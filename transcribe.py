@@ -1,4 +1,3 @@
-
 import argparse
 from pathlib import Path
 import os
@@ -28,4 +27,5 @@ if __name__ == "__main__":
     script_dir = os.path.dirname(os.path.abspath(__file__))
     config = TranscribeConfig.from_config_dir(Path(script_dir))
 
-    AudioTranscriber(config=config, obsidian_root=obsidian_root, dry_run=args.dry_run).run()
+    transcriber = AudioTranscriber(config=config, obsidian_root=obsidian_root, dry_run=args.dry_run)
+    transcriber.run()

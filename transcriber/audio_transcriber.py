@@ -1,24 +1,21 @@
 # pylint: disable=broad-exception-caught
 
 from dataclasses import dataclass
-import os
 from pathlib import Path
 from datetime import datetime
-from datetime import date
 from urllib.parse import urljoin
 from typing import List
 import json
-import logging
+import os
 
 import requests
 from openai import OpenAI
 
 from transcriber.config import TranscribeConfig
 from transcriber.transcript_bundle import TranscriptBundle
-from transcriber.utils import extract_date_from_recording_filename
 from transcriber.logger import get_logger
 
-COMPLETE_DIR_NAME = 'Processed'
+OUTPUT_DIR_NAME = 'Output'
 PENDING_DIR_NAME = "attachments"  # Directory where audio files are located
 
 logger = get_logger()
@@ -41,7 +38,7 @@ class AudioTranscriber:
              f"Text summary {"enabled" if self.config.text.summary_enabled else "disabled"}")
 
         # Make sure obsidian_root exists
-        if not os.path.exists(self.obsidian_root):
+        if not self.obsidian_root.exists():
             raise ValueError(f"Obsidian root directory does not exist: {self.obsidian_root}")
 
     def transcribe_audio(self, audio_path: Path) -> str:
@@ -50,6 +47,8 @@ class AudioTranscriber:
         Writes output directly to file.
         """
         logger.info(f"Transcribing: {audio_path}")
+        if self.dry_run:
+            return "(dry run transcript)"
 
         with open(audio_path, 'rb') as audio_file:
             files = {
@@ -106,7 +105,9 @@ class AudioTranscriber:
         """
         Queries the configured LLM for a summary
         """
-
+        if self.dry_run:
+            return "(dry run summary)"
+        
         extra_context_prompt = f"Extra context:\n{self.config.text.extra_context}" if self.config.text.extra_context is not None else ""
         prompt = f"""
             You are part of an automated pipeline to transcribe and summarize texts. 
@@ -130,6 +131,7 @@ class AudioTranscriber:
             return "(summary is disabled in config)"
 
         logger.debug("Generating AI summary")
+        
         try:
             summary = self.get_ai_summary(transcript)
             logger.info(f"AI summary succeeded. Excerpt: {summary[:160]}...")  # Log first 100 chars
@@ -142,7 +144,7 @@ class AudioTranscriber:
         """Process audio files from the pending directory."""
 
         pending_dir = transcribing_dir / PENDING_DIR_NAME
-        complete_dir = transcribing_dir / COMPLETE_DIR_NAME
+        output_dir = transcribing_dir / OUTPUT_DIR_NAME
 
         # Get list of audio files from pending directory
 
@@ -164,30 +166,19 @@ class AudioTranscriber:
             logger.info(f"Processing audio file: {filename} from {rel_path}")
 
             try:
-                bundle_name = self.generate_bundle_name(audio_path)
-                logger.debug(f"Generated bundle name: [{bundle_name}]")
-
-                # Create subdirectories in Complete and temp processing directory
-                complete_subdir = complete_dir / rel_path
-
-                # Transcribe audio directly to file
-
-                if self.dry_run:
-                    logger.info(f"Dry run: Would process: {filename}")
-                    return
-
                 transcript = self.transcribe_audio(audio_path)
                 summary = self.try_get_ai_summary(transcript)
 
-                bundle = TranscriptBundle(bundle_name=bundle_name, source_audio=audio_path, transcript=transcript, ai_summary=summary)
-                bundle.write(complete_subdir)
+                bundle = TranscriptBundle(source_audio=audio_path, transcript=transcript, ai_summary=summary)
+                bundle.write(output_dir, dry_run=self.dry_run)
 
                 self.remove_empty_directories(pending_dir)
-                logger.info(f"Successfully processed: {filename}")
+
+                logger.info(f"Successfully processed: [{filename}] to bundle [{bundle.get_bundle_name()}]")
 
             except Exception as e:
-                logger.error(f"Error processing {filename}: {e}")
-                raise
+                logger.error(f"Error processing [{filename}]:")
+                raise e
 
     def log_section_header(self, message):
         """Log a section header with separators."""
@@ -268,39 +259,6 @@ class AudioTranscriber:
 
         return audio_files
 
-    def get_file_modified_date(self, audio_path: Path) -> date:
-        """Get the file's date from its last modified time (format: YYYY-MM-DD).
-        Falls back to current date if modification time is unavailable."""
-
-        try:
-            file_mtime = os.path.getmtime(audio_path)
-            file_date = datetime.fromtimestamp(file_mtime)
-            logger.debug(f"Using file last modified date: '{file_date}'")
-            return file_date
-        except OSError:
-            file_date = datetime.now()
-            logger.warning(f"Could not get file modification time, using current date: '{file_date}'")
-            return file_date
-
-    def get_date_for_filename(self, audio_path: Path) -> date:
-        date_from_filename = extract_date_from_recording_filename(audio_path)
-        if date_from_filename:
-            logger.debug(f"Found existing date in audio filename [{os.path.basename(audio_path)}], using it")
-            return date_from_filename
-        else:
-            file_date = self.get_file_modified_date(audio_path)
-            logger.debug(f"No date found in filename, using file modified date : '{file_date}'")
-            return file_date
-
-    def generate_bundle_name(self, audio_path: Path) -> str:
-        """Generate output filenames with date prefix if needed."""
-
-        logger.debug(f"Generating bundle name for audio file: [{audio_path}]")
-
-        date_from_filename = self.get_date_for_filename(audio_path)
-        prefix = date_from_filename.strftime("%Y-%m-%d")
-        return f"{prefix}_{audio_path.stem}"
-
     def remove_empty_directories(self, directory: Path):
         """Recursively remove directories inside given directory if they're empty."""
         try:
@@ -312,7 +270,8 @@ class AudioTranscriber:
 
                 if not os.listdir(root):  # Directory is empty (no files/subdirs)
                     logger.debug(f"Removing empty directory: {root}")
-                    os.rmdir(root)
+                    if not self.dry_run:
+                        os.rmdir(root)
 
         except Exception as e:
             logger.warning(f"Error while removing empty directory {directory}: {e}")
@@ -325,7 +284,7 @@ class AudioTranscriber:
         """
 
         logger.info(f"Starting cleanup of audio files older than {days} days")
-        complete_dir = os.path.join(transcribing_dir, COMPLETE_DIR_NAME)
+        complete_dir = os.path.join(transcribing_dir, OUTPUT_DIR_NAME)
         logger.debug(f"Scanning directory: {complete_dir}")
 
         current_time = datetime.now().timestamp()

@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import datetime
 import os
 from pathlib import Path
 import re
@@ -22,11 +22,9 @@ DATE_RE_PATTERN_OBSIDIAN_RECORDING = re.compile(r'^Recording (\d{4})(\d{2})(\d{2
 # regex pattern to match filenames starting with "YYYY-MM-DD_", regular pattern of mine
 DATE_RE_PATTERN_SPLIT = re.compile(r'^\d{4}-\d{2}-\d{2}_')
 
-def extract_date_from_recording_filename(audio_path: Path) -> date|None:
+def extract_date_from_recording_filename(audio_path: Path) -> datetime|None:
     """
-    Returns "YYYY-MM-DD_(originalfilename)".
-    If keep_full_original is False, the original prefix (e.g. "RecordingYYYYMMDD_") is removed
-    from the part placed inside parentheses.
+    Try to extract a date from the audio filename.
     """
     filename = os.path.basename(audio_path)
 
@@ -41,7 +39,7 @@ def extract_date_from_recording_filename(audio_path: Path) -> date|None:
         year = int(m.group(1))
         month = int(m.group(2))
         day = int(m.group(3))
-        return date(year, month, day)
+        return datetime(year, month, day)
     except ValueError:
         logger.warning(f"Filename {filename} contains an invalid date: {m.groups()}")
         return None
