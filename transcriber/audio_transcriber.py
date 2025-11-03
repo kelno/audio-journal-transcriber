@@ -169,7 +169,7 @@ class AudioTranscriber:
                 transcript = self.transcribe_audio(audio_path)
                 summary = self.try_get_ai_summary(transcript)
 
-                bundle = TranscriptBundle(source_audio=audio_path, transcript=transcript, ai_summary=summary)
+                bundle = TranscriptBundle(config=self.config, source_audio=audio_path, transcript=transcript, ai_summary=summary)
                 bundle.write(output_dir, dry_run=self.dry_run)
 
                 self.remove_empty_directories(pending_dir)

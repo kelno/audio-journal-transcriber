@@ -7,11 +7,13 @@ import os
 from transcriber.utils import extract_date_from_recording_filename
 from transcriber.utils import ensure_directory_exists
 from transcriber.logger import get_logger
+from transcriber.config import TranscribeConfig
 
 logger = get_logger()
 
 @dataclass
 class TranscriptBundle:
+    config: TranscribeConfig
     source_audio: Path
     transcript: str
     ai_summary: str
@@ -25,9 +27,10 @@ class TranscriptBundle:
     #     ai_summary = "dummy AI summary"  # Replace with actual reading logic
     #     return cls("dummy", transcript, ai_summary)
 
-    def get_transcript_file_properties(self, model: str) -> str:
+    def get_transcript_file_properties(self) -> str:
         """Generate Obsidian frontmatter properties for the transcript bundle."""
 
+        model = self.config.audio.model
         props = (
             f"---\n"
             f"original_audio_filename: {self.source_audio.name}\n"
@@ -36,9 +39,10 @@ class TranscriptBundle:
         )
         return props
     
-    def get_summary_file_properties(self, model: str) -> str:
+    def get_summary_file_properties(self) -> str:
         """Generate Obsidian frontmatter properties for the summary file."""
 
+        model = self.config.text.model
         props = (
             f"---\n"
             f"model: {model}\n"
@@ -109,8 +113,8 @@ class TranscriptBundle:
         shutil.move(self.source_audio, final_audio_path)
 
         transcript_path = bundle_dir / "transcript.md"
-        self.write_file(transcript_path, self.transcript, self.get_transcript_file_properties("dummy-model"))
+        self.write_file(transcript_path, self.transcript, self.get_transcript_file_properties())
 
         summary_path = bundle_dir / "summary.md"
-        self.write_file(summary_path, self.ai_summary, self.get_summary_file_properties("dummy-model"))
+        self.write_file(summary_path, self.ai_summary, self.get_summary_file_properties())
         
