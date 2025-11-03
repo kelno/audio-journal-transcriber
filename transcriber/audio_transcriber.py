@@ -163,7 +163,7 @@ class AudioTranscriber:
             # if rel_path == '.':
             #     rel_path = ''
 
-            logger.info(f"Processing audio file: {filename} from {rel_path}")
+            logger.info(f"Processing audio file: {rel_path}")
 
             try:
                 transcript = self.transcribe_audio(audio_path)

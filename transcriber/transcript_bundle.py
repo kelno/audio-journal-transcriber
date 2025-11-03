@@ -25,12 +25,23 @@ class TranscriptBundle:
     #     ai_summary = "dummy AI summary"  # Replace with actual reading logic
     #     return cls("dummy", transcript, ai_summary)
 
-    def get_obsidian_properties(self) -> str:
+    def get_transcript_file_properties(self, model: str) -> str:
         """Generate Obsidian frontmatter properties for the transcript bundle."""
 
         props = (
             f"---\n"
             f"original_audio_filename: {self.source_audio.name}\n"
+            f"model: {model}\n"
+            f"---\n"
+        )
+        return props
+    
+    def get_summary_file_properties(self, model: str) -> str:
+        """Generate Obsidian frontmatter properties for the summary file."""
+
+        props = (
+            f"---\n"
+            f"model: {model}\n"
             f"---\n"
         )
         return props
@@ -74,6 +85,12 @@ class TranscriptBundle:
         prefix = date_from_filename.strftime("%Y-%m-%d")
         return f"{prefix}_{audio_path.stem}"
 
+    def write_file(self, file_path: Path, content: str, props: str):
+        with open(file_path, 'w', encoding='utf-8') as f:
+            f.write(props)
+            f.write("\n")
+            f.write(content)
+        logger.debug(f"Wrote {file_path}")
 
     def write(self, output_dir: Path, dry_run: bool = False):
         """Write content to the result file."""
@@ -81,25 +98,19 @@ class TranscriptBundle:
         bundle_name = self.get_bundle_name()
         logger.info(f"Writing bundle: [{self.bundle_name}]")
         
+        if dry_run:
+            return
+    
         bundle_dir = output_dir / bundle_name
-        if not dry_run:
-            ensure_directory_exists(bundle_dir)
+        ensure_directory_exists(bundle_dir)
 
         final_audio_path = bundle_dir / f"recording{self.source_audio.suffix}"
         logger.debug(f"Moving audio file from [{self.source_audio}] to [{final_audio_path}]")
-        if not dry_run:
-            shutil.move(self.source_audio, final_audio_path)
+        shutil.move(self.source_audio, final_audio_path)
 
-        text_path = bundle_dir / "transcript.md"
-        props = self.get_obsidian_properties()
-        if not dry_run:
-            with open(text_path, 'w', encoding='utf-8') as f:
-                f.write(props)
-                f.write("\n")
-                f.write("Transcript:\n")
-                f.write(self.transcript)
-                f.write("\n\n---\n\n")
-                f.write("AI Summary:\n")
-                f.write(self.ai_summary)
+        transcript_path = bundle_dir / "transcript.md"
+        self.write_file(transcript_path, self.transcript, self.get_transcript_file_properties("dummy-model"))
 
-        logger.debug(f"Wrote content to {text_path}")
+        summary_path = bundle_dir / "summary.md"
+        self.write_file(summary_path, self.ai_summary, self.get_summary_file_properties("dummy-model"))
+        
