@@ -10,6 +10,11 @@ pipenv install
 
 ```bash
 pipenv run python transcribe.py --help
+
+Or:
+
+pipenv shell
+python transcribe.py --help
 ```
 
 ## Obsidian shell command example

@@ -29,18 +29,7 @@ DATE_RE_PATTERN = re.compile(r'^\d{4}-\d{2}-\d{2}_')
 TMP_DIR_NAME = 'tmp'  # Temporary directory for processing files
 LOG_FILE = "transcribe.log"
 
-def init_logger() -> logging.Logger:
-    """Initialize the logger with console and file handlers."""
-    new_logger = logging.getLogger(__name__)
-    coloredlogs.install(level='INFO', logger=new_logger, fmt='%(asctime)s,%(levelname)s: %(message)s', datefmt='%H:%M:%S')
-
-    file_handler = logging.FileHandler(LOG_FILE, encoding='utf-8')
-    file_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s: %(message)s', datefmt='%Y-%m-%d %H:%M:%S'))
-    new_logger.addHandler(file_handler)
-
-    return new_logger
-
-logger = init_logger()
+logger = logging.getLogger(__name__)
 
 # Configuration class matching yaml config
 class TranscribeConfig(BaseModel):
@@ -337,7 +326,7 @@ class AudioTranscriber:
         try:
             file_mtime = os.path.getmtime(audio_path)
             file_date = datetime.fromtimestamp(file_mtime).strftime('%Y-%m-%d')
-            logger.info(f"Choosing date prefix: Using file's modified date: {file_date}")
+            logger.debug(f"Choosing date prefix: Using file's modified date: {file_date}")
             return file_date
         except OSError:
             file_date = datetime.now().strftime('%Y-%m-%d')
@@ -355,7 +344,7 @@ class AudioTranscriber:
             logger.debug("File already has date prefix")
             audio_filename = filename
             text_filename = f"{os.path.splitext(filename)[0]}.md"
-            
+
         return audio_filename, text_filename
 
     def remove_empty_directories(self, directory: Path):
@@ -366,24 +355,24 @@ class AudioTranscriber:
                 # Skip the root directory itself
                 if root == directory:
                     continue
-                    
+
                 if not os.listdir(root):  # Directory is empty (no files/subdirs)
                     logger.debug(f"Removing empty directory: {root}")
                     os.rmdir(root)
-                    
+
         except Exception as e:
             logger.warning(f"Error while removing empty directory {directory}: {e}")
-            
+
     def move_to_complete(self, audio_path: Path, text_path: Path, complete_dir: Path, 
                         audio_filename: str, text_filename: str):
         """Move processed files to Complete directory and update their modification times."""
 
         final_audio_path = complete_dir / audio_filename
         final_text_path = complete_dir / text_filename
-        
+
         # Get source directory before moving files
         # source_dir = os.path.dirname(audio_path)
-        
+
         logger.debug(f"Moving audio file to: {final_audio_path}")
         shutil.move(audio_path, final_audio_path)
         touch_file(final_audio_path)
@@ -426,13 +415,13 @@ class AudioTranscriber:
 
                 file_path = os.path.join(root, filename)
                 files_checked += 1
-                
+
                 # Check for matching .md file
                 base_name = os.path.splitext(filename)[0]
                 md_path = os.path.join(root, f"{base_name}.md")
-                
+
                 if not os.path.exists(md_path):
-                    logger.info(f"Skipping \"{filename}\" - no matching .md file found")
+                    logger.warning(f"Skipping \"{filename}\", as no matching text file was found. ")
                     continue
 
                 mtime = os.path.getmtime(file_path)
@@ -459,7 +448,7 @@ class AudioTranscriber:
         transcribing_dir = self.obsidian_root / self.config.general.transcription_dir_path
         if not os.path.exists(transcribing_dir):
             raise ValueError(f"Transcribing directory does not exist: {transcribing_dir}")
-        
+
         self.create_subdirectories(transcribing_dir)
 
         # Clean old audio files
@@ -477,8 +466,17 @@ def load_config(config_dir) -> TranscribeConfig:
     yaml_path = os.path.join(config_dir, "config.yaml")
     with open(yaml_path, "r", encoding="utf-8") as f:
         raw = yaml.safe_load(f)
-        
+
     return TranscribeConfig(**raw)
+
+def configure_logger(debug: bool = False):
+    """Initialize the logger with console and file handlers."""
+    new_logger = logging.getLogger(__name__)
+    coloredlogs.install(level='DEBUG' if debug else 'INFO', logger=new_logger, fmt='%(asctime)s,%(levelname)s: %(message)s', datefmt='%H:%M:%S')
+
+    file_handler = logging.FileHandler(LOG_FILE, encoding='utf-8')
+    file_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s: %(message)s', datefmt='%Y-%m-%d %H:%M:%S'))
+    new_logger.addHandler(file_handler)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Transcribe audio files in Obsidian Vault.")
@@ -488,13 +486,19 @@ if __name__ == "__main__":
         action="store_true",
         help="Simulate transcription without actually processing audio files. Will still create directories.",
     )
+    parser.add_argument(
+        "--debug",
+        action="store_true",
+        help="Enable debug logging output.",
+    )
 
     args = parser.parse_args()
+    configure_logger(args.debug)
 
     obsidian_root = Path(args.obsidian_root)
     script_dir = os.path.dirname(os.path.abspath(__file__))
     config = load_config(script_dir)
-    
+
     AudioTranscriber(config=config, obsidian_root=obsidian_root, dry_run=args.dry_run).run()
 
 
@@ -506,7 +510,6 @@ if __name__ == "__main__":
 # - Try grouping records being done very close to each other. Group them as a single result file basically.
 # - Do a "remove empty audio" pass
 # - Maybe use IA to name those recordings too, based on their content ?
-# - Log runs in a file too?
 #
 # Future improvements:
 # Maybe a way to provide context to the AI, such as a list of topics we care about, so that it can focus on those ? 
