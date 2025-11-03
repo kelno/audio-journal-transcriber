@@ -5,14 +5,15 @@ import os
 from pathlib import Path
 import argparse
 import shutil
-import coloredlogs, logging
-from typing import List
 from datetime import datetime
+from urllib.parse import urljoin
+from typing import List
 import re
 import json
-import yaml
-from urllib.parse import urljoin
+import logging
 
+import yaml
+import coloredlogs
 from pydantic import BaseModel, model_validator
 import requests
 from openai import OpenAI
@@ -28,7 +29,7 @@ DATE_RE_PATTERN = re.compile(r'^\d{4}-\d{2}-\d{2}_')
 TMP_DIR_NAME = 'tmp'  # Temporary directory for processing files
 LOG_FILE = "transcribe.log"
 
-def init_logger():
+def init_logger() -> logging.Logger:
     """Initialize the logger with console and file handlers."""
     new_logger = logging.getLogger(__name__)
     coloredlogs.install(level='INFO', logger=new_logger, fmt='%(asctime)s,%(levelname)s: %(message)s', datefmt='%H:%M:%S')
@@ -36,7 +37,7 @@ def init_logger():
     file_handler = logging.FileHandler(LOG_FILE, encoding='utf-8')
     file_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s: %(message)s', datefmt='%Y-%m-%d %H:%M:%S'))
     new_logger.addHandler(file_handler)
-    
+
     return new_logger
 
 logger = init_logger()
@@ -80,9 +81,12 @@ class TranscribeConfig(BaseModel):
 class AudioTranscriber:
     config: TranscribeConfig
     obsidian_root: Path
+    dry_run: bool = False
 
     def __post_init__(self):
         self.obsidian_root = self.obsidian_root.resolve()
+        if (self.dry_run):
+            logger.warning("!!! DRY RUN MODE !!!")
         logger.info(
              f"{type(self).__name__} initialized with\n"
              f"Obsidian Root: {self.obsidian_root}\n"
@@ -229,6 +233,9 @@ class AudioTranscriber:
                 logger.info(f"Will save transcription to: {transcribed_file}")
 
                 # Transcribe audio directly to file
+                if self.dry_run:
+                    return  # for now
+
                 self.transcribe_audio(audio_path, transcribed_file)
                 if self.config.text.summary_enabled:
                     self.process_ai_summary(transcribed_file)
@@ -250,26 +257,6 @@ class AudioTranscriber:
     def log_section_header(self, message):
         """Log a section header with separators."""
         logger.info(f"========== {message} ==========")
-
-    def run(self):
-        transcribing_dir = self.obsidian_root / self.config.general.transcription_dir_path
-        if not os.path.exists(transcribing_dir):
-            raise ValueError(f"Transcribing directory does not exist: {transcribing_dir}")
-        
-        # Create necessary subdirectories
-        self.create_subdirectories(transcribing_dir)
-
-        # Clean old audio files
-        if self.config.general.cleanup != 0:
-            self.log_section_header("Cleanup old audio files")
-            self.cleanup_audio_files_older_than(transcribing_dir, self.config.general.cleanup)
-
-        self.log_section_header("Processing Audio Files")
-        # Process audio files
-        self.process_audio_files(transcribing_dir)
-
-        self.log_section_header("Summary")
-        logger.info("Transcription process completed successfully.")
 
     def create_subdirectories(self, transcribing_dir: Path):
         """
@@ -339,7 +326,7 @@ class AudioTranscriber:
                 if self.is_handled_audio_file(filename):
                     full_path = os.path.join(root, filename)
                     audio_files.append(full_path)
-                    self.logger.debug(f"Found audio file: {full_path}")
+                    logger.debug(f"Found audio file: {full_path}")
 
         return audio_files
 
@@ -458,7 +445,8 @@ class AudioTranscriber:
 
                 if age_in_days > days:
                     logger.info(f"  Removing file: {file_path}")
-                    os.remove(file_path)
+                    if not self.dry_run:
+                        os.remove(file_path)
                     files_removed += 1
                 else:
                     logger.debug("  Keeping file (not old enough)")
@@ -466,6 +454,24 @@ class AudioTranscriber:
         logger.info("CLEANUP SUMMARY:")
         logger.info(f"  Files checked: {files_checked}")
         logger.info(f"  Files removed: {files_removed}")
+
+    def run(self):
+        transcribing_dir = self.obsidian_root / self.config.general.transcription_dir_path
+        if not os.path.exists(transcribing_dir):
+            raise ValueError(f"Transcribing directory does not exist: {transcribing_dir}")
+        
+        self.create_subdirectories(transcribing_dir)
+
+        # Clean old audio files
+        if self.config.general.cleanup != 0:
+            self.log_section_header("Cleanup old audio files")
+            self.cleanup_audio_files_older_than(transcribing_dir, self.config.general.cleanup)
+
+        self.log_section_header("Processing Audio Files")
+        self.process_audio_files(transcribing_dir)
+
+        self.log_section_header("Summary")
+        logger.info("Transcription process completed successfully.")
 
 def load_config(config_dir) -> TranscribeConfig:
     yaml_path = os.path.join(config_dir, "config.yaml")
@@ -477,13 +483,19 @@ def load_config(config_dir) -> TranscribeConfig:
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Transcribe audio files in Obsidian Vault.")
     parser.add_argument("obsidian_root", type=str, help="The Obsidian root directory path")
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Simulate transcription without actually processing audio files. Will still create directories.",
+    )
+
     args = parser.parse_args()
 
     obsidian_root = Path(args.obsidian_root)
-
     script_dir = os.path.dirname(os.path.abspath(__file__))
     config = load_config(script_dir)
-    AudioTranscriber(config, obsidian_root).run()
+    
+    AudioTranscriber(config=config, obsidian_root=obsidian_root, dry_run=args.dry_run).run()
 
 
 # Improve me:
