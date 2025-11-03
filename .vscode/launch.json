@@ -11,6 +11,8 @@
       "program": "transcribe.py",
       "console": "integratedTerminal",
       "args": [
+        "--debug",
+        "--dry-run",
         "../../",
       ]
     }

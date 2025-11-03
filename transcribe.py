@@ -4,11 +4,10 @@ from dataclasses import dataclass
 import os
 from pathlib import Path
 import argparse
-import shutil
 from datetime import datetime
+from datetime import date
 from urllib.parse import urljoin
 from typing import List
-import re
 import json
 import logging
 
@@ -18,15 +17,12 @@ from pydantic import BaseModel, model_validator
 import requests
 from openai import OpenAI
 
-from utils import ensure_directory_exists, touch_file
+from transcript_bundle import TranscriptBundle
+from utils import extract_date_from_recording_filename
 
-COMPLETE_DIR_NAME = 'Complete'
-ERRORED_DIR_NAME = 'Errored'
+COMPLETE_DIR_NAME = 'Processed'
 PENDING_DIR_NAME = "attachments"  # Directory where audio files are located
-# Regex to match YYYY-MM-DD format at the start of the filename
-DATE_RE_PATTERN = re.compile(r'^\d{4}-\d{2}-\d{2}_') 
 
-TMP_DIR_NAME = 'tmp'  # Temporary directory for processing files
 LOG_FILE = "transcribe.log"
 
 logger = logging.getLogger(__name__)
@@ -43,13 +39,13 @@ class TranscribeConfig(BaseModel):
         model: str
         api_key: str
         extra_context: str|None = None
-    
+
         @model_validator(mode="after")
         def ensure_trailing_slash(cls, self): # pylint: disable=E0213
             if not self.api_base_url.endswith('/'):
                 self.api_base_url += '/'
             return self
-    
+
     class AudioConfig(BaseModel):
         api_base_url: str
         model: str
@@ -74,7 +70,7 @@ class AudioTranscriber:
 
     def __post_init__(self):
         self.obsidian_root = self.obsidian_root.resolve()
-        if (self.dry_run):
+        if self.dry_run:
             logger.warning("!!! DRY RUN MODE !!!")
         logger.info(
              f"{type(self).__name__} initialized with\n"
@@ -82,12 +78,12 @@ class AudioTranscriber:
              f"Transcribing dir: {self.config.general.transcription_dir_path}\n"
              f"Cleanup {self.config.general.cleanup}\n"
              f"Text summary {"enabled" if self.config.text.summary_enabled else "disabled"}")
-        
+
         # Make sure obsidian_root exists
         if not os.path.exists(self.obsidian_root):
             raise ValueError(f"Obsidian root directory does not exist: {self.obsidian_root}")
-            
-    def transcribe_audio(self, audio_path: Path, output_text_path: Path):
+
+    def transcribe_audio(self, audio_path: Path) -> str:
         """
         Transcribe an audio file using a local OpenAI-compatible API with streaming.
         Writes output directly to file.
@@ -113,7 +109,7 @@ class AudioTranscriber:
             )
 
         if response.status_code == 200:
-            self.process_streaming_response(response, output_text_path)
+            return self.extract_streaming_response(response)
         else:
             raise ValueError(f"Transcription failed with status code {response.status_code} and response: {response.text}")
 
@@ -137,17 +133,17 @@ class AudioTranscriber:
         if len(completion.choices) == 0:
             logger.error("AI summary failed: no choices returned")
             raise ValueError("AI summary failed: no choices returned")
-        
+
         completion = completion.choices[0].message.content
         if not completion:
             logger.error("AI summary failed: empty content")
             raise ValueError("AI summary failed: empty content")
 
         return completion
-     
-    def get_ai_summary(self, transcript: str) -> str|None:
+
+    def get_ai_summary(self, transcript: str) -> str:
         """
-        Queries configured LLM for a summary
+        Queries the configured LLM for a summary
         """
 
         extra_context_prompt = f"Extra context:\n{self.config.text.extra_context}" if self.config.text.extra_context is not None else ""
@@ -165,41 +161,39 @@ class AudioTranscriber:
             {transcript}"""
         return self.query_chat_completion(prompt)
 
-    def process_ai_summary(self, transcribe_path: Path):
+    def try_get_ai_summary(self, transcript: str) -> str:
         """
         Generate and append AI summary to the transcription file.
         """
-        logger.debug(f"Appending AI summary to {transcribe_path}")
+        if not self.config.text.summary_enabled:
+            return "(summary is disabled in config)"
+
+        logger.debug("Generating AI summary")
         try:
-            with open(transcribe_path, "r", encoding="utf-8") as f:
-                transcript = f.read()
-                if summary := self.get_ai_summary(transcript):
-                    logger.info(f"AI summary succeeded. Excerpt: {summary[:160]}...")  # Log first 100 chars
-                    with open(transcribe_path, "a", encoding="utf-8") as f:
-                        f.write("\n\n---\n\n# AI Summary\n\n")
-                        f.write(summary)
+            summary = self.get_ai_summary(transcript)
+            logger.info(f"AI summary succeeded. Excerpt: {summary[:160]}...")  # Log first 100 chars
+            return summary
         except Exception as e:
             logger.error(f"AI summary failed with exception: {e}")
+            raise
 
     def process_audio_files(self, transcribing_dir: Path):
         """Process audio files from the pending directory."""
 
         pending_dir = transcribing_dir / PENDING_DIR_NAME
         complete_dir = transcribing_dir / COMPLETE_DIR_NAME
-        errored_dir = transcribing_dir / ERRORED_DIR_NAME
-        tmp_dir = transcribing_dir / TMP_DIR_NAME
 
         # Get list of audio files from pending directory
-        
+
         logger.info(f"Looking for pending audio files in {pending_dir}")
         audio_files = self.find_pending_audio_files(pending_dir)
-        
+
         if not audio_files:
             logger.info("No audio files found for processing")
             return
 
         logger.info(f"Found {len(audio_files)} audio files to process")
-        
+
         for audio_path in audio_files:
             filename = os.path.basename(audio_path)
             rel_path = os.path.relpath(audio_path, pending_dir)
@@ -209,39 +203,30 @@ class AudioTranscriber:
             logger.info(f"Processing audio file: {filename} from {rel_path}")
 
             try:
-                file_date = self.get_file_date_prefix(audio_path)
-                audio_filename, text_filename = self.generate_output_filenames(filename, file_date)
-                
-                # Create subdirectories in Complete and temp processi ng directory
-                temp_sub_dir = tmp_dir / rel_path
-                complete_subdir = complete_dir / rel_path
-                ensure_directory_exists(temp_sub_dir)
-                ensure_directory_exists(complete_subdir)
+                bundle_name = self.generate_bundle_name(audio_path)
+                logger.debug(f"Generated bundle name: [{bundle_name}]")
 
-                transcribed_file: Path = temp_sub_dir / text_filename
-                logger.info(f"Will save transcription to: {transcribed_file}")
+                # Create subdirectories in Complete and temp processing directory
+                complete_subdir = complete_dir / rel_path
 
                 # Transcribe audio directly to file
+
                 if self.dry_run:
-                    return  # for now
+                    logger.info(f"Dry run: Would process: {filename}")
+                    return
 
-                self.transcribe_audio(audio_path, transcribed_file)
-                if self.config.text.summary_enabled:
-                    self.process_ai_summary(transcribed_file)
+                transcript = self.transcribe_audio(audio_path)
+                summary = self.try_get_ai_summary(transcript)
 
-                self.move_to_complete(audio_path, transcribed_file, complete_subdir,
-                            audio_filename, text_filename)
+                bundle = TranscriptBundle(bundle_name=bundle_name, source_audio=audio_path, transcript=transcript, ai_summary=summary)
+                bundle.write(complete_subdir)
+
                 self.remove_empty_directories(pending_dir)
                 logger.info(f"Successfully processed: {filename}")
 
             except Exception as e:
                 logger.error(f"Error processing {filename}: {e}")
-                error_subdir = errored_dir / rel_path
-                ensure_directory_exists(error_subdir)
-                self.move_to_error(audio_path, transcribed_file, error_subdir, filename)
-
-        # Cleanup temporary directory, should be empty after processing
-        shutil.rmtree(tmp_dir)
+                raise
 
     def log_section_header(self, message):
         """Log a section header with separators."""
@@ -257,9 +242,8 @@ class AudioTranscriber:
         """
         complete_dir = os.path.join(transcribing_dir, 'Complete')
         errored_dir = os.path.join(transcribing_dir, 'Errored')
-        tmp_dir = os.path.join(transcribing_dir, TMP_DIR_NAME)
 
-        for directory in [complete_dir, errored_dir, tmp_dir]:
+        for directory in [complete_dir, errored_dir]:
             if not os.path.exists(directory):
                 os.makedirs(directory)
                 logger.debug(f"Created directory: {directory}")
@@ -278,74 +262,83 @@ class AudioTranscriber:
         audio_extensions = ['.mp3', '.wav', '.m4a', '.flac', '.ogg', '.aac', '.mkv', '.mp4']
         return os.path.splitext(filename)[1].lower() in audio_extensions
 
-    def process_streaming_response(self, response, output_text_path):
-        """Process a streaming response from the transcription API and write directly to file."""
-        logger.debug(f"Creating transcription file: {output_text_path}")
-        with open(output_text_path, 'w', encoding='utf-8') as f:
-            for line in response.iter_lines():
-                if line:
-                    try:
-                        json_str = line.decode('utf-8').removeprefix('data: ')
-                        if json_str.strip() == '[DONE]':
-                            break
-                        result = json.loads(json_str)
-                        if 'text' in result:
-                            text = result['text'] + ' '  # Add space after each chunk
-                            f.write(text)
-                            f.flush()
-                            print(text, end='', flush=True)
-                    except Exception as e:
-                        logger.error(f"{output_text_path} Error decoding line:\n{line}\nException: {e}")
-                        return False
-        logger.info(f"\nCompleted writing transcription to {output_text_path}")
+    def extract_streaming_response(self, response) -> str:
+        """Process a streaming response from the transcription API and write directly to file.
+        Returns the complete transcript as a string."""
+        logger.debug("Processing streaming response")
+        text_chunks = []
+
+        for line in response.iter_lines():
+            if line:
+                try:
+                    json_str = line.decode('utf-8').removeprefix('data: ')
+                    if json_str.strip() == '[DONE]':
+                        break
+                    result = json.loads(json_str)
+                    if 'text' in result:
+                        text = result['text'] + ' '  # Add space after each chunk
+                        text_chunks.append(text)
+                        print(text, end='', flush=True)
+                except Exception as e:
+                    logger.error(f"Error decoding line:\n{line}")
+                    raise e
+
+        complete_transcript = ' '.join(text_chunks)
+        # with open(output_text_path, 'w', encoding='utf-8') as f:
+        #     f.write(complete_transcript)
+
+        return complete_transcript
 
 
     def find_pending_audio_files(self, pending_dir: Path) -> List[Path]:
         """
         Find audio files in the given subdirectory and its subdirectories.
-        Returns a list of tuples (source_path, relative_path).
+        Returns a list of Path objects for each audio file found.
         """
-        if not os.path.exists(pending_dir):
-            logger.info(f'No {PENDING_DIR_NAME} directory found')
+        if not pending_dir.exists():
+            logger.info(f'No [{PENDING_DIR_NAME}] directory found')
             return []
 
         audio_files = []
-        for root, _, files in os.walk(pending_dir):
-            for filename in files:
-                if self.is_handled_audio_file(filename):
-                    full_path = os.path.join(root, filename)
-                    audio_files.append(full_path)
-                    logger.debug(f"Found audio file: {full_path}")
+        for path in pending_dir.rglob('*'):
+            if path.is_file() and self.is_handled_audio_file(path.name):
+                audio_files.append(path)
+                logger.debug(f"Found audio file: [{path}]")
 
         return audio_files
 
-    def get_file_date_prefix(self, audio_path: Path) -> str:
+    def get_file_modified_date(self, audio_path: Path) -> date:
         """Get the file's date from its last modified time (format: YYYY-MM-DD).
         Falls back to current date if modification time is unavailable."""
 
         try:
             file_mtime = os.path.getmtime(audio_path)
-            file_date = datetime.fromtimestamp(file_mtime).strftime('%Y-%m-%d')
-            logger.debug(f"Choosing date prefix: Using file's modified date: {file_date}")
+            file_date = datetime.fromtimestamp(file_mtime)
+            logger.debug(f"Using file last modified date: '{file_date}'")
             return file_date
         except OSError:
-            file_date = datetime.now().strftime('%Y-%m-%d')
-            logger.warning(f"Could not get file modification time, using current date: {file_date}")
+            file_date = datetime.now()
+            logger.warning(f"Could not get file modification time, using current date: '{file_date}'")
             return file_date
 
-    def generate_output_filenames(self, filename: str, file_date: str) -> tuple[str, str]:
+    def get_date_for_filename(self, audio_path: Path) -> date:
+        date_from_filename = extract_date_from_recording_filename(audio_path)
+        if date_from_filename:
+            logger.debug(f"Found existing date in audio filename [{os.path.basename(audio_path)}], using it")
+            return date_from_filename
+        else:
+            file_date = self.get_file_modified_date(audio_path)
+            logger.debug(f"No date found in filename, using file modified date : '{file_date}'")
+            return file_date
+
+    def generate_bundle_name(self, audio_path: Path) -> str:
         """Generate output filenames with date prefix if needed."""
 
-        if not DATE_RE_PATTERN.match(filename):
-            logger.debug(f"Adding date prefix to filename: {file_date}")
-            audio_filename = f"{file_date}_{filename}"
-            text_filename = f"{file_date}_{os.path.splitext(filename)[0]}.md"
-        else:
-            logger.debug("File already has date prefix")
-            audio_filename = filename
-            text_filename = f"{os.path.splitext(filename)[0]}.md"
+        logger.debug(f"Generating bundle name for audio file: [{audio_path}]")
 
-        return audio_filename, text_filename
+        date_from_filename = self.get_date_for_filename(audio_path)
+        prefix = date_from_filename.strftime("%Y-%m-%d")
+        return f"{prefix}_{audio_path.stem}"
 
     def remove_empty_directories(self, directory: Path):
         """Recursively remove directories inside given directory if they're empty."""
@@ -362,36 +355,6 @@ class AudioTranscriber:
 
         except Exception as e:
             logger.warning(f"Error while removing empty directory {directory}: {e}")
-
-    def move_to_complete(self, audio_path: Path, text_path: Path, complete_dir: Path, 
-                        audio_filename: str, text_filename: str):
-        """Move processed files to Complete directory and update their modification times."""
-
-        final_audio_path = complete_dir / audio_filename
-        final_text_path = complete_dir / text_filename
-
-        # Get source directory before moving files
-        # source_dir = os.path.dirname(audio_path)
-
-        logger.debug(f"Moving audio file to: {final_audio_path}")
-        shutil.move(audio_path, final_audio_path)
-        touch_file(final_audio_path)
-
-        logger.debug(f"Moving transcription to: {final_text_path}")
-        shutil.move(text_path, final_text_path)
-        touch_file(final_text_path)
-
-    def move_to_error(self, audio_path: Path, text_path: Path, errored_dir: Path, 
-                    filename: str) -> None:
-        """Move failed files to Errored directory."""
-
-        error_path = errored_dir / filename
-        logger.error(f"Failed to process {filename}. Moving to: {error_path}")
-        shutil.move(audio_path, error_path)
-
-        if os.path.exists(text_path):
-            logger.error(f"Moving partial transcription to: {error_path}")
-            shutil.move(text_path, error_path)
 
     def cleanup_audio_files_older_than(self, transcribing_dir, days):
         """
@@ -421,7 +384,7 @@ class AudioTranscriber:
                 md_path = os.path.join(root, f"{base_name}.md")
 
                 if not os.path.exists(md_path):
-                    logger.warning(f"Skipping \"{filename}\", as no matching text file was found. ")
+                    logger.warning(f"Skipping [{filename}], as no matching text file was found. ")
                     continue
 
                 mtime = os.path.getmtime(file_path)
@@ -440,7 +403,7 @@ class AudioTranscriber:
                 else:
                     logger.debug("  Keeping file (not old enough)")
 
-        logger.info("CLEANUP SUMMARY:")
+        logger.info("Cleanup summary:")
         logger.info(f"  Files checked: {files_checked}")
         logger.info(f"  Files removed: {files_removed}")
 
@@ -503,13 +466,13 @@ if __name__ == "__main__":
 
 
 # Improve me:
-# - Move everything to a "Transcription" subdir, so that we can have our own structure inside and not depends on attachements
-# - Change arguments? So we'd be given an input directory and the output where we place our results
 # - Those file can be Obsidian notes and contain metadata on top such as the model used, the original file name, date of processing
 # - Also we can store a "status" there to indicate success/failure and know what to retry, separate for audio & summary
 # - Try grouping records being done very close to each other. Group them as a single result file basically.
 # - Do a "remove empty audio" pass
 # - Maybe use IA to name those recordings too, based on their content ?
+# - (?) Move everything to a "Transcription" subdir, so that we can have our own structure inside and not depends on attachements
+# - Change arguments? So we'd be given an input directory and the output where we place our results
 #
 # Future improvements:
 # Maybe a way to provide context to the AI, such as a list of topics we care about, so that it can focus on those ? 
