@@ -1,11 +1,11 @@
 from dataclasses import dataclass
-import logging
 from pathlib import Path
 import shutil
 
-from utils import ensure_directory_exists
+from transcriber.utils import ensure_directory_exists
+from transcriber.logger import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger()
 
 @dataclass
 class TranscriptBundle:

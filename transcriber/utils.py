@@ -1,10 +1,11 @@
 from datetime import date
 import os
-import logging
 from pathlib import Path
 import re
 
-logger = logging.getLogger(__name__)
+from transcriber.logger import get_logger
+
+logger = get_logger()
 
 def ensure_directory_exists(directory):
     """Create directory and any necessary parent directories if they don't exist."""
