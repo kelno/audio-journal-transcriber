@@ -115,10 +115,10 @@ class AudioTranscriber:
             Extra instructions:
             - Use the input language for the summary.
             - You should act like a function and only output the summary.
-            - If the transcript mentions things to do, please highlight those todo as a recap at the end of the summary. (don't mention if none)
-            - Given that this is a transcript that might be of poor quality, if you're confused or need to make assumptions, do mention it in your summary.
+            - If and only if the transcript very specifically mentions things that should be done, highlight those points as a recap at the end of the summary with the title "Action Items".
+            - Given that this is an audio transcript that might be of poor quality, you might need to make some assumptions as to what was said. In those instances, take extra care to announce your assumptions clearly.
             {extra_context_prompt}
-            Okay now here is the transcript:
+            Okay. Now the transcript follows:
             ---
             {transcript}"""
         return self.query_chat_completion(prompt)
@@ -266,7 +266,7 @@ class AudioTranscriber:
             # Walk bottom-up so we check deepest directories first
             for root, _dirs, _files in os.walk(directory, topdown=False):
                 # Skip the root directory itself
-                if root == directory:
+                if root == directory.name:
                     continue
 
                 if not os.listdir(root):  # Directory is empty (no files/subdirs)

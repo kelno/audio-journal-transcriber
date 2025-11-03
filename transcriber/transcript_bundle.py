@@ -45,6 +45,7 @@ class TranscriptBundle:
         model = self.config.text.model
         props = (
             f"---\n"
+            f"original_audio_filename: {self.source_audio.name}\n"
             f"model: {model}\n"
             f"---\n"
         )
