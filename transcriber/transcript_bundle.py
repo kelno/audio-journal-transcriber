@@ -29,9 +29,9 @@ class TranscriptBundle:
         """Generate Obsidian frontmatter properties for the transcript bundle."""
 
         props = (
-            f"---"
-            f"original_audio_filename: {self.source_audio.name}"
-            f"---"
+            f"---\n"
+            f"original_audio_filename: {self.source_audio.name}\n"
+            f"---\n"
         )
         return props
 
@@ -64,7 +64,7 @@ class TranscriptBundle:
         if self.bundle_name is None:
             self.bundle_name = self.generate_bundle_name(self.source_audio)
         return self.bundle_name
-    
+
     def generate_bundle_name(self, audio_path: Path) -> str:
         """Generate output filenames with date prefix if needed."""
 
@@ -85,12 +85,12 @@ class TranscriptBundle:
         if not dry_run:
             ensure_directory_exists(bundle_dir)
 
-        final_audio_path = bundle_dir / "recording" / self.source_audio.suffix
+        final_audio_path = bundle_dir / f"recording{self.source_audio.suffix}"
         logger.debug(f"Moving audio file from [{self.source_audio}] to [{final_audio_path}]")
         if not dry_run:
             shutil.move(self.source_audio, final_audio_path)
 
-        text_path = bundle_dir / "transcript" / ".md"
+        text_path = bundle_dir / "transcript.md"
         props = self.get_obsidian_properties()
         if not dry_run:
             with open(text_path, 'w', encoding='utf-8') as f:

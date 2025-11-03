@@ -12,7 +12,18 @@
       "console": "integratedTerminal",
       "args": [
         "--debug",
+        "../../",
+      ]
+    },
+    {
+      "name": "(DRY RUN) Transcribe",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "transcribe.py",
+      "console": "integratedTerminal",
+      "args": [
         "--dry-run",
+        "--debug",
         "../../",
       ]
     }

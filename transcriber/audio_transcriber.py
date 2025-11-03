@@ -107,7 +107,7 @@ class AudioTranscriber:
         """
         if self.dry_run:
             return "(dry run summary)"
-        
+ 
         extra_context_prompt = f"Extra context:\n{self.config.text.extra_context}" if self.config.text.extra_context is not None else ""
         prompt = f"""
             You are part of an automated pipeline to transcribe and summarize texts. 
@@ -228,13 +228,14 @@ class AudioTranscriber:
                         break
                     result = json.loads(json_str)
                     if 'text' in result:
-                        text = result['text'] + ' '  # Add space after each chunk
+                        text = result['text'] 
                         text_chunks.append(text)
                         print(text, end='', flush=True)
                 except Exception as e:
                     logger.error(f"Error decoding line:\n{line}")
                     raise e
 
+        print("\n")
         complete_transcript = ' '.join(text_chunks)
         # with open(output_text_path, 'w', encoding='utf-8') as f:
         #     f.write(complete_transcript)
