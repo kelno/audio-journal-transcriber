@@ -23,7 +23,7 @@ def remove_empty_subdirs(directory: Path):
         # Walk bottom-up so we check deepest directories first
         for root, _dirs, _files in os.walk(directory, topdown=False):
             # Skip the root directory itself
-            if root == directory.name:
+            if Path(root) == directory:
                 continue
 
             if not os.listdir(root):  # Directory is empty (no files/subdirs)

@@ -13,7 +13,7 @@ from transcriber.globals import is_handled_audio_file
 from transcriber.transcript_bundle import TranscriptBundle
 from transcriber.logger import get_logger
 from transcriber.transcribe_job import TranscribeJob
-from transcriber.utils import ensure_directory_exists
+from transcriber.utils import ensure_directory_exists, remove_empty_subdirs
 
 OUTPUT_DIR_NAME = 'Output'
 SOURCE_DIR_NAME = "attachments"  # Directory where audio files are located
@@ -107,7 +107,7 @@ class AudioTranscriber:
         """
         if self.dry_run:
             return "(dry run summary)"
- 
+
         extra_context_prompt = f"Extra context:\n{self.config.text.extra_context}" if self.config.text.extra_context is not None else ""
         prompt = f"""
             You are part of an automated pipeline to transcribe and summarize texts. 
@@ -131,7 +131,7 @@ class AudioTranscriber:
             return "(summary is disabled in config)"
 
         logger.debug("Generating AI summary")
-        
+
         try:
             summary = self.get_ai_summary(transcript)
             logger.info(f"AI summary succeeded. Excerpt: {summary[:160]}...")  # Log first 100 chars
@@ -180,7 +180,7 @@ class AudioTranscriber:
                         break
                     result = json.loads(json_str)
                     if 'text' in result:
-                        text = result['text'] 
+                        text = result['text']
                         text_chunks.append(text)
                         print(text, end='', flush=True)
                 except Exception as e:
@@ -236,8 +236,7 @@ class AudioTranscriber:
             self.process_jobs(jobs, output_dir)
 
         if not self.dry_run:
-            # remove_empty_subdirs(source_dir)
-            pass
+            remove_empty_subdirs(source_dir)
 
         self.log_section_header("Summary")
         logger.info("Transcription process completed successfully.")
