@@ -17,6 +17,22 @@ def touch_file(file_path):
 
     os.utime(file_path, None)
 
+def remove_empty_subdirs(directory: Path):
+    """Recursively remove directories inside given directory if they're empty."""
+    try:
+        # Walk bottom-up so we check deepest directories first
+        for root, _dirs, _files in os.walk(directory, topdown=False):
+            # Skip the root directory itself
+            if root == directory.name:
+                continue
+
+            if not os.listdir(root):  # Directory is empty (no files/subdirs)
+                logger.debug(f"Removing empty directory: {root}")
+                os.rmdir(root)
+
+    except OSError as e:
+        logger.warning(f"Error while removing empty directory {directory}: {e}")
+
 # regex pattern to match obisidian recording filenames like "Recording YYYYMMDDHHMMSS"
 DATE_RE_PATTERN_OBSIDIAN_RECORDING = re.compile(r'^Recording (\d{4})(\d{2})(\d{2})\d{6}')
 # regex pattern to match filenames starting with "YYYY-MM-DD_", regular pattern of mine

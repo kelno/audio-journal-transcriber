@@ -29,13 +29,14 @@ $obsidianRoot = (Get-Location).Path; cd _/transcribe; Start-Process powershell -
   - On re run, the existence of those files can be checked and if they're existing, we assume they're good
   - We'll need some kind of "job" concept here to only run some of the tasks depending on what was successfull
   - The goal is to be able to re run the script and it will resume whatever was failed
-
+- Use IA to name those recordings too, based on their content
+- Do one retry on ai summary failure
 - Try grouping records being done very close to each other. Group them as a single result file basically.
+- Add a "do not delete" property checkbox
+  - Extra swag if it can be auto enabled if I mention it in the record
+- Remove links to records from the Obsidian record document
 - Do a "remove empty audio" pass
-- Use IA to name those recordings too, based on their content ?
-- (?) Move everything to a "Transcription" subdir, so that we can have our own structure inside and not depends on attachements
-- Change arguments? So we'd be given an input directory and the output where we place our results
-
-Future improvements:
-Maybe a way to provide context to the AI, such as a list of topics we care about, so that it can focus on those ? 
-get a list of recents notes titles or tasks to give to it.
+- Change cli arguments? So we'd be given an input directory and the output where we place our results
+- refine the prompt, what am I expecting from those summaries?
+  -  Maybe provide context such as a list of topics we care about
+  -  Maybe some standard ways to interact with it like a key phrase to tell it to create a task in my vault. 

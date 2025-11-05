@@ -4,6 +4,7 @@ from pathlib import Path
 import shutil
 import os
 
+from transcriber.globals import is_handled_audio_file
 from transcriber.utils import extract_date_from_recording_filename
 from transcriber.utils import ensure_directory_exists
 from transcriber.logger import get_logger
@@ -90,6 +91,56 @@ class TranscriptBundle:
         prefix = date_from_filename.strftime("%Y-%m-%d")
         return f"{prefix}_{audio_path.stem}"
 
+    @staticmethod
+    def cleanup_audio_files_older_than(output_dir, days, dry_run=False):
+        """
+        Clean up audio files that were processed more than X days ago.
+        Only removes audio files that have a matching .md file next to them.
+        Handles nested directory structure.
+        """
+
+        logger.info(f"Starting cleanup of audio files older than {days} days")
+        logger.debug(f"Scanning directory for cleanup: {output_dir}")
+
+        current_time = datetime.now().timestamp()
+        files_removed = 0
+        files_checked = 0
+
+        for root, _, files in os.walk(output_dir):
+            for filename in files:
+                if not is_handled_audio_file(filename):
+                    continue
+
+                file_path = os.path.join(root, filename)
+                files_checked += 1
+
+                # Check for matching .md file
+                transcript_path = os.path.join(root, "summary.md")
+
+                if not os.path.exists(transcript_path):
+                    logger.warning(f"Skipping [{filename}], as no matching text file was found. ")
+                    continue
+
+                mtime = os.path.getmtime(file_path)
+                age_in_days = (current_time - mtime) / (24 * 3600)
+
+                rel_path = os.path.relpath(root, output_dir)
+                logger.debug(f"\nChecking: \"{os.path.join(rel_path, filename)}\". "
+                        f"Modified: {datetime.fromtimestamp(mtime).strftime('%Y-%m-%d')}. "
+                        f"Age: {int(age_in_days)} days.")
+
+                if age_in_days > days:
+                    logger.info(f"  Removing file: {file_path}")
+                    if not dry_run:
+                        os.remove(file_path)
+                    files_removed += 1
+                else:
+                    logger.debug("  Keeping file (not old enough)")
+
+        logger.info("Cleanup summary:")
+        logger.info(f"  Files checked: {files_checked}")
+        logger.info(f"  Files removed: {files_removed}")
+
     def write_file(self, file_path: Path, content: str, props: str):
         with open(file_path, 'w', encoding='utf-8') as f:
             f.write(props)
@@ -118,4 +169,3 @@ class TranscriptBundle:
 
         summary_path = bundle_dir / "summary.md"
         self.write_file(summary_path, self.ai_summary, self.get_summary_file_properties())
-        

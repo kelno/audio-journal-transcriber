@@ -1,8 +1,5 @@
-# pylint: disable=broad-exception-caught
-
 from dataclasses import dataclass
 from pathlib import Path
-from datetime import datetime
 from urllib.parse import urljoin
 from typing import List
 import json
@@ -12,11 +9,14 @@ import requests
 from openai import OpenAI
 
 from transcriber.config import TranscribeConfig
+from transcriber.globals import is_handled_audio_file
 from transcriber.transcript_bundle import TranscriptBundle
 from transcriber.logger import get_logger
+from transcriber.transcribe_job import TranscribeJob
+from transcriber.utils import ensure_directory_exists
 
 OUTPUT_DIR_NAME = 'Output'
-PENDING_DIR_NAME = "attachments"  # Directory where audio files are located
+SOURCE_DIR_NAME = "attachments"  # Directory where audio files are located
 
 logger = get_logger()
 
@@ -140,30 +140,14 @@ class AudioTranscriber:
             logger.error(f"AI summary failed with exception: {e}")
             raise
 
-    def process_audio_files(self, transcribing_dir: Path):
+    def process_jobs(self, jobs, output_dir: Path):
         """Process audio files from the pending directory."""
 
-        pending_dir = transcribing_dir / PENDING_DIR_NAME
-        output_dir = transcribing_dir / OUTPUT_DIR_NAME
-
-        # Get list of audio files from pending directory
-
-        logger.info(f"Looking for pending audio files in {pending_dir}")
-        audio_files = self.find_pending_audio_files(pending_dir)
-
-        if not audio_files:
-            logger.info("No audio files found for processing")
-            return
-
-        logger.info(f"Found {len(audio_files)} audio files to process")
-
-        for audio_path in audio_files:
+        for job in jobs:
+            audio_path: Path = job.audio_file
             filename = os.path.basename(audio_path)
-            rel_path = os.path.relpath(audio_path, pending_dir)
-            # if rel_path == '.':
-            #     rel_path = ''
 
-            logger.info(f"Processing audio file: {rel_path}")
+            logger.info(f"Processing audio file: {audio_path}")
 
             try:
                 transcript = self.transcribe_audio(audio_path)
@@ -171,8 +155,6 @@ class AudioTranscriber:
 
                 bundle = TranscriptBundle(config=self.config, source_audio=audio_path, transcript=transcript, ai_summary=summary)
                 bundle.write(output_dir, dry_run=self.dry_run)
-
-                self.remove_empty_directories(pending_dir)
 
                 logger.info(f"Successfully processed: [{filename}] to bundle [{bundle.get_bundle_name()}]")
 
@@ -183,36 +165,6 @@ class AudioTranscriber:
     def log_section_header(self, message):
         """Log a section header with separators."""
         logger.info(f"========== {message} ==========")
-
-    def create_subdirectories(self, transcribing_dir: Path):
-        """
-        Create 'Complete' and 'Errored' subdirectories if they don't exist.
-
-        Args:
-            transcribing_dir (str): Path to the transcribing directory
-            logger: Logging object
-        """
-        complete_dir = os.path.join(transcribing_dir, 'Complete')
-        errored_dir = os.path.join(transcribing_dir, 'Errored')
-
-        for directory in [complete_dir, errored_dir]:
-            if not os.path.exists(directory):
-                os.makedirs(directory)
-                logger.debug(f"Created directory: {directory}")
-
-    @staticmethod
-    def is_handled_audio_file(filename: str) -> bool:
-        """
-        Check if the file is an audio file based on extension.
-
-        Args:
-            filename (str): Name of the file
-
-        Returns:
-            bool: True if the file is an audio file, False otherwise
-        """
-        audio_extensions = ['.mp3', '.wav', '.m4a', '.flac', '.ogg', '.aac', '.mkv', '.mp4']
-        return os.path.splitext(filename)[1].lower() in audio_extensions
 
     def extract_streaming_response(self, response) -> str:
         """Process a streaming response from the transcription API and write directly to file.
@@ -237,111 +189,55 @@ class AudioTranscriber:
 
         print("\n")
         complete_transcript = ' '.join(text_chunks)
-        # with open(output_text_path, 'w', encoding='utf-8') as f:
-        #     f.write(complete_transcript)
 
         return complete_transcript
 
-
-    def find_pending_audio_files(self, pending_dir: Path) -> List[Path]:
+    def gather_jobs(self, source_dir: Path) -> List[TranscribeJob]:
         """
         Find audio files in the given subdirectory and its subdirectories.
         Returns a list of Path objects for each audio file found.
         """
-        if not pending_dir.exists():
-            logger.info(f'No [{PENDING_DIR_NAME}] directory found')
-            return []
+        if not source_dir.exists():
+            raise FileNotFoundError(f'Source directory does not exist: {source_dir}')
 
-        audio_files = []
-        for path in pending_dir.rglob('*'):
-            if path.is_file() and self.is_handled_audio_file(path.name):
-                audio_files.append(path)
+        logger.debug(f"Looking for pending jobs in {source_dir}")
+
+        jobs = []
+        for path in source_dir.rglob('*'):
+            if path.is_file() and is_handled_audio_file(path.name):
+                jobs.append(TranscribeJob(audio_file=path))
                 logger.debug(f"Found audio file: [{path}]")
 
-        return audio_files
-
-    def remove_empty_directories(self, directory: Path):
-        """Recursively remove directories inside given directory if they're empty."""
-        try:
-            # Walk bottom-up so we check deepest directories first
-            for root, _dirs, _files in os.walk(directory, topdown=False):
-                # Skip the root directory itself
-                if root == directory.name:
-                    continue
-
-                if not os.listdir(root):  # Directory is empty (no files/subdirs)
-                    logger.debug(f"Removing empty directory: {root}")
-                    if not self.dry_run:
-                        os.rmdir(root)
-
-        except Exception as e:
-            logger.warning(f"Error while removing empty directory {directory}: {e}")
-
-    def cleanup_audio_files_older_than(self, transcribing_dir, days):
-        """
-        Clean up audio files that were processed more than X days ago.
-        Only removes audio files that have a matching .md file next to them.
-        Handles nested directory structure.
-        """
-
-        logger.info(f"Starting cleanup of audio files older than {days} days")
-        complete_dir = os.path.join(transcribing_dir, OUTPUT_DIR_NAME)
-        logger.debug(f"Scanning directory: {complete_dir}")
-
-        current_time = datetime.now().timestamp()
-        files_removed = 0
-        files_checked = 0
-
-        for root, _, files in os.walk(complete_dir):
-            for filename in files:
-                if not self.is_handled_audio_file(filename):
-                    continue
-
-                file_path = os.path.join(root, filename)
-                files_checked += 1
-
-                # Check for matching .md file
-                base_name = os.path.splitext(filename)[0]
-                md_path = os.path.join(root, f"{base_name}.md")
-
-                if not os.path.exists(md_path):
-                    logger.warning(f"Skipping [{filename}], as no matching text file was found. ")
-                    continue
-
-                mtime = os.path.getmtime(file_path)
-                age_in_days = (current_time - mtime) / (24 * 3600)
-
-                rel_path = os.path.relpath(root, complete_dir)
-                logger.debug(f"\nChecking: \"{os.path.join(rel_path, filename)}\". "
-                        f"Modified: {datetime.fromtimestamp(mtime).strftime('%Y-%m-%d')}. "
-                        f"Age: {int(age_in_days)} days.")
-
-                if age_in_days > days:
-                    logger.info(f"  Removing file: {file_path}")
-                    if not self.dry_run:
-                        os.remove(file_path)
-                    files_removed += 1
-                else:
-                    logger.debug("  Keeping file (not old enough)")
-
-        logger.info("Cleanup summary:")
-        logger.info(f"  Files checked: {files_checked}")
-        logger.info(f"  Files removed: {files_removed}")
+        return jobs
 
     def run(self):
         transcribing_dir = self.obsidian_root / self.config.general.transcription_dir_path
         if not os.path.exists(transcribing_dir):
             raise ValueError(f"Transcribing directory does not exist: {transcribing_dir}")
 
-        self.create_subdirectories(transcribing_dir)
+        output_dir = transcribing_dir / OUTPUT_DIR_NAME
 
         # Clean old audio files
         if self.config.general.cleanup != 0:
             self.log_section_header("Cleanup old audio files")
-            self.cleanup_audio_files_older_than(transcribing_dir, self.config.general.cleanup)
+            TranscriptBundle.cleanup_audio_files_older_than(output_dir, self.config.general.cleanup, self.dry_run)
 
         self.log_section_header("Processing Audio Files")
-        self.process_audio_files(transcribing_dir)
+
+        source_dir = transcribing_dir / SOURCE_DIR_NAME
+
+        self.log_section_header("Gathering Jobs")
+        jobs = self.gather_jobs(source_dir)
+        if not jobs:
+            logger.info("No jobs found for processing")
+        else:
+            self.log_section_header("Processing Jobs")
+            ensure_directory_exists(output_dir)
+            self.process_jobs(jobs, output_dir)
+
+        if not self.dry_run:
+            # remove_empty_subdirs(source_dir)
+            pass
 
         self.log_section_header("Summary")
         logger.info("Transcription process completed successfully.")
