@@ -1,8 +1,8 @@
 
 from pathlib import Path
-import yaml
-from pydantic import BaseModel, model_validator
 import os
+from pydantic import BaseModel, model_validator
+import yaml
 
 CONFIG_FILENAME = "config.yaml"
 
@@ -40,7 +40,7 @@ class TranscribeConfig(BaseModel):
     general: GeneralConfig
     text: TextConfig
     audio: AudioConfig
-    
+
     @classmethod
     def from_config_dir(cls, config_dir: Path) -> "TranscribeConfig":
         yaml_path = os.path.join(config_dir, CONFIG_FILENAME)

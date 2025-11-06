@@ -5,10 +5,10 @@ name = "pypi"
 
 [packages]
 requests = "*"
-openai = "*"
 pyyaml = "*"
 pydantic = "*"
 coloredlogs = "*"
+openai = "*"
 
 [dev-packages]
 

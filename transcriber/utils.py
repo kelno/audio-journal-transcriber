@@ -59,3 +59,11 @@ def extract_date_from_recording_filename(audio_path: Path) -> datetime|None:
     except ValueError:
         logger.warning(f"Filename {filename} contains an invalid date: {m.groups()}")
         return None
+
+def file_is_in_directory_tree(file : Path, tree: Path) -> bool:
+
+    root = tree.resolve()
+    file_path = file.resolve()
+
+    is_inside = root in file_path.parents
+    return is_inside
