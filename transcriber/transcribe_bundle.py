@@ -5,7 +5,7 @@ import os
 from typing import List
 
 from transcriber.globals import is_handled_audio_file
-from transcriber.transcribe_bundle_text_file import TranscribeTextFile
+from transcriber.transcribe_bundle_text_file import TranscribeBundleTextFile
 from transcriber.utils import extract_date_from_recording_filename
 from transcriber.logger import get_logger
 
@@ -17,8 +17,8 @@ SUMMARY_NAME = "summary.md"
 @dataclass
 class TranscribeBundle:
     source_audio: Path|None
-    transcript: TranscribeTextFile|None
-    summary: TranscribeTextFile|None
+    transcript: TranscribeBundleTextFile|None
+    summary: TranscribeBundleTextFile|None
     bundle_name: str|None # Can be provided, otherwise will be generated. This will be the bundle directory name.
 
     @classmethod
@@ -36,9 +36,9 @@ class TranscribeBundle:
                     raise ValueError("Multiple audio files found in bundle") # not yet supported
                 bundle.source_audio = file_path
             elif file_path.name == TRANSCRIPT_NAME:
-                bundle.transcript = TranscribeTextFile.from_file(file_path)
+                bundle.transcript = TranscribeBundleTextFile.from_file(file_path)
             elif file_path.name == SUMMARY_NAME:
-                bundle.summary = TranscribeTextFile.from_file(file_path)
+                bundle.summary = TranscribeBundleTextFile.from_file(file_path)
 
         if not bundle.source_audio and not bundle.transcript and not bundle.summary:
             raise ValueError("Bundle directory has no valid files")

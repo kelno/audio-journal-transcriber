@@ -7,7 +7,7 @@ from typing import List
 from transcriber.ai_manager import AIManager
 from transcriber.config import TranscribeConfig
 from transcriber.logger import get_logger
-from transcriber.transcribe_bundle import TranscribeBundle, TranscribeTextFile
+from transcriber.transcribe_bundle import TranscribeBundle, TranscribeBundleTextFile
 from transcriber.transcribe_bundle_text_file import TranscribeTextFileProps
 from transcriber.utils import file_is_in_directory_tree
 from transcriber.utils import ensure_directory_exists
@@ -56,7 +56,7 @@ class TranscriptionJob(TranscribeBundleJob):
         if not self.dry_run:
             transcript_content = ai_manager.transcribe_audio(self.bundle.source_audio)
             props = TranscribeTextFileProps(self.config.text.model)
-            self.bundle.transcript = TranscribeTextFile(props, transcript_content)
+            self.bundle.transcript = TranscribeBundleTextFile(props, transcript_content)
             self.bundle.transcript.write(transcript_path)
 
 @dataclass
@@ -72,7 +72,7 @@ class SummaryJob(TranscribeBundleJob):
 
             summary_content = ai_manager.try_get_ai_summary(self.bundle.transcript.content)
             props = TranscribeTextFileProps(self.config.text.model)
-            self.bundle.summary = TranscribeTextFile(props, summary_content)
+            self.bundle.summary = TranscribeBundleTextFile(props, summary_content)
             self.bundle.summary.write(summary_path)
 
 class BundleNameJob(TranscribeBundleJob):

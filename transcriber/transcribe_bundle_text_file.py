@@ -12,12 +12,12 @@ class TranscribeTextFileProps:
     model: str
 
 @dataclass
-class TranscribeTextFile:
+class TranscribeBundleTextFile:
     props: TranscribeTextFileProps
     content: str
 
     @classmethod
-    def from_file(cls, path: Path) -> "TranscribeTextFile":
+    def from_file(cls, path: Path) -> "TranscribeBundleTextFile":
         """
         Parse a markdown file into frontmatter + content.
         Returns (frontmatter_obj, markdown_content)
