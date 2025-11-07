@@ -62,3 +62,17 @@ def file_is_in_directory_tree(file : Path, tree: Path) -> bool:
 
     is_inside = root in file_path.parents
     return is_inside
+
+def get_file_modified_date(audio_path: Path) -> datetime:
+    """Get the file's date from its last modified time (format: YYYY-MM-DD).
+    Falls back to current date if modification time is unavailable."""
+
+    try:
+        file_mtime = os.path.getmtime(audio_path)
+        file_date = datetime.fromtimestamp(file_mtime)
+        logger.debug(f"Using file last modified date: '{file_date}'")
+        return file_date
+    except OSError:
+        file_date = datetime.now()
+        logger.warning(f"Could not get file modification time, using current date: '{file_date}'")
+        return file_date

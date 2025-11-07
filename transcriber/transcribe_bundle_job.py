@@ -7,9 +7,8 @@ from typing import List
 from transcriber.ai_manager import AIManager
 from transcriber.config import TranscribeConfig
 from transcriber.logger import get_logger
-from transcriber.transcribe_bundle import TranscribeBundle, TranscribeBundleTextFile
-from transcriber.transcribe_bundle_text_file import TranscribeTextFileProps
-from transcriber.utils import file_is_in_directory_tree
+from transcriber.transcribe_bundle import TranscribeBundle
+from transcriber.utils import ensure_directory_exists, file_is_in_directory_tree
 
 logger = get_logger()
 
@@ -37,10 +36,12 @@ class CreateBundleJob(TranscribeBundleJob):
 
         final_audio_path = self.bundle.get_bundle_audio_path(output_base_dir)
         if self.bundle.source_audio != final_audio_path:
+            ensure_directory_exists(final_audio_path.parent)
             logger.info(f"Moving audio file from [{self.bundle.source_audio}] to [{final_audio_path}]")
             if not self.dry_run:
                 shutil.move(self.bundle.source_audio, final_audio_path)
                 self.bundle.update_audio_path(final_audio_path)
+                self.bundle.set_and_write_original_audio_filename(output_base_dir, final_audio_path.name)
 
 @dataclass
 class TranscriptionJob(TranscribeBundleJob):
@@ -54,9 +55,7 @@ class TranscriptionJob(TranscribeBundleJob):
 
         if not self.dry_run:
             transcript_content = ai_manager.transcribe_audio(self.bundle.source_audio)
-            props = TranscribeTextFileProps(self.config.text.model)
-            self.bundle.transcript = TranscribeBundleTextFile(props, transcript_content)
-            self.bundle.transcript.write(transcript_path)
+            self.bundle.set_and_write_transcript(output_base_dir, transcript_content, self.config.audio.model)
 
 @dataclass
 class SummaryJob(TranscribeBundleJob):
@@ -69,10 +68,8 @@ class SummaryJob(TranscribeBundleJob):
             if not self.bundle.transcript:
                 raise ValueError("Cannot generate ai summary without transcript")
 
-            summary_content = ai_manager.try_get_ai_summary(self.bundle.transcript.content)
-            props = TranscribeTextFileProps(self.config.text.model)
-            self.bundle.summary = TranscribeBundleTextFile(props, summary_content)
-            self.bundle.summary.write(summary_path)
+            summary_content = ai_manager.try_get_ai_summary(self.bundle.transcript)
+            self.bundle.set_and_write_summary(output_base_dir, summary_content, self.config.text.model)
 
 class BundleNameJob(TranscribeBundleJob):
 
