@@ -1,0 +1,27 @@
+general:
+  # Directory inside the Obsidian vault where audio files to transcribe are located, relative to the vault root
+  transcription_dir_path: Transcription
+  # Remove successfully processed audio files after this delay. 0 = disabled
+  cleanup: 0
+
+text:
+  summary_enabled: true
+  # Base URL for the local OpenAI-compatible API.
+  #   Example for openwebui: http://localhost:8080/api
+  api_base_url: http://localhost:8080/api
+  # Key as required by your API (or any dummy text if value not needed)
+  api_key: your_api_key_here
+  # Example: mistral-medium-2505
+  model: mistral-medium-2505
+  # Extra context to provide to the AI when summarizing audio content, beside the basic instruction.
+  extra_context: null
+
+audio:
+  # Example for speaches: http://localhost:8000/v1
+  api_base_url: http://localhost:8000/v1
+  # Key as required by your API (or any dummy text if value not needed)
+  api_key: your_api_key_here
+  # Model to use for transcription. Must support streaming.
+  # Example: Kelno/whisper-large-v3-french-distil-dec16-ct2
+  model: Kelno/whisper-large-v3-french-distil-dec16-ct2
+  stream: true
