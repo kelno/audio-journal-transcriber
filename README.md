@@ -25,13 +25,9 @@ $obsidianRoot = (Get-Location).Path; cd _/transcribe; Start-Process powershell -
 
 # Improve me
 
-- Split transcript and summary in different files
-  - On re run, the existence of those files can be checked and if they're existing, we assume they're good
-  - We'll need some kind of "job" concept here to only run some of the tasks depending on what was successfull
-  - The goal is to be able to re run the script and it will resume whatever was failed
 - Use IA to name those recordings too, based on their content
-- Do one retry on ai summary failure
-- Try grouping records being done very close to each other. Group them as a single result file basically.
+- Do one retry on ai summary failure?
+- Try grouping records being done very close to each other. Group them as a single bundle, and process them accordingly. 
 - Add a "do not delete" property checkbox
   - Extra swag if it can be auto enabled if I mention it in the record
 - Remove links to records from the Obsidian record document

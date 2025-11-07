@@ -44,7 +44,7 @@ class TranscribeTextFile:
         Combine this frontmatter and body content into full markdown text.
         """
         yaml_text = yaml.safe_dump(asdict(self.props), sort_keys=False).strip()
-        return f"---\n{yaml_text}\n---\n\n{self.content.strip()}\n"
+        return f"---\n{yaml_text}\n---\n*This file is generated and changes might be erased*\n\n---\n\n{self.content.strip()}\n"
 
     def write(self, path: Path) -> None:
         """Write full markdown file with this frontmatter."""
