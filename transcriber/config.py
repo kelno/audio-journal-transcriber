@@ -1,10 +1,11 @@
-
 from pathlib import Path
 import os
 from pydantic import BaseModel, model_validator
+
 import yaml
 
 CONFIG_FILENAME = "config.yaml"
+
 
 # Configuration class matching yaml config
 class TranscribeConfig(BaseModel):
@@ -17,12 +18,12 @@ class TranscribeConfig(BaseModel):
         api_base_url: str
         model: str
         api_key: str
-        extra_context: str|None = None
+        extra_context: str | None = None
 
         @model_validator(mode="after")
-        def ensure_trailing_slash(cls, self): # pylint: disable=E0213
-            if not self.api_base_url.endswith('/'):
-                self.api_base_url += '/'
+        def ensure_trailing_slash(cls, self):  # pylint: disable=E0213
+            if not self.api_base_url.endswith("/"):
+                self.api_base_url += "/"
             return self
 
     class AudioConfig(BaseModel):
@@ -32,9 +33,9 @@ class TranscribeConfig(BaseModel):
         stream: bool = False
 
         @model_validator(mode="after")
-        def ensure_trailing_slash(cls, self): # pylint: disable=E0213
-            if not self.api_base_url.endswith('/'):
-                self.api_base_url += '/'
+        def ensure_trailing_slash(cls, self):  # pylint: disable=E0213
+            if not self.api_base_url.endswith("/"):
+                self.api_base_url += "/"
             return self
 
     general: GeneralConfig

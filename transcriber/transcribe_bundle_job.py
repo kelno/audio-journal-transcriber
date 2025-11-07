@@ -12,9 +12,11 @@ from transcriber.utils import ensure_directory_exists, file_is_in_directory_tree
 
 logger = get_logger()
 
+
 @dataclass
 class TranscribeBundleJob(ABC):
     """Abstract base class for all job types."""
+
     bundle: TranscribeBundle
     config: TranscribeConfig
     dry_run: bool
@@ -25,6 +27,7 @@ class TranscribeBundleJob(ABC):
 
     def __str__(self):
         return f"{self.__class__.__name__}({self.bundle.get_bundle_name()})"
+
 
 @dataclass
 class CreateBundleJob(TranscribeBundleJob):
@@ -37,11 +40,16 @@ class CreateBundleJob(TranscribeBundleJob):
         final_audio_path = self.bundle.get_bundle_audio_path(output_base_dir)
         if self.bundle.source_audio != final_audio_path:
             ensure_directory_exists(final_audio_path.parent)
-            logger.info(f"Moving audio file from [{self.bundle.source_audio}] to [{final_audio_path}]")
+            logger.info(
+                f"Moving audio file from [{self.bundle.source_audio}] to [{final_audio_path}]"
+            )
             if not self.dry_run:
                 shutil.move(self.bundle.source_audio, final_audio_path)
                 self.bundle.update_audio_path(final_audio_path)
-                self.bundle.set_and_write_original_audio_filename(output_base_dir, final_audio_path.name)
+                self.bundle.set_and_write_original_audio_filename(
+                    output_base_dir, final_audio_path.name
+                )
+
 
 @dataclass
 class TranscriptionJob(TranscribeBundleJob):
@@ -55,7 +63,10 @@ class TranscriptionJob(TranscribeBundleJob):
 
         if not self.dry_run:
             transcript_content = ai_manager.transcribe_audio(self.bundle.source_audio)
-            self.bundle.set_and_write_transcript(output_base_dir, transcript_content, self.config.audio.model)
+            self.bundle.set_and_write_transcript(
+                output_base_dir, transcript_content, self.config.audio.model
+            )
+
 
 @dataclass
 class SummaryJob(TranscribeBundleJob):
@@ -69,7 +80,10 @@ class SummaryJob(TranscribeBundleJob):
                 raise ValueError("Cannot generate ai summary without transcript")
 
             summary_content = ai_manager.try_get_ai_summary(self.bundle.transcript)
-            self.bundle.set_and_write_summary(output_base_dir, summary_content, self.config.text.model)
+            self.bundle.set_and_write_summary(
+                output_base_dir, summary_content, self.config.text.model
+            )
+
 
 class BundleNameJob(TranscribeBundleJob):
 
@@ -79,15 +93,20 @@ class BundleNameJob(TranscribeBundleJob):
 
         raise NotImplementedError("BundleNameJob not yet implemented.")
 
+
 # Moved here to avoid circular imports
-def gather_bundle_jobs(bundle: TranscribeBundle, output_dir: Path, config: TranscribeConfig, dry_run: bool) -> List[TranscribeBundleJob]:
+def gather_bundle_jobs(
+    bundle: TranscribeBundle, output_dir: Path, config: TranscribeConfig, dry_run: bool
+) -> List[TranscribeBundleJob]:
     """Gather transcription jobs from this bundle."""
     jobs = []
 
     bundle_name = bundle.get_bundle_name()
     logger.debug(f"Gathering jobs for bundle: [{bundle_name}]")
 
-    if bundle.source_audio and not file_is_in_directory_tree(bundle.source_audio, output_dir):
+    if bundle.source_audio and not file_is_in_directory_tree(
+        bundle.source_audio, output_dir
+    ):
         job = CreateBundleJob(bundle, config, dry_run)
         jobs.append(job)
 

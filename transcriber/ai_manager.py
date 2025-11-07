@@ -1,4 +1,3 @@
-
 from pathlib import Path
 from dataclasses import dataclass
 import json
@@ -13,6 +12,7 @@ from transcriber.logger import get_logger
 
 logger = get_logger()
 
+
 @dataclass
 class AIManager:
     """Manages interactions with AI models for transcription and summarization."""
@@ -26,28 +26,36 @@ class AIManager:
         """
         logger.debug(f"AIManager Transcribing: {audio_path}")
 
-        with open(audio_path, 'rb') as audio_file:
+        with open(audio_path, "rb") as audio_file:
             files = {
-                'file': (os.path.basename(audio_path), audio_file, 'multipart/form-data')
+                "file": (
+                    os.path.basename(audio_path),
+                    audio_file,
+                    "multipart/form-data",
+                )
             }
             data = {
-                'model': self.config.audio.model,
-                'stream': "true" if self.config.audio.stream else "false",
+                "model": self.config.audio.model,
+                "stream": "true" if self.config.audio.stream else "false",
             }
             url = urljoin(self.config.audio.api_base_url, "audio/transcriptions")
             response = requests.post(
                 url=url,
                 files=files,
                 data=data,
-                headers={'Authorization': f'Bearer {self.config.audio.api_key}'},
+                headers={"Authorization": f"Bearer {self.config.audio.api_key}"},
                 stream=True,
-                timeout=60 if self.config.audio.stream else 600 # 1 min for streaming, 10 min for non-streaming
+                timeout=(
+                    60 if self.config.audio.stream else 600
+                ),  # 1 min for streaming, 10 min for non-streaming
             )
 
         if response.status_code == 200:
             return self.extract_streaming_response(response)
         else:
-            raise ValueError(f"Transcription failed with status code {response.status_code} and response: {response.text}")
+            raise ValueError(
+                f"Transcription failed with status code {response.status_code} and response: {response.text}"
+            )
 
     def extract_streaming_response(self, response) -> str:
         """Process a streaming response from the transcription API and write directly to file.
@@ -58,20 +66,20 @@ class AIManager:
         for line in response.iter_lines():
             if line:
                 try:
-                    json_str = line.decode('utf-8').removeprefix('data: ')
-                    if json_str.strip() == '[DONE]':
+                    json_str = line.decode("utf-8").removeprefix("data: ")
+                    if json_str.strip() == "[DONE]":
                         break
                     result = json.loads(json_str)
-                    if 'text' in result:
-                        text = result['text']
+                    if "text" in result:
+                        text = result["text"]
                         text_chunks.append(text)
-                        print(text, end='', flush=True)
+                        print(text, end="", flush=True)
                 except Exception as e:
                     logger.error(f"Error decoding line:\n{line}")
                     raise e
 
         print("\n")
-        complete_transcript = ' '.join(text_chunks)
+        complete_transcript = " ".join(text_chunks)
 
         return complete_transcript
 
@@ -82,15 +90,20 @@ class AIManager:
             *: Pass through any exceptions from the OpenAI client.
         """
 
-        client = OpenAI(base_url="http://localhost:8080/api/", api_key=self.config.text.api_key)
+        client = OpenAI(
+            base_url="http://localhost:8080/api/", api_key=self.config.text.api_key
+        )
 
         # https://platform.openai.com/docs/api-reference/chat/create
         completion = client.chat.completions.create(
             model=self.config.text.model,
             messages=[
-                {"role": "system", "content": "You are part of an automated pipeline to transcribe and summarize texts."},
-                {"role": "user", "content": prompt}
-            ]
+                {
+                    "role": "system",
+                    "content": "You are part of an automated pipeline to transcribe and summarize texts.",
+                },
+                {"role": "user", "content": prompt},
+            ],
         )
         if len(completion.choices) == 0:
             logger.error("AI summary failed: no choices returned")
@@ -108,7 +121,11 @@ class AIManager:
         Queries the configured LLM for a summary
         """
 
-        extra_context_prompt = f"Extra context:\n{self.config.text.extra_context}" if self.config.text.extra_context is not None else ""
+        extra_context_prompt = (
+            f"Extra context:\n{self.config.text.extra_context}"
+            if self.config.text.extra_context is not None
+            else ""
+        )
         prompt = f"""
             You are part of an automated pipeline to transcribe and summarize texts. 
             Please summarize the following transcript of my own audio recording. 
@@ -131,7 +148,9 @@ class AIManager:
 
         try:
             summary = self.get_ai_summary(transcript)
-            logger.info(f"AI summary succeeded. Excerpt: {summary[:160]}...")  # Log first 100 chars
+            logger.info(
+                f"AI summary succeeded. Excerpt: {summary[:160]}..."
+            )  # Log first 100 chars
             return summary
         except Exception as e:
             logger.error(f"AI summary failed with exception: {e}")

@@ -12,10 +12,11 @@ from transcriber.logger import get_logger
 from transcriber.transcribe_bundle_job import TranscribeBundleJob, gather_bundle_jobs
 from transcriber.utils import ensure_directory_exists, remove_empty_subdirs
 
-OUTPUT_DIR_NAME = 'Output'
+OUTPUT_DIR_NAME = "Output"
 SOURCE_DIR_NAME = "attachments"  # Directory where audio files are located
 
 logger = get_logger()
+
 
 @dataclass
 class AudioTranscriber:
@@ -28,17 +29,22 @@ class AudioTranscriber:
         if self.dry_run:
             logger.warning("!!! DRY RUN MODE !!!")
         logger.info(
-             f"{type(self).__name__} initialized with\n"
-             f"Obsidian Root: {self.obsidian_root}\n"
-             f"Transcribing dir: {self.config.general.transcription_dir_path}\n"
-             f"Cleanup {self.config.general.cleanup}\n"
-             f"Text summary {"enabled" if self.config.text.summary_enabled else "disabled"}")
+            f"{type(self).__name__} initialized with\n"
+            f"Obsidian Root: {self.obsidian_root}\n"
+            f"Transcribing dir: {self.config.general.transcription_dir_path}\n"
+            f"Cleanup {self.config.general.cleanup}\n"
+            f"Text summary {"enabled" if self.config.text.summary_enabled else "disabled"}"
+        )
 
         # Make sure obsidian_root exists
         if not self.obsidian_root.exists():
-            raise ValueError(f"Obsidian root directory does not exist: {self.obsidian_root}")
+            raise ValueError(
+                f"Obsidian root directory does not exist: {self.obsidian_root}"
+            )
 
-    def process_jobs(self, jobs: List[TranscribeBundleJob], output_dir: Path, ai_manager: AIManager):
+    def process_jobs(
+        self, jobs: List[TranscribeBundleJob], output_dir: Path, ai_manager: AIManager
+    ):
         """Process audio files from the pending directory."""
 
         for job in jobs:
@@ -80,16 +86,20 @@ class AudioTranscriber:
                 transcript_path = os.path.join(root, "summary.md")
 
                 if not os.path.exists(transcript_path):
-                    logger.warning(f"Skipping [{filename}], as no matching text file was found. ")
+                    logger.warning(
+                        f"Skipping [{filename}], as no matching text file was found. "
+                    )
                     continue
 
                 mtime = os.path.getmtime(file_path)
                 age_in_days = (current_time - mtime) / (24 * 3600)
 
                 rel_path = os.path.relpath(root, output_dir)
-                logger.debug(f"Checking: \"{os.path.join(rel_path, filename)}\". "
-                        f"Modified: {datetime.fromtimestamp(mtime).strftime('%Y-%m-%d')}. "
-                        f"Age: {int(age_in_days)} days.")
+                logger.debug(
+                    f'Checking: "{os.path.join(rel_path, filename)}". '
+                    f"Modified: {datetime.fromtimestamp(mtime).strftime('%Y-%m-%d')}. "
+                    f"Age: {int(age_in_days)} days."
+                )
 
                 if age_in_days > days:
                     logger.info(f"Removing file: {file_path}")
@@ -103,13 +113,15 @@ class AudioTranscriber:
         logger.info(f"  Files checked: {files_checked}")
         logger.info(f"  Files removed: {files_removed}")
 
-    def gather_jobs(self, source_dir: Path, output_dir: Path) -> List[TranscribeBundleJob]:
+    def gather_jobs(
+        self, source_dir: Path, output_dir: Path
+    ) -> List[TranscribeBundleJob]:
         """
         Find audio files in the given subdirectory and its subdirectories.
         Returns a list of Path objects for each audio file found.
         """
         if not source_dir.exists():
-            raise FileNotFoundError(f'Source directory does not exist: {source_dir}')
+            raise FileNotFoundError(f"Source directory does not exist: {source_dir}")
 
         logger.debug(f"Looking for pending jobs in {source_dir}")
 
@@ -119,14 +131,20 @@ class AudioTranscriber:
         jobs = []
 
         for bundle in bundles:
-            jobs.extend(gather_bundle_jobs(bundle, output_dir, self.config, self.dry_run))
+            jobs.extend(
+                gather_bundle_jobs(bundle, output_dir, self.config, self.dry_run)
+            )
 
         return jobs
 
     def run(self):
-        transcribing_dir = self.obsidian_root / self.config.general.transcription_dir_path
+        transcribing_dir = (
+            self.obsidian_root / self.config.general.transcription_dir_path
+        )
         if not os.path.exists(transcribing_dir):
-            raise ValueError(f"Transcribing directory does not exist: {transcribing_dir}")
+            raise ValueError(
+                f"Transcribing directory does not exist: {transcribing_dir}"
+            )
 
         source_dir = transcribing_dir / SOURCE_DIR_NAME
         output_dir = transcribing_dir / OUTPUT_DIR_NAME
@@ -135,7 +153,9 @@ class AudioTranscriber:
         # Clean old audio files
         if self.config.general.cleanup != 0:
             self.log_section_header("Cleanup old audio files")
-            self.cleanup_audio_files_older_than(output_dir, self.config.general.cleanup, self.dry_run)
+            self.cleanup_audio_files_older_than(
+                output_dir, self.config.general.cleanup, self.dry_run
+            )
 
         self.log_section_header("Init AI Manager")
         ai_manager = AIManager(self.config)
