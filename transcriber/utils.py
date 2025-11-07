@@ -12,11 +12,6 @@ def ensure_directory_exists(directory):
     if not os.path.exists(directory):
         os.makedirs(directory)
 
-def touch_file(file_path):
-    """Update file's modification time to current time"""
-
-    os.utime(file_path, None)
-
 def remove_empty_subdirs(directory: Path):
     """Recursively remove directories inside given directory if they're empty."""
     try:

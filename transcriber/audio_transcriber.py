@@ -137,7 +137,6 @@ class AudioTranscriber:
             self.log_section_header("Cleanup old audio files")
             self.cleanup_audio_files_older_than(output_dir, self.config.general.cleanup, self.dry_run)
 
-
         self.log_section_header("Init AI Manager")
         ai_manager = AIManager(self.config)
 

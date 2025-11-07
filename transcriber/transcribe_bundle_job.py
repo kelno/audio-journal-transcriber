@@ -10,7 +10,6 @@ from transcriber.logger import get_logger
 from transcriber.transcribe_bundle import TranscribeBundle, TranscribeBundleTextFile
 from transcriber.transcribe_bundle_text_file import TranscribeTextFileProps
 from transcriber.utils import file_is_in_directory_tree
-from transcriber.utils import ensure_directory_exists
 
 logger = get_logger()
 
@@ -35,7 +34,7 @@ class CreateBundleJob(TranscribeBundleJob):
     def run(self, output_base_dir: Path, _ai_manager: AIManager):
         if not self.bundle.source_audio:
             raise FileNotFoundError("Bundle has no audio file set")
-        
+
         final_audio_path = self.bundle.get_bundle_audio_path(output_base_dir)
         if self.bundle.source_audio != final_audio_path:
             logger.info(f"Moving audio file from [{self.bundle.source_audio}] to [{final_audio_path}]")
@@ -52,7 +51,7 @@ class TranscriptionJob(TranscribeBundleJob):
 
         if not self.bundle.source_audio:
             raise FileNotFoundError("Bundle has no audio file set")
-        
+
         if not self.dry_run:
             transcript_content = ai_manager.transcribe_audio(self.bundle.source_audio)
             props = TranscribeTextFileProps(self.config.text.model)
@@ -80,7 +79,7 @@ class BundleNameJob(TranscribeBundleJob):
     def run(self, output_base_dir: Path, ai_manager: AIManager):
         if not self.bundle.summary:
             raise ValueError("Cannot generate bundle name without AI summary.")
-        
+
         raise NotImplementedError("BundleNameJob not yet implemented.")
 
 # Moved here to avoid circular imports
@@ -90,8 +89,6 @@ def gather_bundle_jobs(bundle: TranscribeBundle, output_dir: Path, config: Trans
 
     bundle_name = bundle.get_bundle_name()
     logger.debug(f"Gathering jobs for bundle: [{bundle_name}]")
-
-    ensure_directory_exists(bundle.get_bundle_dir(output_dir))
 
     if bundle.source_audio and not file_is_in_directory_tree(bundle.source_audio, output_dir):
         job = CreateBundleJob(bundle, config, dry_run)
