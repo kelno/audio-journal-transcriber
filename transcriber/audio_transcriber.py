@@ -87,17 +87,17 @@ class AudioTranscriber:
                 age_in_days = (current_time - mtime) / (24 * 3600)
 
                 rel_path = os.path.relpath(root, output_dir)
-                logger.debug(f"\nChecking: \"{os.path.join(rel_path, filename)}\". "
+                logger.debug(f"Checking: \"{os.path.join(rel_path, filename)}\". "
                         f"Modified: {datetime.fromtimestamp(mtime).strftime('%Y-%m-%d')}. "
                         f"Age: {int(age_in_days)} days.")
 
                 if age_in_days > days:
-                    logger.info(f"  Removing file: {file_path}")
+                    logger.info(f"Removing file: {file_path}")
                     if not dry_run:
                         os.remove(file_path)
                     files_removed += 1
                 else:
-                    logger.debug("  Keeping file (not old enough)")
+                    logger.debug("Keeping file (not old enough)")
 
         logger.info("Cleanup summary:")
         logger.info(f"  Files checked: {files_checked}")
