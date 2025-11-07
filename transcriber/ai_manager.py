@@ -113,7 +113,7 @@ class AIManager:
             You are part of an automated pipeline to transcribe and summarize texts. 
             Please summarize the following transcript of my own audio recording. 
             Extra instructions:
-            - Use the input language for the summary.
+            - Answer using the same language as the transcript. For example if the transcript is in french, answer in french.
             - You should act like a function and only output the summary.
             - If and only if the transcript very specifically mentions things that should be done, highlight those points as a recap at the end of the summary with the title "Action Items".
             - Given that this is an audio transcript that might be of poor quality, you might need to make some assumptions as to what was said. In those instances, take extra care to announce your assumptions clearly.
