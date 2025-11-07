@@ -9,7 +9,7 @@ from transcriber.config import TranscribeConfig
 from transcriber.globals import is_handled_audio_file
 from transcriber.transcribe_bundle import TranscribeBundle
 from transcriber.logger import get_logger
-from transcriber.transcribe_job import TranscribeJob, gather_bundle_jobs
+from transcriber.transcribe_bundle_job import TranscribeBundleJob, gather_bundle_jobs
 from transcriber.utils import ensure_directory_exists, remove_empty_subdirs
 
 OUTPUT_DIR_NAME = 'Output'
@@ -38,7 +38,7 @@ class AudioTranscriber:
         if not self.obsidian_root.exists():
             raise ValueError(f"Obsidian root directory does not exist: {self.obsidian_root}")
 
-    def process_jobs(self, jobs: List[TranscribeJob], output_dir: Path, ai_manager: AIManager):
+    def process_jobs(self, jobs: List[TranscribeBundleJob], output_dir: Path, ai_manager: AIManager):
         """Process audio files from the pending directory."""
 
         for job in jobs:
@@ -103,7 +103,7 @@ class AudioTranscriber:
         logger.info(f"  Files checked: {files_checked}")
         logger.info(f"  Files removed: {files_removed}")
 
-    def gather_jobs(self, source_dir: Path, output_dir: Path) -> List[TranscribeJob]:
+    def gather_jobs(self, source_dir: Path, output_dir: Path) -> List[TranscribeBundleJob]:
         """
         Find audio files in the given subdirectory and its subdirectories.
         Returns a list of Path objects for each audio file found.
@@ -119,7 +119,7 @@ class AudioTranscriber:
         jobs = []
 
         for bundle in bundles:
-            jobs.extend(gather_bundle_jobs(bundle, output_dir, self.config.text.summary_enabled, self.dry_run))
+            jobs.extend(gather_bundle_jobs(bundle, output_dir, self.config, self.dry_run))
 
         return jobs
 

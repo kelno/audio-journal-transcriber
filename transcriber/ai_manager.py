@@ -24,7 +24,7 @@ class AIManager:
         Transcribe an audio file using a local OpenAI-compatible API with streaming.
         Writes output directly to file.
         """
-        logger.info(f"Transcribing: {audio_path}")
+        logger.debug(f"AIManager Transcribing: {audio_path}")
 
         with open(audio_path, 'rb') as audio_file:
             files = {
@@ -122,3 +122,17 @@ class AIManager:
             ---
             {transcript}"""
         return self.query_chat_completion(prompt)
+
+    def try_get_ai_summary(self, transcript: str) -> str:
+        """
+        Generate and append AI summary to the transcription file.
+        """
+        logger.debug("Generating AI summary")
+
+        try:
+            summary = self.get_ai_summary(transcript)
+            logger.info(f"AI summary succeeded. Excerpt: {summary[:160]}...")  # Log first 100 chars
+            return summary
+        except Exception as e:
+            logger.error(f"AI summary failed with exception: {e}")
+            raise
