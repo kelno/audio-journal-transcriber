@@ -14,35 +14,24 @@ from transcriber.transcribe_bundle_job import (
 )
 from transcriber.utils import ensure_directory_exists, remove_empty_subdirs
 
-OUTPUT_DIR_NAME = "Output"
-SOURCE_DIR_NAME = "attachments"  # Directory where audio files are located
-
 logger = get_logger()
 
 
 @dataclass
 class AudioTranscriber:
     config: TranscribeConfig
-    obsidian_root: Path
+    store_dir: Path
     dry_run: bool = False
 
     def __post_init__(self):
-        self.obsidian_root = self.obsidian_root.resolve()
         if self.dry_run:
             logger.warning("!!! DRY RUN MODE !!!")
         logger.info(
             f"{type(self).__name__} initialized with\n"
-            f"Obsidian Root: {self.obsidian_root}\n"
-            f"Transcribing dir: {self.config.general.transcription_dir_path}\n"
+            f"Store directory: {self.store_dir}\n"
             f"Cleanup {self.config.general.cleanup}\n"
             f"Text summary {"enabled" if self.config.text.summary_enabled else "disabled"}"
         )
-
-        # Make sure obsidian_root exists
-        if not self.obsidian_root.exists():
-            raise ValueError(
-                f"Obsidian root directory does not exist: {self.obsidian_root}"
-            )
 
     def process_jobs(
         self, all_jobs: list[BundleJobs], output_dir: Path, ai_manager: AIManager
@@ -117,17 +106,17 @@ class AudioTranscriber:
         logger.info(f"  Files checked: {files_checked}")
         logger.info(f"  Files removed: {files_removed}")
 
-    def gather_jobs(self, source_dir: Path, output_dir: Path) -> list[BundleJobs]:
+    def gather_jobs(self, input_dir: Path, output_dir: Path) -> list[BundleJobs]:
         """
         Find audio files in the given subdirectory and its subdirectories.
         Returns a list of Path objects for each audio file found.
         """
-        if not source_dir.exists():
-            raise FileNotFoundError(f"Source directory does not exist: {source_dir}")
+        if not input_dir.exists():
+            raise FileNotFoundError(f"Input directory does not exist: {input_dir}")
 
-        logger.debug(f"Looking for pending jobs in {source_dir}")
+        logger.debug(f"Looking for pending jobs in {input_dir}")
 
-        bundles = TranscribeBundle.gather_pending_audio_files(source_dir)
+        bundles = TranscribeBundle.gather_pending_audio_files(input_dir)
         bundles.extend(TranscribeBundle.gather_existing_bundles(output_dir))
 
         jobs: list[BundleJobs] = []
@@ -139,40 +128,34 @@ class AudioTranscriber:
 
         return jobs
 
-    def run(self):
-        transcribing_dir = (
-            self.obsidian_root / self.config.general.transcription_dir_path
-        )
-        if not os.path.exists(transcribing_dir):
-            raise ValueError(
-                f"Transcribing directory does not exist: {transcribing_dir}"
-            )
+    def run(self, input_dir: Path):
+        ensure_directory_exists(self.store_dir)
 
-        source_dir = transcribing_dir / SOURCE_DIR_NAME
-        output_dir = transcribing_dir / OUTPUT_DIR_NAME
-        ensure_directory_exists(output_dir)
+        # Make sure obsidian_root exists
+        if not input_dir.exists():
+            raise ValueError(f"Input directory does not exist: {input_dir}")
 
         # Clean old audio files
         if self.config.general.cleanup != 0:
             self.log_section_header("Cleanup old audio files")
             self.cleanup_audio_files_older_than(
-                output_dir, self.config.general.cleanup, self.dry_run
+                self.store_dir, self.config.general.cleanup, self.dry_run
             )
 
         self.log_section_header("Init AI Manager")
         ai_manager = AIManager(self.config)
 
         self.log_section_header("Gathering Jobs")
-        jobs = self.gather_jobs(source_dir, output_dir)
+        jobs = self.gather_jobs(input_dir, self.store_dir)
         logger.info(f"Found pending jobs for {len(jobs)} bundles")
         if not jobs:
             logger.info("No jobs found for processing")
         else:
             self.log_section_header("Processing Jobs")
-            self.process_jobs(jobs, output_dir, ai_manager)
+            self.process_jobs(jobs, self.store_dir, ai_manager)
 
         if not self.dry_run:
-            remove_empty_subdirs(source_dir)
+            remove_empty_subdirs(input_dir)
 
         self.log_section_header("Summary")
         logger.info("Transcription process finished.")

@@ -7,15 +7,20 @@ from transcriber.logger import configure_logger
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        description="Transcribe audio files in Obsidian Vault."
+        description="Move, transcribe and summarize audio files into processed bundles."
     )
     parser.add_argument(
-        "obsidian_root", type=str, help="The Obsidian root directory path"
+        "input_dir", type=str, help="The directory to take audio files from"
+    )
+    parser.add_argument(
+        "--store",
+        type=str,
+        help="The managed transcription directory where files will be moved and processed into bundles (created if not existing)",
     )
     parser.add_argument(
         "--dry-run",
         action="store_true",
-        help="Simulate transcription without actually processing audio files. Will still create directories.",
+        help="Simulate transcription and other jobs without actually writing changes. Will still create directories",
     )
     parser.add_argument(
         "--debug",
@@ -26,11 +31,12 @@ if __name__ == "__main__":
     args = parser.parse_args()
     configure_logger(args.debug)
 
-    obsidian_root = Path(args.obsidian_root)
+    input_dir = Path(args.input_dir)
+    store_dir = Path(args.store)
     script_dir = Path(__file__).parent
     config = TranscribeConfig.from_config_dir(script_dir)
 
     transcriber = AudioTranscriber(
-        config=config, obsidian_root=obsidian_root, dry_run=args.dry_run
+        config=config, store_dir=store_dir, dry_run=args.dry_run
     )
-    transcriber.run()
+    transcriber.run(input_dir)

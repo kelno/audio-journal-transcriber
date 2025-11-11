@@ -1,6 +1,4 @@
 general:
-  # Directory inside the Obsidian vault where audio files to transcribe are located, relative to the vault root
-  transcription_dir_path: Transcription
   # Remove successfully processed audio files after this delay. 0 = disabled
   cleanup: 0
 

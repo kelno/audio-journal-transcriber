@@ -8,6 +8,7 @@ pipenv install
 
 # Usage
 
+See usage with:  
 ```bash
 pipenv run python transcribe.py --help
 
@@ -20,7 +21,10 @@ python transcribe.py --help
 ## Obsidian shell command example
 
 ```
-$obsidianRoot = (Get-Location).Path; cd _/transcribe; Start-Process powershell -ArgumentList "-Command `"pipenv run python transcribe.py $obsidianRoot; Read-Host 'Press Enter to exit'`" "
+$inputDir = Join-Path (Get-Location).Path "Transcription/attachments"
+$storeDir = Join-Path (Get-Location).Path "Transcription/Output"
+cd _/transcribe
+Start-Process powershell -ArgumentList "-Command `"pipenv run python transcribe.py '$inputDir' --store '$storeDir'; Read-Host 'Press Enter to exit'`" "
 ```
 
 # Improve me
@@ -31,7 +35,6 @@ $obsidianRoot = (Get-Location).Path; cd _/transcribe; Start-Process powershell -
   - Extra swag if it can be auto enabled if I mention it in the record
 - Remove links to records from the Obsidian record document
 - Do a "remove empty audio" pass
-- Change cli arguments? So we'd be given an input directory and the output where we place our results
 - refine the prompt, what am I expecting from those summaries?
   -  Maybe provide context such as a list of topics we care about
   -  Maybe some standard ways to interact with it like a key phrase to tell it to create a task in my vault. 

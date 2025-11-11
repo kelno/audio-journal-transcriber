@@ -10,7 +10,6 @@ CONFIG_FILENAME = "config.yaml"
 # Configuration class matching yaml config
 class TranscribeConfig(BaseModel):
     class GeneralConfig(BaseModel):
-        transcription_dir_path: Path
         cleanup: int = 0
 
     class TextConfig(BaseModel):

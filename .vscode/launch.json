@@ -12,7 +12,9 @@
       "console": "integratedTerminal",
       "args": [
         "--debug",
-        "../../",
+        "--store",
+        "../../Transcription/Output",
+        "../../Transcription/attachments",
       ]
     },
     {
@@ -24,7 +26,9 @@
       "args": [
         "--dry-run",
         "--debug",
-        "../../",
+        "--store",
+        "../../Transcription/Output",
+        "../../Transcription/attachments",
       ]
     }
   ]

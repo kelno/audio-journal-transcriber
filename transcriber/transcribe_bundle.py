@@ -179,16 +179,16 @@ class TranscribeBundle:
         return f"{prefix}_{Path(audio_filename).stem}"
 
     @staticmethod
-    def gather_pending_audio_files(source_dir: Path) -> list["TranscribeBundle"]:
+    def gather_pending_audio_files(input_dir: Path) -> list["TranscribeBundle"]:
         """
-        Import audio files from the source directory as TranscriptBundle instances.
+        Import audio files from the input directory as TranscriptBundle instances.
         """
 
-        logger.info(f"Importing audio files from source directory: {source_dir}")
+        logger.info(f"Importing audio files from input directory: {input_dir}")
 
         bundles = []
 
-        for path in source_dir.rglob("*"):
+        for path in input_dir.rglob("*"):
             if path.is_file() and is_handled_audio_file(path.suffix):
                 logger.debug(f"Found audio file: [{path}]")
                 bundle = TranscribeBundle.from_audio_file(source_audio=path)
