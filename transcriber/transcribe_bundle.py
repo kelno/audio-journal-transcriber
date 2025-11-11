@@ -173,7 +173,7 @@ class TranscribeBundle:
         bundles = []
 
         for path in source_dir.rglob("*"):
-            if path.is_file() and is_handled_audio_file(path.name):
+            if path.is_file() and is_handled_audio_file(path.suffix):
                 logger.debug(f"Found audio file: [{path}]")
                 bundle = TranscribeBundle.from_audio_file(source_audio=path)
                 bundles.append(bundle)
