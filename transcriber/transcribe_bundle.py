@@ -88,7 +88,7 @@ class TranscribeBundle:
         summary: str | None = None
 
         for file_path in existing_dir.glob("*"):
-            if is_handled_audio_file(file_path.name):
+            if is_handled_audio_file(file_path.suffix):
                 if source_audio:
                     raise ValueError(
                         "Multiple audio files found in bundle"
@@ -171,6 +171,7 @@ class TranscribeBundle:
         logger.info(f"Importing audio files from source directory: {source_dir}")
 
         bundles = []
+
         for path in source_dir.rglob("*"):
             if path.is_file() and is_handled_audio_file(path.name):
                 logger.debug(f"Found audio file: [{path}]")

@@ -64,7 +64,9 @@ class AudioTranscriber:
         logger.info(f"========== {message} ==========")
 
     @staticmethod
-    def cleanup_audio_files_older_than(output_dir, days, dry_run=False):
+    def cleanup_audio_files_older_than(
+        output_dir: Path, days: int, dry_run: bool = False
+    ):
         """
         Clean up audio files that were processed more than X days ago.
         Only removes audio files that have a matching .md file next to them.
@@ -78,29 +80,27 @@ class AudioTranscriber:
         files_removed = 0
         files_checked = 0
 
-        for root, _, files in os.walk(output_dir):
-            for filename in files:
-                if not is_handled_audio_file(filename):
+        for file_path in Path(output_dir).rglob("*"):
+            if file_path.is_file():
+                if not is_handled_audio_file(file_path.suffix):
                     continue
 
-                file_path = os.path.join(root, filename)
                 files_checked += 1
 
                 # Check for matching .md file
-                transcript_path = os.path.join(root, "summary.md")
+                transcript_path = file_path.parent / "summary.md"
 
-                if not os.path.exists(transcript_path):
+                if not transcript_path.exists():
                     logger.warning(
-                        f"Skipping [{filename}], as no matching text file was found. "
+                        f"Skipping [{file_path.name}], as no matching text file was found. "
                     )
                     continue
 
-                mtime = os.path.getmtime(file_path)
+                mtime = file_path.stat().st_mtime
                 age_in_days = (current_time - mtime) / (24 * 3600)
 
-                rel_path = os.path.relpath(root, output_dir)
                 logger.debug(
-                    f'Checking: "{os.path.join(rel_path, filename)}". '
+                    f'Checking: "{file_path}". '
                     f"Modified: {datetime.fromtimestamp(mtime).strftime('%Y-%m-%d')}. "
                     f"Age: {int(age_in_days)} days."
                 )
@@ -108,7 +108,7 @@ class AudioTranscriber:
                 if age_in_days > days:
                     logger.info(f"Removing file: {file_path}")
                     if not dry_run:
-                        os.remove(file_path)
+                        file_path.unlink()
                     files_removed += 1
                 else:
                     logger.debug("Keeping file (not old enough)")

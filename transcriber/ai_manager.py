@@ -1,7 +1,6 @@
 from pathlib import Path
 from dataclasses import dataclass
 import json
-import os
 
 from urllib.parse import urljoin
 import requests
@@ -29,7 +28,7 @@ class AIManager:
         with open(audio_path, "rb") as audio_file:
             files = {
                 "file": (
-                    os.path.basename(audio_path),
+                    audio_path.name,
                     audio_file,
                     "multipart/form-data",
                 )

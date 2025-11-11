@@ -1,15 +1,14 @@
-import os
+AUDIO_EXTENSIONS = [".mp3", ".wav", ".m4a", ".flac", ".ogg", ".aac", ".mkv", ".mp4"]
 
 
-def is_handled_audio_file(filename: str) -> bool:
+def is_handled_audio_file(extension: str) -> bool:
     """
     Check if the file is an audio file based on extension.
 
     Args:
-        filename (str): Name of the file
+        extension (str): suffix, including the dot
 
     Returns:
-        bool: True if the file is an audio file, False otherwise
+        bool: True if the file is an audio file type we're managing, False otherwise
     """
-    audio_extensions = [".mp3", ".wav", ".m4a", ".flac", ".ogg", ".aac", ".mkv", ".mp4"]
-    return os.path.splitext(filename)[1].lower() in audio_extensions
+    return extension.lower() in AUDIO_EXTENSIONS
