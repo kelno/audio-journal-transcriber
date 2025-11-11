@@ -7,10 +7,12 @@ from transcriber.logger import get_logger
 
 logger = get_logger()
 
+
 def ensure_directory_exists(directory):
     """Create directory and any necessary parent directories if they don't exist."""
     if not os.path.exists(directory):
         os.makedirs(directory)
+
 
 def remove_empty_subdirs(directory: Path):
     """Recursively remove directories inside given directory if they're empty."""
@@ -28,17 +30,19 @@ def remove_empty_subdirs(directory: Path):
     except OSError as e:
         logger.warning(f"Error while removing empty directory {directory}: {e}")
 
-# regex pattern to match obisidian recording filenames like "Recording YYYYMMDDHHMMSS"
-DATE_RE_PATTERN_OBSIDIAN_RECORDING = re.compile(r'^Recording (\d{4})(\d{2})(\d{2})\d{6}')
-# regex pattern to match filenames starting with "YYYY-MM-DD_", regular pattern of mine
-DATE_RE_PATTERN_SPLIT = re.compile(r'^(\d{4})-(\d{2})-(\d{2})_')
 
-def extract_date_from_recording_filename(audio_path: Path) -> datetime|None:
+# regex pattern to match obisidian recording filenames like "Recording YYYYMMDDHHMMSS"
+DATE_RE_PATTERN_OBSIDIAN_RECORDING = re.compile(
+    r"^Recording (\d{4})(\d{2})(\d{2})\d{6}"
+)
+# regex pattern to match filenames starting with "YYYY-MM-DD_", regular pattern of mine
+DATE_RE_PATTERN_SPLIT = re.compile(r"^(\d{4})-(\d{2})-(\d{2})_")
+
+
+def extract_date_from_recording_filename(filename: str) -> datetime | None:
     """
     Try to extract a date from the audio filename.
     """
-    filename = os.path.basename(audio_path)
-
     m = DATE_RE_PATTERN_OBSIDIAN_RECORDING.match(filename)
     if not m:
         # Try another one
@@ -55,13 +59,15 @@ def extract_date_from_recording_filename(audio_path: Path) -> datetime|None:
         logger.warning(f"Filename {filename} contains an invalid date: {m.groups()}")
         return None
 
-def file_is_in_directory_tree(file : Path, tree: Path) -> bool:
+
+def file_is_in_directory_tree(file: Path, tree: Path) -> bool:
 
     root = tree.resolve()
     file_path = file.resolve()
 
     is_inside = root in file_path.parents
     return is_inside
+
 
 def get_file_modified_date(audio_path: Path) -> datetime:
     """Get the file's date from its last modified time (format: YYYY-MM-DD).
@@ -74,5 +80,7 @@ def get_file_modified_date(audio_path: Path) -> datetime:
         return file_date
     except OSError:
         file_date = datetime.now()
-        logger.warning(f"Could not get file modification time, using current date: '{file_date}'")
+        logger.warning(
+            f"Could not get file modification time, using current date: '{file_date}'"
+        )
         return file_date

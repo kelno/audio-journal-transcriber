@@ -86,6 +86,7 @@ class AIManager:
         """
         Returns the output string on success, or None on failure.
         Raises:
+            ValueError: When OpenAI client returns an invalid answer.
             *: Pass through any exceptions from the OpenAI client.
         """
 
@@ -117,40 +118,62 @@ class AIManager:
 
     def get_ai_summary(self, transcript: str) -> str:
         """
-        Queries the configured LLM for a summary
+        Generate AI summary from transcript
+        Raises:
+            *: Pass through any exceptions from the OpenAI client.
         """
-
-        extra_context_prompt = (
-            f"Extra context:\n{self.config.text.extra_context}"
-            if self.config.text.extra_context is not None
-            else ""
-        )
-        prompt = f"""
-            You are part of an automated pipeline to transcribe and summarize texts. 
-            Please summarize the following transcript of my own audio recording. 
-            Extra instructions:
-            - Answer using the same language as the transcript. For example if the transcript is in french, answer in french.
-            - You should act like a function and only output the summary.
-            - If and only if the transcript very specifically mentions things that should be done, highlight those points as a recap at the end of the summary with the title "Action Items".
-            - Given that this is an audio transcript that might be of poor quality, you might need to make some assumptions as to what was said. In those instances, take extra care to announce your assumptions clearly.
-            {extra_context_prompt}
-            Okay. Now the transcript follows:
-            ---
-            {transcript}"""
-        return self.query_chat_completion(prompt)
-
-    def try_get_ai_summary(self, transcript: str) -> str:
-        """
-        Generate and append AI summary to the transcription file.
-        """
-        logger.debug("Generating AI summary")
 
         try:
-            summary = self.get_ai_summary(transcript)
-            logger.info(
-                f"AI summary succeeded. Excerpt: {summary[:160]}..."
-            )  # Log first 100 chars
+            extra_context_prompt = (
+                f"Extra context:\n{self.config.text.extra_context}"
+                if self.config.text.extra_context is not None
+                else ""
+            )
+            prompt = f"""
+                You are part of an automated pipeline to transcribe and summarize texts, in a markdown format. 
+                Please summarize the following transcript of my own audio recording. 
+                Extra instructions:
+                - Answer using the same language as the transcript. For example if the transcript is in french, answer in french.
+                - List of topics: There should be a list of topics mentioned in the recording with the title "Topics".
+                - Action items: If and only if the transcript very specifically mentions things that should be done, highlight those points as a recap at the end of the summary with the title "Action Items".
+                - Given that this is an audio transcript that might be of poor quality, you might need to make some assumptions as to what was said. In those instances, take extra care to announce your assumptions clearly about what words were wrongly transcribed. 
+                {extra_context_prompt}
+                Okay. Now the transcript follows:
+                ---
+                {transcript}"""
+            summary = self.query_chat_completion(prompt)
+            logger.debug(f"AI summary succeeded. Excerpt: {summary[:160]}...")
             return summary
-        except Exception as e:
-            logger.error(f"AI summary failed with exception: {e}")
+        except Exception:
+            logger.error("AI summary failed with exception")
+            raise
+
+    def get_bundle_name_summary(self, summary: str) -> str:
+        """
+        Returns a short AI generated name for a bundle
+        Raises:
+            ValueError: When LLM returns an invalid bundle name.
+            *: Pass through any exceptions from the OpenAI client.
+        """
+
+        try:
+
+            prompt = f"""
+                You are part of an automated pipeline to transcribe and summarize texts.
+                - You should act as a function and only return a very short summary intended for file naming, max 6 words.
+                - The text should be synthetic, such as "Test microphone recording" rather than "Testing a recording with the microphone".
+                - The text needs to be valid under NTFS and EXT4.
+                - It should be written in natural langage, such as "Microphone recording test" or "Experimenting with painting".
+                - Answer using the same language as the transcript. For example if the transcript is in french, answer in french.
+                Okay. Now the summary follows:
+                ---
+                {summary}"""
+            bundle_name = self.query_chat_completion(prompt)
+            logger.debug(f"AI generated bundle name: {bundle_name}")
+            if len(bundle_name) > 60:  # arbitrary max length
+                raise ValueError(f"LLM returned a bundle name too long: {bundle_name}")
+
+            return bundle_name
+        except Exception:
+            logger.error("AI summary failed with exception")
             raise

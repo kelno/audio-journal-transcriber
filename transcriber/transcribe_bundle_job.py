@@ -62,7 +62,7 @@ class TranscriptionJob(TranscribeBundleJob):
         logger.info(f"Transcribing {self.bundle.source_audio} → {transcript_path}")
 
         if not self.bundle.source_audio:
-            raise FileNotFoundError("Bundle has no audio file set")
+            raise FileNotFoundError(f"{self}: Bundle has no audio file set")
 
         if not self.dry_run:
             transcript_content = ai_manager.transcribe_audio(self.bundle.source_audio)
@@ -80,9 +80,11 @@ class SummaryJob(TranscribeBundleJob):
 
         if not self.dry_run:
             if not self.bundle.transcript:
-                raise ValueError("Cannot generate ai summary without transcript")
+                raise ValueError(
+                    f"{self}: Cannot generate ai summary without transcript"
+                )
 
-            summary_content = ai_manager.try_get_ai_summary(self.bundle.transcript)
+            summary_content = ai_manager.get_ai_summary(self.bundle.transcript)
             self.bundle.set_and_write_summary(
                 output_base_dir, summary_content, self.config.text.model
             )
@@ -94,7 +96,13 @@ class BundleNameJob(TranscribeBundleJob):
         if not self.bundle.summary:
             raise ValueError("Cannot generate bundle name without AI summary.")
 
-        raise NotImplementedError("BundleNameJob not yet implemented.")
+        try:
+            bundle_name = ai_manager.get_bundle_name_summary(self.bundle.summary)
+        except Exception:
+            logger.error(f"{self}: Failed to generate bundle name")
+            raise
+
+        self.bundle.set_and_write_bundle_name(output_base_dir, bundle_name)
 
 
 # Moved here to avoid circular imports

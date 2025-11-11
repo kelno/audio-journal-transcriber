@@ -1,6 +1,5 @@
 import argparse
 from pathlib import Path
-import os
 
 from transcriber.audio_transcriber import AudioTranscriber
 from transcriber.config import TranscribeConfig

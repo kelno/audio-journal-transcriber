@@ -22,7 +22,7 @@ METADATA_NAME = "_metadata.md"
 class Metadata:
     """A bundle metadata is kept in this single database file as yaml data"""
 
-    original_audio_filename: str | None = None
+    original_audio_filename: str
     transcript_model_used: str | None = None
     summary_model_used: str | None = None
     bundle_name_generated: bool = False
@@ -61,7 +61,7 @@ class Metadata:
 @dataclass
 class TranscribeBundle:
 
-    bundle_name: str  # same as directory name
+    bundle_name: str  # directory name is derived from here
     metadata: Metadata
     source_audio: Path | None
     transcript: str | None
@@ -76,11 +76,9 @@ class TranscribeBundle:
         """
 
         meta_file = existing_dir / METADATA_NAME
-        metadata = Metadata()
-        if meta_file.exists():
-            metadata = Metadata.from_file(meta_file)
-        else:
+        if not meta_file.exists():
             raise ValueError("Bundle directory is invalid (no meta file")
+        metadata = Metadata.from_file(meta_file)
 
         bundle_name = existing_dir.name
         source_audio: Path | None = None
@@ -115,7 +113,9 @@ class TranscribeBundle:
         """Create a TranscribeBundle instance from an audio file."""
 
         metadata = Metadata(original_audio_filename=source_audio.name)
-        bundle_name = TranscribeBundle.generate_bundle_name(source_audio)
+        bundle_name = TranscribeBundle.generate_dumb_bundle_name(
+            source_audio, source_audio.name
+        )
 
         return cls(
             bundle_name=bundle_name,
@@ -132,35 +132,51 @@ class TranscribeBundle:
         return self.source_audio
 
     @staticmethod
-    def get_date_for_filename(audio_path: Path) -> datetime:
-        date_from_filename = extract_date_from_recording_filename(audio_path)
+    def get_date_for_filename(audio_path: Path | None, audio_filename: str) -> datetime:
+        """Try to extract date from filename first, or else from file modified date"""
+        date_from_filename = extract_date_from_recording_filename(audio_filename)
         if date_from_filename:
             logger.debug(
                 f"Found existing date [{date_from_filename}] in audio filename"
             )
             return date_from_filename
-        else:
+        elif audio_path:
             file_date = get_file_modified_date(audio_path)
             logger.debug(
                 f"No date found in filename, using file modified date : '{file_date}'"
             )
             return file_date
+        else:
+            raise ValueError(f"Could not find any date for file {audio_filename}")
 
     def get_bundle_name(self) -> str:
         """Get or generate the bundle name."""
         if self.bundle_name is None:
-            self.bundle_name = self.generate_bundle_name(self.assert_source_audio())
+            self.bundle_name = self.generate_dumb_bundle_name(
+                self.source_audio, self.metadata.original_audio_filename
+            )
         return self.bundle_name
 
     @staticmethod
-    def generate_bundle_name(audio_path: Path) -> str:
-        """Generate output filenames with date prefix if needed."""
+    def generate_bundle_name_prefix(
+        audio_path: Path | None, audio_filename: str
+    ) -> str:
+        """Return a date prefix string in the 'YYYY-MM-DD' format"""
+        date_from_filename = TranscribeBundle.get_date_for_filename(
+            audio_path, audio_filename
+        )
+        return date_from_filename.strftime("%Y-%m-%d")
+
+    @classmethod
+    def generate_dumb_bundle_name(
+        cls, audio_path: Path | None, audio_filename: str
+    ) -> str:
+        """Generate a bundle name based on date and audio filename"""
 
         logger.debug(f"Generating bundle name for audio file: [{audio_path}]")
 
-        date_from_filename = TranscribeBundle.get_date_for_filename(audio_path)
-        prefix = date_from_filename.strftime("%Y-%m-%d")
-        return f"{prefix}_{audio_path.stem}"
+        prefix = cls.generate_bundle_name_prefix(audio_path, audio_filename)
+        return f"{prefix}_{Path(audio_filename).stem}"
 
     @staticmethod
     def gather_pending_audio_files(source_dir: Path) -> list["TranscribeBundle"]:
@@ -201,7 +217,7 @@ class TranscribeBundle:
 
     def needs_naming(self) -> bool:
         """Check if the bundle needs a generated name."""
-        return False  # not self.metadata.bundle_name_generated
+        return not self.metadata.bundle_name_generated
 
     def get_bundle_dir(self, output_base_dir: Path) -> Path:
         """Get the bundle directory path."""
@@ -254,6 +270,26 @@ class TranscribeBundle:
         self, output_base_dir: Path, filename: str
     ):
         self.metadata.original_audio_filename = filename
+        self.write_metadata(output_base_dir)
+
+    def set_and_write_bundle_name(
+        self, output_base_dir: Path, bundle_name_summary: str
+    ):
+        """Set bundle name and rename the directory"""
+        bundle_path_from = output_base_dir / self.bundle_name
+        if not bundle_path_from.exists():
+            raise FileNotFoundError("Bundle directory not found")
+
+        prefix = self.generate_bundle_name_prefix(
+            self.source_audio, self.metadata.original_audio_filename
+        )
+        new_bundle_name = f"{prefix}_{bundle_name_summary}"
+
+        bundle_path_to = output_base_dir / new_bundle_name
+        bundle_path_from.rename(bundle_path_to)
+        self.bundle_name = new_bundle_name
+
+        self.metadata.bundle_name_generated = True
         self.write_metadata(output_base_dir)
 
     def write_metadata(self, output_base_dir: Path):

@@ -164,6 +164,7 @@ class AudioTranscriber:
 
         self.log_section_header("Gathering Jobs")
         jobs = self.gather_jobs(source_dir, output_dir)
+        logger.info(f"Found pending jobs for {len(jobs)} bundles")
         if not jobs:
             logger.info("No jobs found for processing")
         else:
@@ -174,4 +175,4 @@ class AudioTranscriber:
             remove_empty_subdirs(source_dir)
 
         self.log_section_header("Summary")
-        logger.info("Transcription process completed successfully.")
+        logger.info("Transcription process finished.")
