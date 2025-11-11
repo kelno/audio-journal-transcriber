@@ -1,6 +1,5 @@
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List
 import os
 from datetime import datetime
 
@@ -9,7 +8,10 @@ from transcriber.config import TranscribeConfig
 from transcriber.globals import is_handled_audio_file
 from transcriber.transcribe_bundle import TranscribeBundle
 from transcriber.logger import get_logger
-from transcriber.transcribe_bundle_job import TranscribeBundleJob, gather_bundle_jobs
+from transcriber.transcribe_bundle_job import (
+    BundleJobs,
+    gather_bundle_jobs,
+)
 from transcriber.utils import ensure_directory_exists, remove_empty_subdirs
 
 OUTPUT_DIR_NAME = "Output"
@@ -43,17 +45,19 @@ class AudioTranscriber:
             )
 
     def process_jobs(
-        self, jobs: List[TranscribeBundleJob], output_dir: Path, ai_manager: AIManager
+        self, all_jobs: list[BundleJobs], output_dir: Path, ai_manager: AIManager
     ):
         """Process audio files from the pending directory."""
 
-        for job in jobs:
-            logger.info(f"Processing job: {job}")
-            try:
-                job.run(output_dir, ai_manager)
-            except Exception as e:
-                logger.error(f"Error processing [{job}]:")
-                raise e
+        for bundle_jobs in all_jobs:
+            try:  # catch at the bundle level rather than job level, we want to skip remaining jobs on failure
+                for job in bundle_jobs:
+                    logger.info(f"Processing job: {job}")
+                    job.run(output_dir, ai_manager)
+            except OSError as e:
+                logger.error(
+                    f"Error processing [{job}] (skipping any remaining jobs for this bundle). {e}"
+                )
 
     def log_section_header(self, message):
         """Log a section header with separators."""
@@ -113,9 +117,7 @@ class AudioTranscriber:
         logger.info(f"  Files checked: {files_checked}")
         logger.info(f"  Files removed: {files_removed}")
 
-    def gather_jobs(
-        self, source_dir: Path, output_dir: Path
-    ) -> List[TranscribeBundleJob]:
+    def gather_jobs(self, source_dir: Path, output_dir: Path) -> list[BundleJobs]:
         """
         Find audio files in the given subdirectory and its subdirectories.
         Returns a list of Path objects for each audio file found.
@@ -128,10 +130,10 @@ class AudioTranscriber:
         bundles = TranscribeBundle.gather_pending_audio_files(source_dir)
         bundles.extend(TranscribeBundle.gather_existing_bundles(output_dir))
 
-        jobs = []
+        jobs: list[BundleJobs] = []
 
         for bundle in bundles:
-            jobs.extend(
+            jobs.append(
                 gather_bundle_jobs(bundle, output_dir, self.config, self.dry_run)
             )
 

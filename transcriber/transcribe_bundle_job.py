@@ -2,7 +2,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from abc import ABC, abstractmethod
 import shutil
-from typing import List
 
 from transcriber.ai_manager import AIManager
 from transcriber.config import TranscribeConfig
@@ -27,6 +26,10 @@ class TranscribeBundleJob(ABC):
 
     def __str__(self):
         return f"{self.__class__.__name__}({self.bundle.get_bundle_name()})"
+
+
+# Job list for a single bundle
+type BundleJobs = list[TranscribeBundleJob]
 
 
 @dataclass
@@ -97,7 +100,7 @@ class BundleNameJob(TranscribeBundleJob):
 # Moved here to avoid circular imports
 def gather_bundle_jobs(
     bundle: TranscribeBundle, output_dir: Path, config: TranscribeConfig, dry_run: bool
-) -> List[TranscribeBundleJob]:
+) -> BundleJobs:
     """Gather transcription jobs from this bundle."""
     jobs = []
 

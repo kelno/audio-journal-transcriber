@@ -1,7 +1,6 @@
 from dataclasses import dataclass, asdict
 from datetime import datetime
 from pathlib import Path
-from typing import List
 
 import yaml
 
@@ -164,7 +163,7 @@ class TranscribeBundle:
         return f"{prefix}_{audio_path.stem}"
 
     @staticmethod
-    def gather_pending_audio_files(source_dir: Path) -> List["TranscribeBundle"]:
+    def gather_pending_audio_files(source_dir: Path) -> list["TranscribeBundle"]:
         """
         Import audio files from the source directory as TranscriptBundle instances.
         """
@@ -182,7 +181,7 @@ class TranscribeBundle:
         return bundles
 
     @staticmethod
-    def gather_existing_bundles(output_dir: Path) -> List["TranscribeBundle"]:
+    def gather_existing_bundles(output_dir: Path) -> list["TranscribeBundle"]:
         """Find and load all bundles from output_dir"""
 
         bundles = []
