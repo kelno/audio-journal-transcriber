@@ -283,7 +283,7 @@ class TranscribeBundle:
         prefix = self.generate_bundle_name_prefix(
             self.source_audio, self.metadata.original_audio_filename
         )
-        new_bundle_name = f"{prefix}_{bundle_name_summary}"
+        new_bundle_name = f"{prefix} {bundle_name_summary}"
 
         bundle_path_to = output_base_dir / new_bundle_name
         bundle_path_from.rename(bundle_path_to)

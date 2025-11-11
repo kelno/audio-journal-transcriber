@@ -125,22 +125,35 @@ class AIManager:
 
         try:
             extra_context_prompt = (
-                f"Extra context:\n{self.config.text.extra_context}"
+                f"Some extra context:\n{self.config.text.extra_context}"
                 if self.config.text.extra_context is not None
                 else ""
             )
             prompt = f"""
-                You are part of an automated pipeline to transcribe and summarize texts, in a markdown format. 
-                Please summarize the following transcript of my own audio recording. 
-                Extra instructions:
-                - Answer using the same language as the transcript. For example if the transcript is in french, answer in french.
-                - List of topics: There should be a list of topics mentioned in the recording with the title "Topics".
-                - Action items: If and only if the transcript very specifically mentions things that should be done, highlight those points as a recap at the end of the summary with the title "Action Items".
-                - Given that this is an audio transcript that might be of poor quality, you might need to make some assumptions as to what was said. In those instances, take extra care to announce your assumptions clearly about what words were wrongly transcribed. 
+                You are part of an automated pipeline that transcribes personal audio recordings and summarizes them.
+                Your task: Summarize the input transcript and output a structured markdown file.
+
+                **Instructions**
+                - Detect the language of the transcript and **write the entire content (except section titles) in that same language**.
+                - For example, if the transcript is in French, **all sentences and summaries must be in French**, not English.
+                - Only the section titles ("# Topics", "# Summary", "# Action items") stay in English.
+                - Because this is a spoken transcript, it may contain transcription errors or unclear sections.  
+                When you make assumptions about unclear words or phrases, **explicitly note them** and describe your reasoning briefly.
+                - Do **not** include any markdown code fences (```).
+                - Follow **exactly** this structure in your output:
+                ```
+                # Topics
+                [List of topics mentioned in the recording]
+                # Summary
+                [Comprehensive summary in natural language]
+                # Action items
+                [List of actionable points only if clearly stated in the transcript; otherwise write “(None)”]
+                ```
                 {extra_context_prompt}
-                Okay. Now the transcript follows:
                 ---
-                {transcript}"""
+                Transcript:
+                {transcript}
+            """
             summary = self.query_chat_completion(prompt)
             logger.debug(f"AI summary succeeded. Excerpt: {summary[:160]}...")
             return summary

@@ -25,9 +25,7 @@ $obsidianRoot = (Get-Location).Path; cd _/transcribe; Start-Process powershell -
 
 # Improve me
 
-- Make older audio files cleanup a job?
 - Min record length
-- Do one retry on ai summary failure?
 - Try grouping records being done very close to each other. Group them as a single bundle, and process them accordingly. 
 - Add a "do not delete" property checkbox
   - Extra swag if it can be auto enabled if I mention it in the record
