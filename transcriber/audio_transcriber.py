@@ -116,15 +116,16 @@ class AudioTranscriber:
 
         logger.debug(f"Looking for pending jobs in {input_dir}")
 
+        logger.info(f"Gathering audio files from input directory: {input_dir}")
         bundles = TranscribeBundle.gather_pending_audio_files(input_dir)
+        logger.info(f"Gathering bundles from managed store directory:  {output_dir}")
         bundles.extend(TranscribeBundle.gather_existing_bundles(output_dir))
 
         jobs: list[BundleJobs] = []
 
         for bundle in bundles:
-            jobs.append(
-                gather_bundle_jobs(bundle, output_dir, self.config, self.dry_run)
-            )
+            if bundle_jobs := gather_bundle_jobs(bundle, output_dir, self.config, self.dry_run):
+                jobs.append(bundle_jobs)
 
         return jobs
 
@@ -147,10 +148,10 @@ class AudioTranscriber:
 
         self.log_section_header("Gathering Jobs")
         jobs = self.gather_jobs(input_dir, self.store_dir)
-        logger.info(f"Found pending jobs for {len(jobs)} bundles")
         if not jobs:
             logger.info("No jobs found for processing")
         else:
+            logger.info(f"Found pending jobs for {len(jobs)} bundles")
             self.log_section_header("Processing Jobs")
             self.process_jobs(jobs, self.store_dir, ai_manager)
 

@@ -11,6 +11,18 @@
       "program": "transcribe.py",
       "console": "integratedTerminal",
       "args": [
+        "--store",
+        "../../Transcription/Output",
+        "../../Transcription/attachments",
+      ]
+    },
+    {
+      "name": "Transcribe (debug)",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "transcribe.py",
+      "console": "integratedTerminal",
+      "args": [
         "--debug",
         "--store",
         "../../Transcription/Output",
