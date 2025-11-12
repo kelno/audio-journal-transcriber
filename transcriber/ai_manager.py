@@ -44,17 +44,13 @@ class AIManager:
                 data=data,
                 headers={"Authorization": f"Bearer {self.config.audio.api_key}"},
                 stream=True,
-                timeout=(
-                    60 if self.config.audio.stream else 600
-                ),  # 1 min for streaming, 10 min for non-streaming
+                timeout=(60 if self.config.audio.stream else 600),  # 1 min for streaming, 10 min for non-streaming
             )
 
         if response.status_code == 200:
             return self.extract_streaming_response(response)
         else:
-            raise ValueError(
-                f"Transcription failed with status code {response.status_code} and response: {response.text}"
-            )
+            raise ValueError(f"Transcription failed with status code {response.status_code} and response: {response.text}")
 
     def extract_streaming_response(self, response) -> str:
         """Process a streaming response from the transcription API and write directly to file.
@@ -90,9 +86,7 @@ class AIManager:
             *: Pass through any exceptions from the OpenAI client.
         """
 
-        client = OpenAI(
-            base_url="http://localhost:8080/api/", api_key=self.config.text.api_key
-        )
+        client = OpenAI(base_url="http://localhost:8080/api/", api_key=self.config.text.api_key)
 
         # https://platform.openai.com/docs/api-reference/chat/create
         completion = client.chat.completions.create(
@@ -124,11 +118,7 @@ class AIManager:
         """
 
         try:
-            extra_context_prompt = (
-                f"Some extra context:\n{self.config.text.extra_context}"
-                if self.config.text.extra_context is not None
-                else ""
-            )
+            extra_context_prompt = f"Some extra context:\n{self.config.text.extra_context}" if self.config.text.extra_context is not None else ""
             prompt = f"""
                 You are part of an automated pipeline that transcribes personal audio recordings and summarizes them.
                 Your task: Summarize the input transcript and output a structured markdown file.

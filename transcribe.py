@@ -6,12 +6,8 @@ from transcriber.config import TranscribeConfig
 from transcriber.logger import configure_logger
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(
-        description="Move, transcribe and summarize audio files into processed bundles."
-    )
-    parser.add_argument(
-        "input_dir", type=str, help="The directory to take audio files from"
-    )
+    parser = argparse.ArgumentParser(description="Move, transcribe and summarize audio files into processed bundles.")
+    parser.add_argument("input_dir", type=str, help="The directory to take audio files from")
     parser.add_argument(
         "--store",
         type=str,
@@ -36,7 +32,5 @@ if __name__ == "__main__":
     script_dir = Path(__file__).parent
     config = TranscribeConfig.from_config_dir(script_dir)
 
-    transcriber = AudioTranscriber(
-        config=config, store_dir=store_dir, dry_run=args.dry_run
-    )
+    transcriber = AudioTranscriber(config=config, store_dir=store_dir, dry_run=args.dry_run)
     transcriber.run(input_dir)

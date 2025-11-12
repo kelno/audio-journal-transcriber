@@ -33,9 +33,7 @@ class AudioTranscriber:
             f"Text summary {"enabled" if self.config.text.summary_enabled else "disabled"}"
         )
 
-    def process_jobs(
-        self, all_jobs: list[BundleJobs], output_dir: Path, ai_manager: AIManager
-    ):
+    def process_jobs(self, all_jobs: list[BundleJobs], output_dir: Path, ai_manager: AIManager):
         """Process audio files from the pending directory."""
 
         for bundle_jobs in all_jobs:
@@ -44,18 +42,14 @@ class AudioTranscriber:
                     logger.info(f"Processing job: {job}")
                     job.run(output_dir, ai_manager)
             except OSError as e:
-                logger.error(
-                    f"Error processing [{job}] (skipping any remaining jobs for this bundle). {e}"
-                )
+                logger.error(f"Error processing [{job}] (skipping any remaining jobs for this bundle). {e}")
 
     def log_section_header(self, message):
         """Log a section header with separators."""
         logger.info(f"========== {message} ==========")
 
     @staticmethod
-    def cleanup_audio_files_older_than(
-        output_dir: Path, days: int, dry_run: bool = False
-    ):
+    def cleanup_audio_files_older_than(output_dir: Path, days: int, dry_run: bool = False):
         """
         Clean up audio files that were processed more than X days ago.
         Only removes audio files that have a matching .md file next to them.
@@ -80,19 +74,13 @@ class AudioTranscriber:
                 transcript_path = file_path.parent / "summary.md"
 
                 if not transcript_path.exists():
-                    logger.warning(
-                        f"Skipping [{file_path.name}], as no matching text file was found. "
-                    )
+                    logger.warning(f"Skipping [{file_path.name}], as no matching text file was found. ")
                     continue
 
                 mtime = file_path.stat().st_mtime
                 age_in_days = (current_time - mtime) / (24 * 3600)
 
-                logger.debug(
-                    f'Checking: "{file_path}". '
-                    f"Modified: {datetime.fromtimestamp(mtime).strftime('%Y-%m-%d')}. "
-                    f"Age: {int(age_in_days)} days."
-                )
+                logger.debug(f'Checking: "{file_path}". ' f"Modified: {datetime.fromtimestamp(mtime).strftime('%Y-%m-%d')}. " f"Age: {int(age_in_days)} days.")
 
                 if age_in_days > days:
                     logger.info(f"Removing file: {file_path}")
@@ -139,9 +127,7 @@ class AudioTranscriber:
         # Clean old audio files
         if self.config.general.cleanup != 0:
             self.log_section_header("Cleanup old audio files")
-            self.cleanup_audio_files_older_than(
-                self.store_dir, self.config.general.cleanup, self.dry_run
-            )
+            self.cleanup_audio_files_older_than(self.store_dir, self.config.general.cleanup, self.dry_run)
 
         self.log_section_header("Init AI Manager")
         ai_manager = AIManager(self.config)
