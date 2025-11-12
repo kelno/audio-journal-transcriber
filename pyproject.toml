@@ -1,2 +1,6 @@
+[project]
+name = "audio-journal-transcriber"
+description = "Automated pipeline for transcribing and summarizing personal recordings."
+
 [tool.black]
 line-length = 160
