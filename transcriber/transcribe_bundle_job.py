@@ -72,17 +72,23 @@ class SummaryJob(TranscribeBundleJob):
         summary_path = self.bundle.get_summary_path(output_base_dir)
         logger.info(f"Summarizing {self.bundle.get_bundle_name()} → {summary_path}")
 
-        if not self.dry_run:
-            if not self.bundle.transcript:
-                raise ValueError(f"{self}: Cannot generate ai summary without transcript")
+        if self.dry_run:
+            return
 
-            summary_content = ai_manager.get_ai_summary(self.bundle.transcript)
-            self.bundle.set_and_write_summary(output_base_dir, summary_content, self.config.text.model)
+        if not self.bundle.transcript:
+            raise ValueError(f"{self}: Cannot generate ai summary without transcript")
+
+        summary_content = ai_manager.get_ai_summary(self.bundle.transcript)
+        self.bundle.set_and_write_summary(output_base_dir, summary_content, self.config.text.model)
 
 
 class BundleNameJob(TranscribeBundleJob):
 
     def run(self, output_base_dir: Path, ai_manager: AIManager):
+        logger.info(f"Generating buddle name for {self.bundle.get_bundle_name()}")
+        if self.dry_run:
+            return
+
         if not self.bundle.summary:
             raise ValueError("Cannot generate bundle name without AI summary.")
 
