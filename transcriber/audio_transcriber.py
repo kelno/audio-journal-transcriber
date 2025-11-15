@@ -1,9 +1,9 @@
 from dataclasses import dataclass
 from pathlib import Path
-import os
 from datetime import datetime
 
 from transcriber.ai_manager import AIManager
+from transcriber.audio_manipulation import AudioManipulation
 from transcriber.config import TranscribeConfig
 from transcriber.globals import is_handled_audio_file
 from transcriber.transcribe_bundle import TranscribeBundle
@@ -47,6 +47,16 @@ class AudioTranscriber:
     def log_section_header(self, message):
         """Log a section header with separators."""
         logger.info(f"========== {message} ==========")
+
+    @staticmethod
+    def validate_environment() -> bool:
+        """Returns wheter environment has the proper requirements"""
+
+        if not AudioManipulation.validate_ffmpeg():  # NYI: Check if ffmpeg is available in path
+            logger.error("Could not validate ffmpeg")
+            return False
+
+        return True
 
     @staticmethod
     def cleanup_audio_files_older_than(output_dir: Path, days: int, dry_run: bool = False):

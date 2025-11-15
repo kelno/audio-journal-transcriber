@@ -9,6 +9,8 @@ pyyaml = "*"
 pydantic = "*"
 coloredlogs = "*"
 openai = "*"
+pydub = "*"
+audioop-lts = "*"
 
 [dev-packages]
 

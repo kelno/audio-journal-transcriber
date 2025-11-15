@@ -1,9 +1,10 @@
 import argparse
 from pathlib import Path
+import sys
 
 from transcriber.audio_transcriber import AudioTranscriber
 from transcriber.config import TranscribeConfig
-from transcriber.logger import configure_logger
+from transcriber.logger import configure_logger, get_logger
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Move, transcribe and summarize audio files into processed bundles.")
@@ -26,6 +27,11 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
     configure_logger(args.debug)
+    logger = get_logger()
+
+    if not AudioTranscriber.validate_environment():
+        logger.error("Exiting after missing requirements")
+        sys.exit(1)
 
     input_dir = Path(args.input_dir)
     store_dir = Path(args.store)

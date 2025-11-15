@@ -1,5 +1,8 @@
 Audio transcription and summary script for my personal Obsidian Vault. 
 
+# Requirements
+Requires ffmpeg in path.
+
 # Installation
 
 ```bash
@@ -30,6 +33,7 @@ Start-Process powershell -ArgumentList "-Command `"pipenv run python transcribe.
 # Improve me
 
 - Min record length
+- Look into summary strategies? Currently it's quite unspecific
 - Try grouping records being done very close to each other. Group them as a single bundle, and process them accordingly. 
 - Add a "do not delete" property checkbox
   - Extra swag if it can be auto enabled if I mention it in the record
