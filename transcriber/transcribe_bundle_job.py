@@ -5,6 +5,7 @@ import shutil
 
 from transcriber.ai_manager import AIManager
 from transcriber.config import TranscribeConfig
+from transcriber.exception import EmptyTranscriptException
 from transcriber.logger import get_logger
 from transcriber.transcribe_bundle import TranscribeBundle
 from transcriber.utils import ensure_directory_exists, file_is_in_directory_tree
@@ -62,6 +63,9 @@ class TranscriptionJob(TranscribeBundleJob):
 
         if not self.dry_run:
             transcript_content = ai_manager.transcribe_audio(self.bundle.source_audio)
+            if transcript_content.strip() == "":
+                raise EmptyTranscriptException(f"{self}: Transcription resulted in empty transcript")
+
             self.bundle.set_and_write_transcript(output_base_dir, transcript_content, self.config.audio.model)
 
 

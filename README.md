@@ -32,8 +32,6 @@ Start-Process powershell -ArgumentList "-Command `"pipenv run python transcribe.
 
 # Improve me
 
-- BUG: Transcript can be empty if record is too short. That makes the processing fails because summary has no transcript to process.
-- Min record length
 - Look into summary strategies? Currently it's quite unspecific
 - Try grouping records being done very close to each other. Group them as a single bundle, and process them accordingly. 
 - Add a "do not delete" property checkbox

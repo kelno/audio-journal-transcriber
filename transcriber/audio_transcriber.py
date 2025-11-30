@@ -5,7 +5,7 @@ from datetime import datetime
 from transcriber.ai_manager import AIManager
 from transcriber.audio_manipulation import AudioManipulation
 from transcriber.config import TranscribeConfig
-from transcriber.exception import TooShortException
+from transcriber.exception import AudioTranscriberException, TooShortException
 from transcriber.globals import is_handled_audio_file
 from transcriber.transcribe_bundle import TranscribeBundle
 from transcriber.logger import get_logger
@@ -43,6 +43,8 @@ class AudioTranscriber:
                     logger.info(f"Processing job: {job}")
                     job.run(output_dir, ai_manager)
             except OSError as e:
+                logger.error(f"Error processing [{job}] (skipping any remaining jobs for this bundle). {e}")
+            except AudioTranscriberException as e:
                 logger.error(f"Error processing [{job}] (skipping any remaining jobs for this bundle). {e}")
 
     def log_section_header(self, message):
