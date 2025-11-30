@@ -66,6 +66,18 @@ class TranscriptionJob(TranscribeBundleJob):
 
 
 @dataclass
+class GetAudioLengthJob(TranscribeBundleJob):
+
+    def run(self, output_base_dir: Path, _ai_manager: AIManager):
+        logger.info(f"Get audio length for {self.bundle.get_bundle_name()}")
+
+        if self.dry_run:
+            return
+
+        self.bundle.write_metadata(output_base_dir)
+
+
+@dataclass
 class SummaryJob(TranscribeBundleJob):
 
     def run(self, output_base_dir: Path, ai_manager: AIManager):

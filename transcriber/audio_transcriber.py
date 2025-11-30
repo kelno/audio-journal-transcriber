@@ -5,6 +5,7 @@ from datetime import datetime
 from transcriber.ai_manager import AIManager
 from transcriber.audio_manipulation import AudioManipulation
 from transcriber.config import TranscribeConfig
+from transcriber.exception import TooShortException
 from transcriber.globals import is_handled_audio_file
 from transcriber.transcribe_bundle import TranscribeBundle
 from transcriber.logger import get_logger
@@ -104,6 +105,28 @@ class AudioTranscriber:
         logger.info(f"  Files checked: {files_checked}")
         logger.info(f"  Files removed: {files_removed}")
 
+    def gather_pending_audio_files(self, input_dir: Path) -> list[TranscribeBundle]:
+        """
+        Import audio files from the input directory as TranscriptBundle instances.
+        """
+
+        bundles = []
+
+        for path in input_dir.rglob("*"):
+            if path.is_file() and is_handled_audio_file(path.suffix):
+                logger.debug(f"Found audio file: [{path}]")
+                try:
+                    bundle = TranscribeBundle.from_audio_file(source_audio=path, min_length=self.config.general.min_length_seconds)
+                    bundles.append(bundle)
+                except TooShortException as e:
+                    logger.warning(f"Failed to create bundle from audio file {path}, exception {e}")
+                    if self.config.general.remove_short_files and not self.dry_run:
+                        logger.info(f"Removing short audio file: {path}")
+                        path.unlink()
+
+        logger.debug(f"Imported {len(bundles)} audio files as bundles")
+        return bundles
+
     def gather_jobs(self, input_dir: Path, output_dir: Path) -> list[BundleJobs]:
         """
         Find audio files in the given subdirectory and its subdirectories.
@@ -115,7 +138,7 @@ class AudioTranscriber:
         logger.debug(f"Looking for pending jobs in {input_dir}")
 
         logger.info(f"Gathering audio files from input directory: {input_dir}")
-        bundles = TranscribeBundle.gather_pending_audio_files(input_dir)
+        bundles = self.gather_pending_audio_files(input_dir)
         logger.info(f"Gathering bundles from managed store directory:  {output_dir}")
         bundles.extend(TranscribeBundle.gather_existing_bundles(output_dir))
 

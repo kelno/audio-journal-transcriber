@@ -4,6 +4,8 @@ from pathlib import Path
 
 import yaml
 
+from transcriber.audio_manipulation import AudioManipulation
+from transcriber.exception import TooShortException
 from transcriber.globals import is_handled_audio_file
 from transcriber.utils import (
     extract_date_from_recording_filename,
@@ -23,6 +25,7 @@ class Metadata:
     """A bundle metadata is kept in this single database file as yaml data"""
 
     original_audio_filename: str
+    audio_length: float
     transcript_model_used: str | None = None
     summary_model_used: str | None = None
     bundle_name_generated: bool = False
@@ -47,6 +50,7 @@ class Metadata:
             data = yaml.safe_load(front)
         else:
             raise ValueError(f"Invalid metadata file {meta_file}, failed to find frontmatter")
+
         return cls(**data)
 
     def write(self, output_file: Path):
@@ -76,6 +80,9 @@ class TranscribeBundle:
             raise ValueError("Bundle directory is invalid (no meta file")
         metadata = Metadata.from_file(meta_file)
 
+        if not metadata:
+            raise ValueError("Bundle directory is invalid (no audio or meta file")
+
         bundle_name = existing_dir.name
         source_audio: Path | None = None
         transcript: str | None = None
@@ -91,8 +98,11 @@ class TranscribeBundle:
             elif file_path.name == SUMMARY_NAME:
                 summary = file_path.read_text(encoding="utf-8")
 
-        if not metadata:
-            raise ValueError("Bundle directory is invalid (no audio or meta file")
+        # # temp code
+        # if metadata.audio_length is None:
+        #     assert source_audio is not None
+        #     metadata.audio_length = AudioManipulation.get_audio_duration(source_audio)
+        #     metadata.write(meta_file)
 
         return TranscribeBundle(
             bundle_name=bundle_name,
@@ -103,10 +113,14 @@ class TranscribeBundle:
         )
 
     @classmethod
-    def from_audio_file(cls, source_audio: Path) -> "TranscribeBundle":
+    def from_audio_file(cls, source_audio: Path, min_length: float | None) -> "TranscribeBundle":
         """Create a TranscribeBundle instance from an audio file."""
 
-        metadata = Metadata(original_audio_filename=source_audio.name)
+        audio_length = AudioManipulation.get_audio_duration(source_audio)
+        if min_length and audio_length < min_length:
+            raise TooShortException(f"Audio file too short ({audio_length} < {min_length} seconds)")
+
+        metadata = Metadata(original_audio_filename=source_audio.name, audio_length=audio_length)
         bundle_name = TranscribeBundle.generate_dumb_bundle_name(source_audio, source_audio.name)
 
         return cls(
@@ -157,23 +171,6 @@ class TranscribeBundle:
 
         prefix = cls.generate_bundle_name_prefix(audio_path, audio_filename)
         return f"{prefix}_{Path(audio_filename).stem}"
-
-    @staticmethod
-    def gather_pending_audio_files(input_dir: Path) -> list["TranscribeBundle"]:
-        """
-        Import audio files from the input directory as TranscriptBundle instances.
-        """
-
-        bundles = []
-
-        for path in input_dir.rglob("*"):
-            if path.is_file() and is_handled_audio_file(path.suffix):
-                logger.debug(f"Found audio file: [{path}]")
-                bundle = TranscribeBundle.from_audio_file(source_audio=path)
-                bundles.append(bundle)
-
-        logger.debug(f"Imported {len(bundles)} audio files as bundles")
-        return bundles
 
     @staticmethod
     def gather_existing_bundles(output_dir: Path) -> list["TranscribeBundle"]:

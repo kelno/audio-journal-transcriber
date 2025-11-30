@@ -11,6 +11,8 @@ CONFIG_FILENAME = "config.yaml"
 class TranscribeConfig(BaseModel):
     class GeneralConfig(BaseModel):
         cleanup: int = 0
+        min_length_seconds: float = 5.0  # 0 means disabled
+        remove_short_files: bool = True
 
     class TextConfig(BaseModel):
         summary_enabled: bool
@@ -40,6 +42,14 @@ class TranscribeConfig(BaseModel):
     general: GeneralConfig
     text: TextConfig
     audio: AudioConfig
+
+    def get_min_audio_length_seconds(self) -> float | None:
+        """Return the minimal audio length in seconds to process, or None if disabled."""
+
+        if self.general.min_length_seconds <= 0.0:
+            return None
+        else:
+            return self.general.min_length_seconds
 
     @classmethod
     def from_config_dir(cls, config_dir: Path) -> "TranscribeConfig":
