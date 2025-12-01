@@ -10,7 +10,7 @@ CONFIG_FILENAME = "config.yaml"
 # Configuration class matching yaml config
 class TranscribeConfig(BaseModel):
     class GeneralConfig(BaseModel):
-        cleanup: int = 0
+        delete_source_audio_after_days: int = 0  # 0 means disabled
         min_length_seconds: float = 5.0  # 0 means disabled
         remove_short_files: bool = True
 

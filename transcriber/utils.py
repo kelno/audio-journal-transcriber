@@ -74,9 +74,16 @@ def get_file_modified_date(audio_path: Path) -> datetime:
     try:
         file_mtime = os.path.getmtime(audio_path)
         file_date = datetime.fromtimestamp(file_mtime)
-        logger.debug(f"Using file last modified date: '{file_date}'")
+        # logger.debug(f"Using file last modified date: '{file_date}'")
         return file_date
     except OSError:
         file_date = datetime.now()
         logger.warning(f"Could not get file modification time, using current date: '{file_date}'")
         return file_date
+
+
+def get_days_since_time(time: datetime) -> int:
+    """Get number of days since given time."""
+    now = datetime.now(tz=time.tzinfo)
+    passed = (now - time).days
+    return passed

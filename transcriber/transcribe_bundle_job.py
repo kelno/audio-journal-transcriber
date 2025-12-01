@@ -98,6 +98,7 @@ class SummaryJob(TranscribeBundleJob):
         self.bundle.set_and_write_summary(output_base_dir, summary_content, self.config.text.model)
 
 
+@dataclass
 class BundleNameJob(TranscribeBundleJob):
 
     def run(self, output_base_dir: Path, ai_manager: AIManager):
@@ -117,27 +118,48 @@ class BundleNameJob(TranscribeBundleJob):
         self.bundle.set_and_write_bundle_name(output_base_dir, bundle_name)
 
 
+@dataclass
+class DeleteAudioFileJob(TranscribeBundleJob):
+    """Remove audio file"""
+
+    def run(self, _output_base_dir: Path, _ai_manager: AIManager):
+        if not self.bundle.source_audio:
+            raise FileNotFoundError("Bundle has no audio file set")
+
+        logger.info(f"Deleting old audio file: {self.bundle.source_audio}")
+        if not self.dry_run:
+            self.bundle.source_audio.unlink()
+            self.bundle.update_audio_path(None)
+
+
 # Moved here to avoid circular imports
 def gather_bundle_jobs(bundle: TranscribeBundle, output_dir: Path, config: TranscribeConfig, dry_run: bool) -> BundleJobs:
-    """Gather transcription jobs from this bundle."""
+    """Gather transcription jobs from this bundle. Jobs needs to be run in order."""
     jobs = []
 
     bundle_name = bundle.get_bundle_name()
     logger.debug(f"Gathering jobs for bundle: [{bundle_name}]")
 
-    if bundle.source_audio and not file_is_in_directory_tree(bundle.source_audio, output_dir):
-        job = CreateBundleJob(bundle, config, dry_run)
-        jobs.append(job)
+    if bundle.source_audio:
+        is_new_audio = not file_is_in_directory_tree(bundle.source_audio, output_dir)
+        if is_new_audio:
+            job = CreateBundleJob(bundle, config, dry_run)
+            jobs.append(job)
 
-    if not bundle.transcript:
-        job = TranscriptionJob(bundle, config, dry_run)
-        jobs.append(job)
+        if not is_new_audio and bundle.audio_source_needs_removal(config.general.delete_source_audio_after_days):
+            job = DeleteAudioFileJob(bundle, config, dry_run)
+            jobs.append(job)
+        elif not bundle.transcript:
+            job = TranscriptionJob(bundle, config, dry_run)
+            jobs.append(job)
 
     if config.text.summary_enabled:
-        # always needs to be done after transcription
         if not bundle.summary:
-            job = SummaryJob(bundle, config, dry_run)
-            jobs.append(job)
+            # First check if transcript exists or TranscriptionJob is scheduled
+            transcript_exists_or_scheduled = bundle.transcript is not None or any(isinstance(j, TranscriptionJob) for j in jobs)
+            if transcript_exists_or_scheduled:
+                job = SummaryJob(bundle, config, dry_run)
+                jobs.append(job)
 
         # always needs to be done after summary as this relies on summary content
         if bundle.needs_naming():

@@ -9,6 +9,7 @@ from transcriber.exception import TooShortException
 from transcriber.globals import is_handled_audio_file
 from transcriber.utils import (
     extract_date_from_recording_filename,
+    get_days_since_time,
     get_file_modified_date,
 )
 from transcriber.logger import get_logger
@@ -29,7 +30,7 @@ class Metadata:
     transcript_model_used: str | None = None
     summary_model_used: str | None = None
     bundle_name_generated: bool = False
-    # add force keep?
+    keep_forever: bool = False
 
     @staticmethod
     def _split_frontmatter(text: str) -> str | None:
@@ -98,12 +99,6 @@ class TranscribeBundle:
             elif file_path.name == SUMMARY_NAME:
                 summary = file_path.read_text(encoding="utf-8")
 
-        # # temp code
-        # if metadata.audio_length is None:
-        #     assert source_audio is not None
-        #     metadata.audio_length = AudioManipulation.get_audio_duration(source_audio)
-        #     metadata.write(meta_file)
-
         return TranscribeBundle(
             bundle_name=bundle_name,
             metadata=metadata,
@@ -158,7 +153,7 @@ class TranscribeBundle:
         return self.bundle_name
 
     @staticmethod
-    def generate_bundle_name_prefix(audio_path: Path | None, audio_filename: str) -> str:
+    def generate_bundle_name_date_prefix(audio_path: Path | None, audio_filename: str) -> str:
         """Return a date prefix string in the 'YYYY-MM-DD' format"""
         date_from_filename = TranscribeBundle.get_date_for_filename(audio_path, audio_filename)
         return date_from_filename.strftime("%Y-%m-%d")
@@ -169,8 +164,31 @@ class TranscribeBundle:
 
         logger.debug(f"Generating bundle name for audio file: [{audio_path}]")
 
-        prefix = cls.generate_bundle_name_prefix(audio_path, audio_filename)
+        prefix = cls.generate_bundle_name_date_prefix(audio_path, audio_filename)
         return f"{prefix}_{Path(audio_filename).stem}"
+
+    def audio_source_needs_removal(self, config_delete_after_days: int) -> bool:
+        """Check if the bundle audio file is older than given days.
+        The date is either the file modification date or the bundle date, whichever is later.
+        """
+        if not self.source_audio or self.metadata.keep_forever:
+            return False
+
+        bundle_date = self.get_date_from_bundle_name()
+        bundle_days_since = get_days_since_time(bundle_date)
+        file_days_since = 0
+
+        file_date = get_file_modified_date(self.source_audio)
+        file_days_since = get_days_since_time(file_date)
+
+        days_since = min(bundle_days_since, file_days_since)
+        return days_since > config_delete_after_days
+
+    def get_date_from_bundle_name(self) -> datetime:
+        """Extract date from the bundle name."""
+        # Date is in format %Y-%m-%d at the start of the bundle name
+        date_str = self.bundle_name[0:10]
+        return datetime.strptime(date_str, "%Y-%m-%d")
 
     @staticmethod
     def gather_existing_bundles(output_dir: Path) -> list["TranscribeBundle"]:
@@ -217,7 +235,7 @@ class TranscribeBundle:
         bundle_dir = self.get_bundle_dir(output_base_dir)
         return bundle_dir / METADATA_NAME
 
-    def update_audio_path(self, new_audio_path: Path):
+    def update_audio_path(self, new_audio_path: Path | None):
         """Update the source audio path."""
         self.source_audio = new_audio_path
 
@@ -245,7 +263,7 @@ class TranscribeBundle:
         if not bundle_path_from.exists():
             raise FileNotFoundError("Bundle directory not found")
 
-        prefix = self.generate_bundle_name_prefix(self.source_audio, self.metadata.original_audio_filename)
+        prefix = self.generate_bundle_name_date_prefix(self.source_audio, self.metadata.original_audio_filename)
         new_bundle_name = f"{prefix} {bundle_name_summary}"
 
         bundle_path_to = output_base_dir / new_bundle_name

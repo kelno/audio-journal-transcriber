@@ -1,10 +1,10 @@
 general:
-  # Remove successfully processed audio files after this delay. 0 = disabled
-  cleanup: 0
-  # The minimal record length in seconds to process an audio file. Else, the file is cleaned up immediately.
+  # The minimal record length in seconds to process an audio file. 0 = disabled
   min_length_seconds: 5.0
   # Remove audio files that are shorter than min_length_seconds
   remove_short_files: true
+  # Remove successfully processed audio files after this delay. The date is either the file modification date or the bundle date, whichever is later. 0 = disabled
+  delete_source_audio_after_days: 0
 
 text:
   summary_enabled: true
@@ -26,4 +26,5 @@ audio:
   # Model to use for transcription. Must support streaming.
   # Example: Kelno/whisper-large-v3-french-distil-dec16-ct2
   model: Kelno/whisper-large-v3-french-distil-dec16-ct2
+  # Whether to use streaming transcription
   stream: true

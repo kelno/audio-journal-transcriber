@@ -36,8 +36,9 @@ Start-Process powershell -ArgumentList "-Command `"pipenv run python transcribe.
 - Try grouping records being done very close to each other. Group them as a single bundle, and process them accordingly. 
 - Add a "do not delete" property checkbox
   - Extra swag if it can be auto enabled if I mention it in the record
-- Remove links to records from the Obsidian record document
 - Do a "remove empty audio" pass
 - refine the prompt, what am I expecting from those summaries?
   -  Maybe provide context such as a list of topics we care about
-  -  Maybe some standard ways to interact with it like a key phrase to tell it to create a task in my vault. 
+- Vocal commands with start - end keywords. Like "Start command" & "Cancel command" & "Validate command".
+  - Commands are defined with a name & a description and LLM is tasked to match to a command
+  - Command ideas: "Append to last record". "Delete this record". "Do not delete this record"

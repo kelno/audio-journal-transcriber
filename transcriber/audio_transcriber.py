@@ -1,6 +1,5 @@
 from dataclasses import dataclass
 from pathlib import Path
-from datetime import datetime
 
 from transcriber.ai_manager import AIManager
 from transcriber.audio_manipulation import AudioManipulation
@@ -30,7 +29,7 @@ class AudioTranscriber:
         logger.info(
             f"{type(self).__name__} initialized with\n"
             f"Store directory: {self.store_dir}\n"
-            f"Cleanup {self.config.general.cleanup}\n"
+            f"Delete source audio after days: {self.config.general.delete_source_audio_after_days}\n"
             f"Text summary {"enabled" if self.config.text.summary_enabled else "disabled"}"
         )
 
@@ -60,52 +59,6 @@ class AudioTranscriber:
             return False
 
         return True
-
-    @staticmethod
-    def cleanup_audio_files_older_than(output_dir: Path, days: int, dry_run: bool = False):
-        """
-        Clean up audio files that were processed more than X days ago.
-        Only removes audio files that have a matching .md file next to them.
-        Handles nested directory structure.
-        """
-
-        logger.info(f"Starting cleanup of audio files older than {days} days")
-        logger.debug(f"Scanning directory for cleanup: {output_dir}")
-
-        current_time = datetime.now().timestamp()
-        files_removed = 0
-        files_checked = 0
-
-        for file_path in Path(output_dir).rglob("*"):
-            if file_path.is_file():
-                if not is_handled_audio_file(file_path.suffix):
-                    continue
-
-                files_checked += 1
-
-                # Check for matching .md file
-                transcript_path = file_path.parent / "summary.md"
-
-                if not transcript_path.exists():
-                    logger.warning(f"Skipping [{file_path.name}], as no matching text file was found. ")
-                    continue
-
-                mtime = file_path.stat().st_mtime
-                age_in_days = (current_time - mtime) / (24 * 3600)
-
-                logger.debug(f'Checking: "{file_path}". ' f"Modified: {datetime.fromtimestamp(mtime).strftime('%Y-%m-%d')}. " f"Age: {int(age_in_days)} days.")
-
-                if age_in_days > days:
-                    logger.info(f"Removing file: {file_path}")
-                    if not dry_run:
-                        file_path.unlink()
-                    files_removed += 1
-                else:
-                    logger.debug("Keeping file (not old enough)")
-
-        logger.info("Cleanup summary:")
-        logger.info(f"  Files checked: {files_checked}")
-        logger.info(f"  Files removed: {files_removed}")
 
     def gather_pending_audio_files(self, input_dir: Path) -> list[TranscribeBundle]:
         """
@@ -158,11 +111,6 @@ class AudioTranscriber:
         # Make sure obsidian_root exists
         if not input_dir.exists():
             raise ValueError(f"Input directory does not exist: {input_dir}")
-
-        # Clean old audio files
-        if self.config.general.cleanup != 0:
-            self.log_section_header("Cleanup old audio files")
-            self.cleanup_audio_files_older_than(self.store_dir, self.config.general.cleanup, self.dry_run)
 
         self.log_section_header("Init AI Manager")
         ai_manager = AIManager(self.config)
