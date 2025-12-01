@@ -70,19 +70,8 @@ class TranscriptionJob(TranscribeBundleJob):
 
 
 @dataclass
-class GetAudioLengthJob(TranscribeBundleJob):
-
-    def run(self, output_base_dir: Path, _ai_manager: AIManager):
-        logger.info(f"Get audio length for {self.bundle.get_bundle_name()}")
-
-        if self.dry_run:
-            return
-
-        self.bundle.write_metadata(output_base_dir)
-
-
-@dataclass
 class SummaryJob(TranscribeBundleJob):
+    """Generate AI summary for the bundle based on transcript."""
 
     def run(self, output_base_dir: Path, ai_manager: AIManager):
         summary_path = self.bundle.get_summary_path(output_base_dir)
@@ -100,6 +89,7 @@ class SummaryJob(TranscribeBundleJob):
 
 @dataclass
 class BundleNameJob(TranscribeBundleJob):
+    """Generate AI-based bundle name based on summary."""
 
     def run(self, output_base_dir: Path, ai_manager: AIManager):
         logger.info(f"Generating buddle name for {self.bundle.get_bundle_name()}")
