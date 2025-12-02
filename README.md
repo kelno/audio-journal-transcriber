@@ -32,13 +32,16 @@ Start-Process powershell -ArgumentList "-Command `"pipenv run python transcribe.
 
 # Improve me
 
-- Look into summary strategies? Currently it's quite unspecific
-- Try grouping records being done very close to each other. Group them as a single bundle, and process them accordingly. 
-- Add a "do not delete" property checkbox
-  - Extra swag if it can be auto enabled if I mention it in the record
 - Do a "remove empty audio" pass
-- refine the prompt, what am I expecting from those summaries?
-  -  Maybe provide context such as a list of topics we care about
-- Vocal commands with start - end keywords. Like "Start command" & "Cancel command" & "Validate command".
-  - Commands are defined with a name & a description and LLM is tasked to match to a command
-  - Command ideas: "Append to last record". "Delete this record". "Do not delete this record"
+- Refining the prompt:
+  - Look into summary strategies, currently it's free and unspecific
+  - Be more explicit about what am I expecting from those summaries?
+  - Maybe provide context such as a list of topics we care about. About how we use those records.
+- The big vocal commands feature
+  - Trigger it with specific start - end keywords. Like "Start command" & "Cancel command" & "Validate command".
+  - Make those configurable?
+  - Command ideas: 
+    - Append to last record
+    - Delete this record
+    - Never delete this record / Keep forever
+  - Commands are defined with a name & a description and LLM is tasked to match the text between the keywords to a command. 

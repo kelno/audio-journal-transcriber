@@ -172,6 +172,9 @@ class AIManager:
                 ---
                 {summary}"""
             bundle_name = self.query_chat_completion(prompt)
+            # Ai tends to add quotes around the name
+            bundle_name = bundle_name.strip(" \n\"'")
+
             logger.debug(f"AI generated bundle name: {bundle_name}")
             if len(bundle_name) > 60:  # arbitrary max length
                 raise ValueError(f"LLM returned a bundle name too long: {bundle_name}")
