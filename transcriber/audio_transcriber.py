@@ -30,7 +30,7 @@ class AudioTranscriber:
             f"{type(self).__name__} initialized with\n"
             f"Store directory: {self.store_dir}\n"
             f"Delete source audio after days: {self.config.general.delete_source_audio_after_days}\n"
-            f"Text summary {"enabled" if self.config.text.summary_enabled else "disabled"}"
+            f"Text summary {'enabled' if self.config.text.summary_enabled else 'disabled'}"
         )
 
     def process_jobs(self, all_jobs: list[BundleJobs], output_dir: Path, ai_manager: AIManager):

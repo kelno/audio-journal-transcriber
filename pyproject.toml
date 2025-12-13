@@ -1,6 +1,25 @@
 [project]
 name = "audio-journal-transcriber"
+version = "0.1.0"
 description = "Automated pipeline for transcribing and summarizing personal recordings."
+requires-python = "==3.12.*"
+
+dependencies = [
+  "requests",
+  "pyyaml",
+  "pydantic",
+  "coloredlogs",
+  "openai",
+  "pydub",
+]
+
+[project.optional-dependencies]
+dev = [
+   "black",
+]
+
+[tool.uv]
+index-url = "https://pypi.org/simple"
 
 [tool.black]
 line-length = 160
