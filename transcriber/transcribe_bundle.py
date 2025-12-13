@@ -171,7 +171,7 @@ class TranscribeBundle:
         """Check if the bundle audio file is older than given days.
         The date is either the file modification date or the bundle date, whichever is later.
         """
-        if not self.source_audio or self.metadata.keep_forever:
+        if not self.source_audio or self.metadata.keep_forever or config_delete_after_days <= 0:
             return False
 
         bundle_date = self.get_date_from_bundle_name()
