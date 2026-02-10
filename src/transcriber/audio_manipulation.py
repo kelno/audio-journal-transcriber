@@ -1,5 +1,5 @@
 from pathlib import Path
-from pydub import AudioSegment, silence
+from pydub import AudioSegment
 from pydub.utils import which as pydub_which
 from pydub.exceptions import CouldntDecodeError
 
@@ -38,4 +38,3 @@ class AudioManipulation:
         except Exception:  # pylint: disable=broad-exception-caught
             logger.error(f"Unexpected error reading {file_path}")
             raise
-

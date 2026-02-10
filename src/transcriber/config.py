@@ -44,7 +44,7 @@ class AudioConfig(BaseModel):
         return self
 
 
-default_toml_file = Path(__file__).parent.parent / "config.default.toml"
+default_toml_file = Path(__file__).parent / "config.default.toml"
 assert default_toml_file.exists()
 
 

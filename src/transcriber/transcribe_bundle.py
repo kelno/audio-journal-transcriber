@@ -4,15 +4,15 @@ from pathlib import Path
 
 import yaml
 
-from transcriber.audio_manipulation import AudioManipulation
-from transcriber.exception import TooShortException
-from transcriber.globals import is_handled_audio_file
-from transcriber.utils import (
+from .audio_manipulation import AudioManipulation
+from .exception import TooShortException
+from .globals import is_handled_audio_file
+from .utils import (
     extract_date_from_recording_filename,
     get_days_since_time,
     get_file_modified_date,
 )
-from transcriber.logger import get_logger
+from .logger import get_logger
 
 logger = get_logger()
 

@@ -1,18 +1,18 @@
 from dataclasses import dataclass
 from pathlib import Path
 
-from transcriber.ai_manager import AIManager
-from transcriber.audio_manipulation import AudioManipulation
-from transcriber.config import TranscribeConfig
-from transcriber.exception import AudioTranscriberException, TooShortException
-from transcriber.globals import is_handled_audio_file
-from transcriber.transcribe_bundle import TranscribeBundle
-from transcriber.logger import get_logger
-from transcriber.transcribe_bundle_job import (
+from .ai_manager import AIManager
+from .audio_manipulation import AudioManipulation
+from .config import TranscribeConfig
+from .exception import AudioTranscriberException, TooShortException
+from .globals import is_handled_audio_file
+from .transcribe_bundle import TranscribeBundle
+from .logger import get_logger
+from .transcribe_bundle_job import (
     BundleJobs,
     gather_bundle_jobs,
 )
-from transcriber.utils import ensure_directory_exists, remove_empty_subdirs
+from .utils import ensure_directory_exists, remove_empty_subdirs
 
 logger = get_logger()
 

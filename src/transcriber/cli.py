@@ -1,9 +1,9 @@
 import argparse
 import sys
 
-from transcriber.audio_transcriber import AudioTranscriber
-from transcriber.config import TranscribeConfig
-from transcriber.logger import configure_logger, get_logger
+from .audio_transcriber import AudioTranscriber
+from .config import TranscribeConfig
+from .logger import configure_logger, get_logger
 
 
 def main():

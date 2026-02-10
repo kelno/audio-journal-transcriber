@@ -3,12 +3,12 @@ from pathlib import Path
 from abc import ABC, abstractmethod
 import shutil
 
-from transcriber.ai_manager import AIManager
-from transcriber.config import TranscribeConfig
-from transcriber.exception import EmptyTranscriptException
-from transcriber.logger import get_logger
-from transcriber.transcribe_bundle import TranscribeBundle
-from transcriber.utils import ensure_directory_exists, file_is_in_directory_tree
+from .ai_manager import AIManager
+from .config import TranscribeConfig
+from .exception import EmptyTranscriptException
+from .logger import get_logger
+from .transcribe_bundle import TranscribeBundle
+from .utils import ensure_directory_exists, file_is_in_directory_tree
 
 logger = get_logger()
 

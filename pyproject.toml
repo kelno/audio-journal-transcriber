@@ -13,6 +13,7 @@ dependencies = [
   "coloredlogs",
   "openai",
   "pydub",
+  "uv>=0.10.2",
 ]
 
 [project.scripts]
@@ -23,9 +24,21 @@ dev = [
    "black",
 ]
 
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+transcriber = ["*.toml"]
+
 [tool.uv]
 package = true
-index-url = "https://pypi.org/simple"
 
 [tool.black]
 line-length = 160
