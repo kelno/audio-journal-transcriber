@@ -6,28 +6,23 @@ Requires ffmpeg in path.
 # Installation
 
 ```bash
-pipenv install
+uv sync
 ```
 
 # Usage
 
 See usage with:  
 ```bash
-pipenv run python transcribe.py --help
-
-Or:
-
-pipenv shell
-python transcribe.py --help
+uv run transcriber --help
 ```
 
-## Obsidian shell command example
+## Obsidian PowerShell command example
 
-```
+```powershell
 $inputDir = Join-Path (Get-Location).Path "Transcription/attachments"
 $storeDir = Join-Path (Get-Location).Path "Transcription/Output"
 cd _/transcribe
-Start-Process powershell -ArgumentList "-Command `"pipenv run python transcribe.py '$inputDir' --store '$storeDir'; Read-Host 'Press Enter to exit'`" "
+Start-Process powershell -ArgumentList "-Command `"uv run transcriber '$inputDir' --store '$storeDir'; Read-Host 'Press Enter to exit'`" "
 ```
 
 # Improve me

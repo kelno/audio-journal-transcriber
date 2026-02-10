@@ -8,7 +8,7 @@
       "name": "Transcribe",
       "type": "debugpy",
       "request": "launch",
-      "program": "transcribe.py",
+      "module": "transcriber",
       "console": "integratedTerminal",
       "args": [
         "--store",
@@ -20,7 +20,7 @@
       "name": "Transcribe (debug)",
       "type": "debugpy",
       "request": "launch",
-      "program": "transcribe.py",
+      "module": "transcriber",
       "console": "integratedTerminal",
       "args": [
         "--debug",
@@ -33,7 +33,7 @@
       "name": "(DRY RUN) Transcribe",
       "type": "debugpy",
       "request": "launch",
-      "program": "transcribe.py",
+      "module": "transcriber",
       "console": "integratedTerminal",
       "args": [
         "--dry-run",

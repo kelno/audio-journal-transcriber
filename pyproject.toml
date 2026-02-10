@@ -14,12 +14,16 @@ dependencies = [
   "pydub",
 ]
 
+[project.scripts]
+transcriber = "transcriber.cli:main"
+
 [project.optional-dependencies]
 dev = [
    "black",
 ]
 
 [tool.uv]
+package = true
 index-url = "https://pypi.org/simple"
 
 [tool.black]
