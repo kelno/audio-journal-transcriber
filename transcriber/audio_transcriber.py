@@ -20,7 +20,6 @@ logger = get_logger()
 @dataclass
 class AudioTranscriber:
     config: TranscribeConfig
-    store_dir: Path
     dry_run: bool = False
 
     def __post_init__(self):
@@ -28,7 +27,7 @@ class AudioTranscriber:
             logger.warning("!!! DRY RUN MODE !!!")
         logger.info(
             f"{type(self).__name__} initialized with\n"
-            f"Store directory: {self.store_dir}\n"
+            f"Store directory: {self.config.general.store_dir}\n"
             f"Delete source audio after days: {self.config.general.delete_source_audio_after_days}\n"
             f"Text summary {'enabled' if self.config.text.summary_enabled else 'disabled'}"
         )
@@ -106,8 +105,10 @@ class AudioTranscriber:
 
         return jobs
 
-    def run(self, input_dir: Path):
-        ensure_directory_exists(self.store_dir)
+    def run(self):
+        input_dir = self.config.general.input_dir
+        store_dir = self.config.general.store_dir
+        ensure_directory_exists(store_dir)
 
         # Make sure obsidian_root exists
         if not input_dir.exists():
@@ -117,13 +118,13 @@ class AudioTranscriber:
         ai_manager = AIManager(self.config)
 
         self.log_section_header("Gathering Jobs")
-        jobs = self.gather_jobs(input_dir, self.store_dir)
+        jobs = self.gather_jobs(input_dir, store_dir)
         if not jobs:
             logger.info("No jobs found for processing")
         else:
             logger.info(f"Found pending jobs for {len(jobs)} bundles")
             self.log_section_header("Processing Jobs")
-            self.process_jobs(jobs, self.store_dir, ai_manager)
+            self.process_jobs(jobs, store_dir, ai_manager)
 
         if not self.dry_run:
             remove_empty_subdirs(input_dir)

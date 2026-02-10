@@ -9,6 +9,35 @@ Requires ffmpeg in path.
 uv sync
 ```
 
+# Configuration
+
+The application can be configured via config files or env variables. 
+Most configuration values must be provided, see `config.default.toml` to check which ones are set by default.  
+
+Configuration will be merged in the order of priority:  
+- Environment variables (prefixed with `TRANSCRIBER_`)
+- `config.custom.toml`:  From working directory, overrides specific values.
+- `config.default.toml`: From this repository. Provides base values. 
+
+For example you can create a `config.custom.toml` with only the keys you want to change, example:
+
+```toml
+[text]
+api_key = "sk-xxxx"
+
+[audio]
+api_base_url = "http://localhost:8000/v1"
+stream = true
+```
+
+#### Option B: With environment variable
+
+Pass values as environment variables, example:  
+`TRANSCRIBER_GENERAL__DELETE_SOURCE_AUDIO_AFTER_DAYS=30`
+
+(Environment variables take precedence over the config files.)
+
+
 # Usage
 
 See usage with:  
@@ -16,13 +45,13 @@ See usage with:
 uv run transcriber --help
 ```
 
+
 ## Obsidian PowerShell command example
 
 ```powershell
-$inputDir = Join-Path (Get-Location).Path "Transcription/attachments"
-$storeDir = Join-Path (Get-Location).Path "Transcription/Output"
 cd _/transcribe
-Start-Process powershell -ArgumentList "-Command `"uv run transcriber '$inputDir' --store '$storeDir'; Read-Host 'Press Enter to exit'`" "
+Start-Process powershell -ArgumentList "-Command `"uv run transcriber; Read-Host 'Press Enter to exit'`" "
+```
 ```
 
 # Improve me

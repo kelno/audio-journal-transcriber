@@ -9,6 +9,7 @@ dependencies = [
   "requests",
   "pyyaml",
   "pydantic",
+  "pydantic-settings",
   "coloredlogs",
   "openai",
   "pydub",
