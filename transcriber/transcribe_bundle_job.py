@@ -84,6 +84,7 @@ class SummaryJob(TranscribeBundleJob):
             raise ValueError(f"{self}: Cannot generate ai summary without transcript")
 
         summary_content = ai_manager.get_ai_summary(self.bundle.transcript)
+        logger.info(f"Summary complete: {summary_content[:40]}")
         self.bundle.set_and_write_summary(output_base_dir, summary_content, self.config.text.model)
 
 
@@ -105,6 +106,7 @@ class BundleNameJob(TranscribeBundleJob):
             logger.error(f"{self}: Failed to generate bundle name")
             raise
 
+        logger.info(f"Generated bundle name: {bundle_name}")
         self.bundle.set_and_write_bundle_name(output_base_dir, bundle_name)
 
 

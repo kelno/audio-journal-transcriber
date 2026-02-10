@@ -33,6 +33,7 @@ Start-Process powershell -ArgumentList "-Command `"pipenv run python transcribe.
 # Improve me
 
 - Do a "remove empty audio" pass
+- Cut audio when above 20min, to pass to the transcription
 - Refining the prompt:
   - Look into summary strategies, currently it's free and unspecific
   - Be more explicit about what am I expecting from those summaries?

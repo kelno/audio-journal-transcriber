@@ -11,17 +11,17 @@ text:
   # Base URL for the local OpenAI-compatible API.
   #   Example for openwebui: http://localhost:8080/api
   api_base_url: http://localhost:8080/api
-  # Key as required by your API (or any dummy text if value not needed)
+  # Key as required by your API (or any dummy text if value not needed), will be passed using Bearer auth
   api_key: your_api_key_here
-  # Example: mistral-medium-2505
-  model: mistral-medium-2505
+  # Example: mistral-medium-latest
+  model: mistral-medium-latest
   # Extra context to provide to the AI when summarizing audio content, beside the basic instruction.
   extra_context: null
 
 audio:
   # Example for speaches: http://localhost:8000/v1
   api_base_url: http://localhost:8000/v1
-  # Key as required by your API (or any dummy text if value not needed)
+  # Key as required by your API (or any dummy text if value not needed), will be passed using Bearer auth
   api_key: your_api_key_here
   # Model to use for transcription. Must support streaming.
   # Example: Kelno/whisper-large-v3-french-distil-dec16-ct2

@@ -43,7 +43,7 @@ class AIManager:
                 files=files,
                 data=data,
                 headers={"Authorization": f"Bearer {self.config.audio.api_key}"},
-                stream=True,
+                stream=True,  # post option, delay body parsing
                 timeout=(60 if self.config.audio.stream else 600),  # 1 min for streaming, 10 min for non-streaming
             )
 

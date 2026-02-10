@@ -93,6 +93,7 @@ class AudioTranscriber:
         logger.debug(f"Looking for pending jobs in {input_dir}")
 
         logger.info(f"Gathering audio files from input directory: {input_dir}")
+        # TODO: SLOW
         bundles = self.gather_pending_audio_files(input_dir)
         logger.info(f"Gathering bundles from managed store directory:  {output_dir}")
         bundles.extend(TranscribeBundle.gather_existing_bundles(output_dir))
