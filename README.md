@@ -45,6 +45,8 @@ TRANSCRIBER_TEXT__API_KEY=sk-xxxx
 See usage with:  
 ```bash
 uv run transcriber --help
+# or when in venv
+transcriber --help
 ```
 
 

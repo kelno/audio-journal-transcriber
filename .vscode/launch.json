@@ -9,11 +9,8 @@
       "type": "debugpy",
       "request": "launch",
       "console": "integratedTerminal",
-      "module": "uv",
-      "args": [
-        "run",
-        "transcriber"
-      ],
+      "module": "transcriber",
+      "args": [],
       "justMyCode": false,
     },
     {
@@ -21,10 +18,8 @@
       "type": "debugpy",
       "request": "launch",
       "console": "integratedTerminal",
-      "module": "uv",
+      "module": "transcriber",
       "args": [
-        "run",
-        "transcriber",
         "--debug",
       ],
       "justMyCode": false,
@@ -34,10 +29,8 @@
       "type": "debugpy",
       "request": "launch",
       "console": "integratedTerminal",
-      "module": "uv",
+      "module": "transcriber",
       "args": [
-        "run",
-        "transcriber",
         "--dry-run",
         "--debug",
       ],

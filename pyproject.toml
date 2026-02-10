@@ -17,6 +17,7 @@ dependencies = [
 ]
 
 [project.scripts]
+# This creates a console command
 transcriber = "transcriber.cli:main"
 
 [project.optional-dependencies]
