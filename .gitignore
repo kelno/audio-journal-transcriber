@@ -3,3 +3,4 @@ __pycache__/
 *.log
 config.custom.toml
 *.egg-info
+run_podman.sh

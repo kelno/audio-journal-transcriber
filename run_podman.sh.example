@@ -1,0 +1,11 @@
+#!/bin/bash
+set -e  # Exit immediately if any command fails
+
+podman run -v /host/data/input:/data/input \
+        -v /host/data/store:/data/store \
+        -v /host/data/config.custom.toml:/app/config.custom.toml \
+        -e TRANSCRIBER_GENERAL__INPUT_DIR=/data/input \
+        -e TRANSCRIBER_GENERAL__STORE_DIR=/data/store \
+        --name transcriber --rm \
+        audio-journal-transcriber:latest $1
+ 

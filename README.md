@@ -52,6 +52,54 @@ uv run transcriber --help
 cd _/transcribe
 Start-Process powershell -ArgumentList "-Command `"uv run transcriber; Read-Host 'Press Enter to exit'`" "
 ```
+
+## Docker / Podman
+
+### Build
+
+```bash
+# Get the current git tag
+$version = git describe --tags --abbrev=0
+
+# Build the image
+docker build --build-arg VERSION=$version -t audio-journal-transcriber:$version .
+```
+
+### Configuration
+
+See "Configuration" above.  
+The image working directory is `/app` if using the config file, mount it at `/app/config.custom.toml` 
+
+### Run example 
+
+CHANGE ME: Configure input and store in config
+LATER CHANGE ME: Make this app a file watch thingy that will update periodically?
+
+```bash
+# Using env variables 
+docker run -v /path/to/input:/data/input \
+           -v /path/to/store:/data/store \
+           -e TRANSCRIBER_GENERAL__DELETE_SOURCE_AUDIO_AFTER_DAYS=30 \
+           -e TRANSCRIBER_GENERAL__MIN_LENGTH_SECONDS=10.0 \
+           -e TRANSCRIBER_TEXT__SUMMARY_ENABLED=true \
+           -e TRANSCRIBER_TEXT__API_BASE_URL=https://api.openai.com/v1/ \
+           -e TRANSCRIBER_TEXT__MODEL=gpt-4o-mini \
+           -e TRANSCRIBER_TEXT__API_KEY=sk-xxxx \
+           -e TRANSCRIBER_AUDIO__API_BASE_URL=https://api.openai.com/v1/ \
+           -e TRANSCRIBER_AUDIO__MODEL=whisper-1 \
+           -e TRANSCRIBER_AUDIO__API_KEY=sk-xxxx \
+           audio-journal-transcriber:latest
+
+# Using config file
+
+docker run -v /path/to/input:/data/input \
+           -v /path/to/store:/data/store \
+           -v /path/to/config.toml:/app/config.custom.toml \
+           -e TRANSCRIBER_GENERAL__INPUT_DIR=/data/input \
+           -e TRANSCRIBER_GENERAL__STORE_DIR=/data/store \
+           audio-journal-transcriber:latest
+
+# (Or combine both as needed)
 ```
 
 # Improve me
