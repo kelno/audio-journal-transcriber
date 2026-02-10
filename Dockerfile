@@ -45,7 +45,7 @@ RUN groupadd --gid 1000 appuser \
 WORKDIR /app
 
 # Copy virtual environment from builder
-COPY --from=builder --chown=appuser:appuser /app .
+COPY --from=builder --chown=appuser:appuser /app/.venv /app/.venv
 
 USER appuser
 

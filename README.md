@@ -1,7 +1,8 @@
 Audio transcription and summary script for my personal Obsidian Vault. 
 
 # Requirements
-Requires ffmpeg in path.
+Requires `uv` package manager.  
+Requires `ffmpeg` in path.
 
 # Installation
 
@@ -16,10 +17,10 @@ Most configuration values must be provided, see `config.default.toml` to check w
 
 Configuration will be merged in the order of priority:  
 - Environment variables (prefixed with `TRANSCRIBER_`)
-- `config.custom.toml`:  From working directory, overrides specific values.
+- `config.custom.toml`: From working directory, overrides specific values.
 - `config.default.toml`: From this repository. Provides base values. 
 
-For example you can create a `config.custom.toml` with only the keys you want to change, example:
+For example you can create a `config.custom.toml` with only the keys you want to change:  
 
 ```toml
 [text]
@@ -30,15 +31,16 @@ api_base_url = "http://localhost:8000/v1"
 stream = true
 ```
 
-#### Option B: With environment variable
+## Environment variables format
 
-Pass values as environment variables, example:  
-`TRANSCRIBER_GENERAL__DELETE_SOURCE_AUDIO_AFTER_DAYS=30`
+Some examples:
+```
+TRANSCRIBER_GENERAL__DELETE_SOURCE_AUDIO_AFTER_DAYS=30
+TRANSCRIBER_TEXT__API_KEY=sk-xxxx
+```
 
-(Environment variables take precedence over the config files.)
 
-
-# Usage
+# CLI usage
 
 See usage with:  
 ```bash
@@ -46,16 +48,9 @@ uv run transcriber --help
 ```
 
 
-## Obsidian PowerShell command example
+# Docker / Podman
 
-```powershell
-cd _/transcribe
-Start-Process powershell -ArgumentList "-Command `"uv run transcriber; Read-Host 'Press Enter to exit'`" "
-```
-
-## Docker / Podman
-
-### Build
+## Build
 
 ```bash
 # Get the current git tag
@@ -65,12 +60,12 @@ $version = git describe --tags --abbrev=0
 docker build --build-arg VERSION=$version -t audio-journal-transcriber:$version .
 ```
 
-### Configuration
+## Configuration
 
 See "Configuration" above.  
 The image working directory is `/app` if using the config file, mount it at `/app/config.custom.toml` 
 
-### Run example 
+## Examples
 
 CHANGE ME: Configure input and store in config
 LATER CHANGE ME: Make this app a file watch thingy that will update periodically?
@@ -118,3 +113,10 @@ docker run -v /path/to/input:/data/input \
     - Delete this record
     - Never delete this record / Keep forever
   - Commands are defined with a name & a description and LLM is tasked to match the text between the keywords to a command. 
+
+## Obsidian PowerShell command example
+
+```powershell
+cd _/transcribe
+Start-Process powershell -ArgumentList "-Command `"uv run transcriber; Read-Host 'Press Enter to exit'`" "
+```
