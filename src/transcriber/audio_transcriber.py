@@ -4,7 +4,7 @@ from pathlib import Path
 from .ai_manager import AIManager
 from .audio_manipulation import AudioManipulation
 from .config import TranscribeConfig
-from .exception import AudioTranscriberException, TooShortException
+from .exception import AudioTranscriberException
 from .globals import is_handled_audio_file
 from .transcribe_bundle import TranscribeBundle
 from .logger import logger
@@ -18,7 +18,8 @@ from .utils import ensure_directory_exists, remove_empty_subdirs
 @dataclass
 class AudioTranscriber:
     config: TranscribeConfig
-    dry_run: bool = False
+    dry_run: bool
+    ai_manager: AIManager
 
     def __post_init__(self):
         if self.dry_run:
@@ -30,14 +31,14 @@ class AudioTranscriber:
             f"Text summary {'enabled' if self.config.text.summary_enabled else 'disabled'}"
         )
 
-    def process_jobs(self, all_jobs: list[BundleJobs], output_dir: Path, ai_manager: AIManager):
+    def process_jobs(self, all_jobs: list[BundleJobs], output_dir: Path):
         """Process audio files from the pending directory."""
 
         for bundle_jobs in all_jobs:
             try:  # catch at the bundle level rather than job level, we want to skip remaining jobs on failure
                 for job in bundle_jobs:
                     logger.info(f"Processing job: {job}")
-                    job.run(output_dir, ai_manager)
+                    job.run(output_dir, self.ai_manager)
             except OSError as e:
                 logger.error(f"Error processing [{job}] (skipping any remaining jobs for this bundle). {e}")
             except AudioTranscriberException as e:
@@ -70,7 +71,7 @@ class AudioTranscriber:
                 try:
                     bundle = TranscribeBundle.from_audio_file(source_audio=path, min_length=self.config.general.min_length_seconds)
                     bundles.append(bundle)
-                except TooShortException as e:
+                except AudioTranscriberException as e:
                     logger.warning(f"Failed to create bundle from audio file {path}, exception {e}")
                     if self.config.general.remove_short_files and not self.dry_run:
                         logger.info(f"Removing short audio file: {path}")
@@ -103,6 +104,17 @@ class AudioTranscriber:
 
         return jobs
 
+    def process_single_file(self, file_path: Path, output_dir: Path):
+        """Process a single audio file."""
+        if file_path.is_file() and is_handled_audio_file(file_path.suffix):
+            try:
+                bundle = TranscribeBundle.from_audio_file(source_audio=file_path, min_length=self.config.general.min_length_seconds)
+                if bundle_jobs := gather_bundle_jobs(bundle, output_dir, self.config, self.dry_run):
+                    self.process_jobs([bundle_jobs], output_dir)
+
+            except AudioTranscriberException as e:
+                logger.error(f"Error processing file {file_path}: {e}")
+
     def run(self):
         input_dir = self.config.general.input_dir
         store_dir = self.config.general.store_dir
@@ -112,9 +124,6 @@ class AudioTranscriber:
         if not input_dir.exists():
             raise ValueError(f"Input directory does not exist: {input_dir}")
 
-        self.log_section_header("Init AI Manager")
-        ai_manager = AIManager(self.config)
-
         self.log_section_header("Gathering Jobs")
         jobs = self.gather_jobs(input_dir, store_dir)
         if not jobs:
@@ -122,7 +131,7 @@ class AudioTranscriber:
         else:
             logger.info(f"Found pending jobs for {len(jobs)} bundles")
             self.log_section_header("Processing Jobs")
-            self.process_jobs(jobs, store_dir, ai_manager)
+            self.process_jobs(jobs, store_dir)
 
         if not self.dry_run:
             remove_empty_subdirs(input_dir)

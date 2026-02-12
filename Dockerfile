@@ -50,5 +50,5 @@ COPY --from=builder --chown=appuser:appuser /app/.venv /app/.venv
 USER appuser
 
 # Entrypoint: run the transcriber module
-ENTRYPOINT ["python", "-m", "uv", "run", "transcriber"]
+ENTRYPOINT ["python", "-m", "uv", "run", "transcriber", "--daemon"]
 CMD []

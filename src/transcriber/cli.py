@@ -1,6 +1,9 @@
 import argparse
 import sys
 
+from transcriber.ai_manager import AIManager
+from transcriber.daemon import run_daemon_mode
+
 from .audio_transcriber import AudioTranscriber
 from .config import TranscribeConfig
 from .logger import configure_logger, logger
@@ -18,14 +21,18 @@ def main():
         action="store_true",
         help="Enable debug logging output.",
     )
-
+    parser.add_argument(
+        "--daemon",
+        action="store_true",
+        help="Run in daemon mode, watching file changes and processing continuously.",
+    )
     args = parser.parse_args()
 
     dry_run = args.dry_run
     debug = args.debug
+    daemon = args.daemon
 
     configure_logger(debug)
-    logger = get_logger()
 
     if not AudioTranscriber.validate_environment():
         logger.error("Exiting after missing requirements")
@@ -33,5 +40,9 @@ def main():
 
     config = TranscribeConfig()  # type: ignore
 
-    transcriber = AudioTranscriber(config=config, dry_run=dry_run)
+    ai_manager = AIManager(config)
+    transcriber = AudioTranscriber(config=config, dry_run=dry_run, ai_manager=ai_manager)
     transcriber.run()
+
+    if daemon:
+        run_daemon_mode(transcriber)
