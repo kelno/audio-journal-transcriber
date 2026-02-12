@@ -38,17 +38,15 @@ RUN apt-get update && \
         ca-certificates \
         && rm -rf /var/lib/apt/lists/*
 
-# Create non-root user
-RUN groupadd --gid 1000 appuser \
-    && useradd --uid 1000 --gid appuser --shell /bin/bash --home-dir /app appuser
-
 WORKDIR /app
+RUN mkdir -p /app \
+    && chmod 755 /app
 
 # Copy virtual environment from builder
-COPY --from=builder --chown=appuser:appuser /app/.venv /app/.venv
+COPY --from=builder /app/.venv /app/.venv
+# (OpenShift) Allow users in the root group to access files in /app
+RUN chgrp -R 0 /app && chmod -R g=u /app
 
-USER appuser
-
-# Entrypoint: run the transcriber module
-ENTRYPOINT ["python", "-m", "uv", "run", "transcriber", "--daemon"]
+# Entrypoint: run the transcriber module (maybe can call transcriber directly?)
+ENTRYPOINT ["transcriber", "--daemon"]
 CMD []
