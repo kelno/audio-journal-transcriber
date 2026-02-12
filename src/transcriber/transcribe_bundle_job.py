@@ -6,11 +6,9 @@ import shutil
 from .ai_manager import AIManager
 from .config import TranscribeConfig
 from .exception import EmptyTranscriptException
-from .logger import get_logger
+from .logger import logger
 from .transcribe_bundle import TranscribeBundle
 from .utils import ensure_directory_exists, file_is_in_directory_tree
-
-logger = get_logger()
 
 
 @dataclass

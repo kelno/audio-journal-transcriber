@@ -7,9 +7,7 @@ import requests
 from openai import OpenAI
 
 from transcriber.config import TranscribeConfig
-from transcriber.logger import get_logger
-
-logger = get_logger()
+from .logger import logger
 
 
 @dataclass

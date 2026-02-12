@@ -7,14 +7,12 @@ from .config import TranscribeConfig
 from .exception import AudioTranscriberException, TooShortException
 from .globals import is_handled_audio_file
 from .transcribe_bundle import TranscribeBundle
-from .logger import get_logger
+from .logger import logger
 from .transcribe_bundle_job import (
     BundleJobs,
     gather_bundle_jobs,
 )
 from .utils import ensure_directory_exists, remove_empty_subdirs
-
-logger = get_logger()
 
 
 @dataclass

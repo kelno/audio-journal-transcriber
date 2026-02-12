@@ -12,9 +12,7 @@ from .utils import (
     get_days_since_time,
     get_file_modified_date,
 )
-from .logger import get_logger
-
-logger = get_logger()
+from .logger import logger
 
 TRANSCRIPT_NAME = "transcript.md"
 SUMMARY_NAME = "summary.md"
@@ -109,7 +107,10 @@ class TranscribeBundle:
 
     @classmethod
     def from_audio_file(cls, source_audio: Path, min_length: float | None) -> "TranscribeBundle":
-        """Create a TranscribeBundle instance from an audio file."""
+        """Create a TranscribeBundle instance from an audio file.
+
+        Can throw TooShortException
+        """
 
         audio_length = AudioManipulation.get_audio_duration(source_audio)
         if min_length and audio_length < min_length:

@@ -3,7 +3,7 @@ import sys
 
 from .audio_transcriber import AudioTranscriber
 from .config import TranscribeConfig
-from .logger import configure_logger, get_logger
+from .logger import configure_logger, logger
 
 
 def main():
@@ -11,7 +11,7 @@ def main():
     parser.add_argument(
         "--dry-run",
         action="store_true",
-        help="Simulate transcription and other jobs without actually writing changes. Will still create directories",
+        help="Simulate transcription and other jobs without actually writing changes. Will still create directories.",
     )
     parser.add_argument(
         "--debug",

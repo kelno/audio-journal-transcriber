@@ -3,9 +3,7 @@ from pydub import AudioSegment
 from pydub.utils import which as pydub_which
 from pydub.exceptions import CouldntDecodeError
 
-from transcriber.logger import get_logger
-
-logger = get_logger()
+from .logger import logger
 
 
 class AudioManipulation:

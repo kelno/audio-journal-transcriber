@@ -3,9 +3,7 @@ import os
 from pathlib import Path
 import re
 
-from transcriber.logger import get_logger
-
-logger = get_logger()
+from .logger import logger
 
 
 def ensure_directory_exists(directory):
