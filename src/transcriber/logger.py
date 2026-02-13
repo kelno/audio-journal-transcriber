@@ -22,4 +22,4 @@ def configure_logger(debug: bool = False, log_file: str | None = None):
         new_logger.addHandler(file_handler)
 
 
-logger = logging.getLogger("transcriber")
+logger = get_logger()
