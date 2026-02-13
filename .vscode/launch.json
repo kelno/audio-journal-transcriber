@@ -25,6 +25,18 @@
       "justMyCode": false,
     },
     {
+      "name": "Transcribe (daemon)",
+      "type": "debugpy",
+      "request": "launch",
+      "console": "integratedTerminal",
+      "module": "transcriber",
+      "args": [
+        "--debug",
+        "--daemon",
+      ],
+      "justMyCode": false,
+    },
+    {
       "name": "(DRY RUN) Transcribe",
       "type": "debugpy",
       "request": "launch",
