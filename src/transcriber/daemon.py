@@ -44,6 +44,7 @@ def run_daemon_mode(transcriber: AudioTranscriber, unprocessed_bundles: list[Bun
                         retry_manager.reset_delay()
                     else:
                         retry_manager.increase_delay()
+                        logger.info(f"Retrying in {retry_manager.get_current_delay()}s")
     except KeyboardInterrupt:
         logger.info("Stopping daemon mode...")
         watcher.stop()

@@ -50,7 +50,7 @@ class AudioTranscriber:
                     # Remove job from jobs bundle on successful execution
                     remaining_jobs_in_bundle.remove(job)
             except Exception as e:  # pylint: disable=W0718
-                logger.error(f"Error processing [{job}] (skipping any remaining jobs for this bundle). {e}")
+                logger.error(f"Error processing [{job}] (skipping any remaining jobs for this bundle). {e.with_traceback}")
                 if len(remaining_jobs_in_bundle) > 0:
                     unprocessed_bundles.append(remaining_jobs_in_bundle)
 
