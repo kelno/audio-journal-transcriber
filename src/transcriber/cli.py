@@ -3,6 +3,7 @@ import sys
 
 from transcriber.ai_manager import AIManager
 from transcriber.daemon import run_daemon_mode
+from transcriber.exception import AudioTranscriberException
 
 from .audio_transcriber import AudioTranscriber
 from .config import TranscribeConfig
@@ -34,15 +35,14 @@ def main():
 
     configure_logger(debug)
 
-    if not AudioTranscriber.validate_environment():
-        logger.error("Exiting after missing requirements")
-        sys.exit(1)
-
     config = TranscribeConfig()  # type: ignore
 
     ai_manager = AIManager(config)
     transcriber = AudioTranscriber(config=config, dry_run=dry_run, ai_manager=ai_manager)
-    transcriber.run()
-
-    if daemon:
-        run_daemon_mode(transcriber)
+    try:
+        unprocessed = transcriber.run()
+        if daemon:
+            run_daemon_mode(transcriber, unprocessed)
+    except AudioTranscriberException as e:
+        logger.error(f"AudioTranscriber failed with exception: {e}")
+        sys.exit(1)

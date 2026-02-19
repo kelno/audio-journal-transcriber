@@ -25,12 +25,14 @@ class FileWatcher(FileSystemEventHandler):
     If stricter guarantees are required (per-file atomicity, large directories,
     high-frequency ingestion), this design may need to be replaced with a more
     granular state machine.
+
+    delay: Fire events after no file changes in the whole input_dir for given time
     """
 
-    def __init__(self, input_dir: Path, callback: Callback, delay: float = 5.0) -> None:
+    def __init__(self, input_dir: Path, callback: Callback, stable_delay: float = 5.0) -> None:
         self.input_dir = input_dir
         self.callback = callback
-        self.delay = delay
+        self.stable_delay = stable_delay
 
         self._observer = Observer()
         self._timer: Optional[threading.Timer] = None
@@ -65,7 +67,7 @@ class FileWatcher(FileSystemEventHandler):
                 self._timer.cancel()
                 logger.debug("Reset debounce timer")
 
-            self._timer = threading.Timer(self.delay, self._process_files)
+            self._timer = threading.Timer(self.stable_delay, self._process_files)
             self._timer.start()
 
     def _process_files(self) -> None:

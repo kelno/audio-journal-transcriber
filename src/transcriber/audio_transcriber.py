@@ -1,5 +1,9 @@
-from dataclasses import dataclass
+import threading
+from dataclasses import dataclass, field
 from pathlib import Path
+import time
+
+from transcriber.file_watcher import FileWatcher
 
 from .ai_manager import AIManager
 from .audio_manipulation import AudioManipulation
@@ -31,32 +35,42 @@ class AudioTranscriber:
             f"Text summary {'enabled' if self.config.text.summary_enabled else 'disabled'}"
         )
 
-    def process_jobs(self, all_jobs: list[BundleJobs], output_dir: Path):
-        """Process audio files from the pending directory."""
+    def process_jobs(self, all_jobs_bundles: list[BundleJobs]) -> list[BundleJobs]:
+        """Process audio files from the pending directory.
 
-        for bundle_jobs in all_jobs:
-            try:  # catch at the bundle level rather than job level, we want to skip remaining jobs on failure
-                for job in bundle_jobs:
+        Returns remaining unprocessed bundle jobs
+        """
+        store_dir = self.config.general.store_dir
+        unprocessed_bundles = list[BundleJobs]()
+        for jobs_bundle in all_jobs_bundles:
+            remaining_jobs_in_bundle = jobs_bundle.copy()
+            # We want to skip remaining jobs in a bundle on failure and proceed with next bundles
+            try:
+                for job in jobs_bundle:
                     logger.info(f"Processing job: {job}")
-                    job.run(output_dir, self.ai_manager)
-            except OSError as e:
+                    job.run(store_dir, self.ai_manager)
+                    # Remove job from jobs bundle on successful execution
+                    remaining_jobs_in_bundle.remove(job)
+            except (OSError, AudioTranscriberException) as e:
                 logger.error(f"Error processing [{job}] (skipping any remaining jobs for this bundle). {e}")
-            except AudioTranscriberException as e:
-                logger.error(f"Error processing [{job}] (skipping any remaining jobs for this bundle). {e}")
+                if len(remaining_jobs_in_bundle) > 0:
+                    unprocessed_bundles.append(remaining_jobs_in_bundle)
+
+        return unprocessed_bundles
 
     def log_section_header(self, message):
         """Log a section header with separators."""
         logger.info(f"========== {message} ==========")
 
-    @staticmethod
-    def validate_environment() -> bool:
-        """Returns wheter environment has the proper requirements"""
+    def validate_environment(self):
+        """Raise if missing any environment requirements"""
+
+        input_dir = self.config.general.input_dir
+        if not input_dir.exists():
+            raise AudioTranscriberException(f"Input directory does not exist: {input_dir}")
 
         if not AudioManipulation.validate_ffmpeg():  # NYI: Check if ffmpeg is available in path
-            logger.error("Could not validate ffmpeg")
-            return False
-
-        return True
+            raise AudioTranscriberException("Could not validate ffmpeg")
 
     def gather_pending_audio_files(self, input_dir: Path) -> list[TranscribeBundle]:
         """
@@ -80,7 +94,7 @@ class AudioTranscriber:
         logger.debug(f"Imported {len(bundles)} audio files as bundles")
         return bundles
 
-    def gather_jobs(self, input_dir: Path, output_dir: Path) -> list[BundleJobs]:
+    def gather_jobs(self, input_dir: Path) -> list[BundleJobs]:
         """
         Find audio files in the given subdirectory and its subdirectories.
         Returns a list of Path objects for each audio file found.
@@ -93,52 +107,43 @@ class AudioTranscriber:
         logger.info(f"Gathering audio files from input directory: {input_dir}")
         # TODO: SLOW
         bundles = self.gather_pending_audio_files(input_dir)
-        logger.info(f"Gathering bundles from managed store directory:  {output_dir}")
-        bundles.extend(TranscribeBundle.gather_existing_bundles(output_dir))
+        store_dir = self.config.general.store_dir
+        logger.info(f"Gathering bundles from managed store directory:  {store_dir}")
+        bundles.extend(TranscribeBundle.gather_existing_bundles(store_dir))
 
         jobs: list[BundleJobs] = []
 
         for bundle in bundles:
-            if bundle_jobs := gather_bundle_jobs(bundle, output_dir, self.config, self.dry_run):
+            if bundle_jobs := gather_bundle_jobs(bundle, store_dir, self.config, self.dry_run):
                 jobs.append(bundle_jobs)
 
         return jobs
 
-    def process_single_file(self, file_path: Path, output_dir: Path):
-        """Process a single audio file."""
-        if file_path.is_file() and is_handled_audio_file(file_path.suffix):
-            try:
-                bundle = TranscribeBundle.from_audio_file(source_audio=file_path, min_length=self.config.general.min_length_seconds)
-                if bundle_jobs := gather_bundle_jobs(bundle, output_dir, self.config, self.dry_run):
-                    self.process_jobs([bundle_jobs], output_dir)
-
-            except AudioTranscriberException as e:
-                logger.error(f"Error processing file {file_path}: {e}")
-
     def run(self):
         """Process all files"""
 
+        self.validate_environment()  # will raise on error
+
         input_dir = self.config.general.input_dir
         store_dir = self.config.general.store_dir
-
-        # Make sure input_dir exists
-        if not input_dir.exists():
-            raise ValueError(f"Input directory does not exist: {input_dir}")
 
         # Create store_dir if needed
         ensure_directory_exists(store_dir)
 
         self.log_section_header("Gathering Jobs")
-        jobs = self.gather_jobs(input_dir, store_dir)
+        jobs = self.gather_jobs(input_dir)
+        unprocessed_bundles = list[BundleJobs]()
         if not jobs:
             logger.info("No jobs found for processing")
         else:
             logger.info(f"Found pending jobs for {len(jobs)} bundles")
             self.log_section_header("Processing Jobs")
-            self.process_jobs(jobs, store_dir)
+            unprocessed_bundles = self.process_jobs(jobs)
 
         if not self.dry_run:
             remove_empty_subdirs(input_dir)
 
         self.log_section_header("Summary")
         logger.info("Transcription process finished.")
+
+        return unprocessed_bundles

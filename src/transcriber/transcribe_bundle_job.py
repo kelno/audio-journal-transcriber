@@ -123,7 +123,7 @@ class DeleteAudioFileJob(TranscribeBundleJob):
 
 
 # Moved here to avoid circular imports
-def gather_bundle_jobs(bundle: TranscribeBundle, output_dir: Path, config: TranscribeConfig, dry_run: bool) -> BundleJobs:
+def gather_bundle_jobs(bundle: TranscribeBundle, store_dir: Path, config: TranscribeConfig, dry_run: bool) -> BundleJobs:
     """Gather transcription jobs from this bundle. Jobs needs to be run in order."""
     jobs = []
 
@@ -131,7 +131,7 @@ def gather_bundle_jobs(bundle: TranscribeBundle, output_dir: Path, config: Trans
     logger.debug(f"Gathering jobs for bundle: [{bundle_name}]")
 
     if bundle.source_audio:
-        is_new_audio = not file_is_in_directory_tree(bundle.source_audio, output_dir)
+        is_new_audio = not file_is_in_directory_tree(bundle.source_audio, store_dir)
         if is_new_audio:
             job = CreateBundleJob(bundle, config, dry_run)
             jobs.append(job)
