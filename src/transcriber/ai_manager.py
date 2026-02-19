@@ -179,5 +179,5 @@ class AIManager:
 
             return bundle_name
         except Exception:
-            logger.error("AI summary failed with exception")
+            logger.error("AI bundle name failed with exception")
             raise

@@ -1,9 +1,7 @@
-import threading
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
-import time
 
-from transcriber.file_watcher import FileWatcher
+import httpcore
 
 from .ai_manager import AIManager
 from .audio_manipulation import AudioManipulation
@@ -51,7 +49,7 @@ class AudioTranscriber:
                     job.run(store_dir, self.ai_manager)
                     # Remove job from jobs bundle on successful execution
                     remaining_jobs_in_bundle.remove(job)
-            except (OSError, AudioTranscriberException) as e:
+            except (OSError, AudioTranscriberException, httpcore.NetworkError) as e:
                 logger.error(f"Error processing [{job}] (skipping any remaining jobs for this bundle). {e}")
                 if len(remaining_jobs_in_bundle) > 0:
                     unprocessed_bundles.append(remaining_jobs_in_bundle)
