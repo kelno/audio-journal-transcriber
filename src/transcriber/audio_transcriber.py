@@ -116,13 +116,17 @@ class AudioTranscriber:
                 logger.error(f"Error processing file {file_path}: {e}")
 
     def run(self):
+        """Process all files"""
+
         input_dir = self.config.general.input_dir
         store_dir = self.config.general.store_dir
-        ensure_directory_exists(store_dir)
 
-        # Make sure obsidian_root exists
+        # Make sure input_dir exists
         if not input_dir.exists():
             raise ValueError(f"Input directory does not exist: {input_dir}")
+
+        # Create store_dir if needed
+        ensure_directory_exists(store_dir)
 
         self.log_section_header("Gathering Jobs")
         jobs = self.gather_jobs(input_dir, store_dir)

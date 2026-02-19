@@ -101,6 +101,7 @@ docker run -v /path/to/input:/data/input \
 
 # Improve me
 
+- Validate configuration early (checking if models can be used or at least url accessed)
 - Do a "remove empty audio" pass
 - Cut audio when above 20min, to pass to the transcription
 - Refining the prompt:

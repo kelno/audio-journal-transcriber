@@ -41,9 +41,9 @@ class CreateBundleJob(TranscribeBundleJob):
 
         final_audio_path = self.bundle.get_bundle_audio_path(output_base_dir)
         if self.bundle.source_audio != final_audio_path:
-            ensure_directory_exists(final_audio_path.parent)
             logger.info(f"Moving audio file from [{self.bundle.source_audio}] to [{final_audio_path}]")
             if not self.dry_run:
+                ensure_directory_exists(final_audio_path.parent)
                 shutil.move(self.bundle.source_audio, final_audio_path)
                 self.bundle.update_audio_path(final_audio_path)
                 self.bundle.set_and_write_original_audio_filename(output_base_dir, final_audio_path.name)
