@@ -88,7 +88,6 @@ docker run -v /path/to/input:/data/input \
            audio-journal-transcriber:latest
 
 # Using config file
-
 docker run -v /path/to/input:/data/input \
            -v /path/to/store:/data/store \
            -v /path/to/config.toml:/app/config.custom.toml \
@@ -98,24 +97,6 @@ docker run -v /path/to/input:/data/input \
 
 # (Or combine both as needed)
 ```
-
-# Improve me
-
-- Validate configuration early (checking if models can be used or at least url accessed)
-- Do a "remove empty audio" pass
-- Cut audio when above 20min, to pass to the transcription
-- Refining the prompt:
-  - Look into summary strategies, currently it's free and unspecific
-  - Be more explicit about what am I expecting from those summaries?
-  - Maybe provide context such as a list of topics we care about. About how we use those records.
-- The big vocal commands feature
-  - Trigger it with specific start - end keywords. Like "Start command" & "Cancel command" & "Validate command".
-  - Make those configurable?
-  - Command ideas: 
-    - Append to last record
-    - Delete this record
-    - Never delete this record / Keep forever
-  - Commands are defined with a name & a description and LLM is tasked to match the text between the keywords to a command. 
 
 ## Obsidian PowerShell command example
 

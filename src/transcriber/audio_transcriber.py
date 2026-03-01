@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from pathlib import Path
+import traceback
 
 import httpcore
 
@@ -49,8 +50,8 @@ class AudioTranscriber:
                     job.run(store_dir, self.ai_manager)
                     # Remove job from jobs bundle on successful execution
                     remaining_jobs_in_bundle.remove(job)
-            except Exception as e:  # pylint: disable=W0718
-                logger.error(f"Error processing [{job}] (skipping any remaining jobs for this bundle). {e.with_traceback}")
+            except Exception:  # pylint: disable=W0718
+                logger.error(f"Error processing [{job}] (skipping any remaining jobs for this bundle). {traceback.format_exc()}")
                 if len(remaining_jobs_in_bundle) > 0:
                     unprocessed_bundles.append(remaining_jobs_in_bundle)
 
