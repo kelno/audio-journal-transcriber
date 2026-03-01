@@ -48,7 +48,9 @@ class AIManager:
         if response.status_code == 200:
             return self.extract_streaming_response(response)
         else:
-            raise ValueError(f"Transcription failed with status code {response.status_code} and response: {response.text}")
+            raise ValueError(
+                f"Transcription failed with status code {response.status_code} and response: {response.text} (url {self.config.audio.api_base_url})"
+            )
 
     def extract_streaming_response(self, response) -> str:
         """Process a streaming response from the transcription API and write directly to file.
@@ -84,27 +86,32 @@ class AIManager:
             *: Pass through any exceptions from the OpenAI client.
         """
 
-        client = OpenAI(base_url="http://localhost:8080/api/", api_key=self.config.text.api_key)
+        try:
+            client = OpenAI(base_url=self.config.text.api_base_url, api_key=self.config.text.api_key)
 
-        # https://platform.openai.com/docs/api-reference/chat/create
-        completion = client.chat.completions.create(
-            model=self.config.text.model,
-            messages=[
-                {
-                    "role": "system",
-                    "content": "You are part of an automated pipeline to transcribe and summarize texts.",
-                },
-                {"role": "user", "content": prompt},
-            ],
-        )
+            # https://platform.openai.com/docs/api-reference/chat/create
+            completion = client.chat.completions.create(
+                model=self.config.text.model,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": "You are part of an automated pipeline to transcribe and summarize texts.",
+                    },
+                    {"role": "user", "content": prompt},
+                ],
+            )
+        except Exception:
+            logger.error(f"query_chat_completion failed with exception (url {self.config.text.api_base_url})")
+            raise
+
         if len(completion.choices) == 0:
-            logger.error("AI summary failed: no choices returned")
-            raise ValueError("AI summary failed: no choices returned")
+            logger.error("query_chat_completion failed: no choices returned")
+            raise ValueError("query_chat_completion failed: no choices returned")
 
         completion = completion.choices[0].message.content
         if not completion:
-            logger.error("AI summary failed: empty content")
-            raise ValueError("AI summary failed: empty content")
+            logger.error("query_chat_completion failed: empty content")
+            raise ValueError("query_chat_completion failed: empty content")
 
         return completion
 
@@ -143,10 +150,10 @@ class AIManager:
                 {transcript}
             """
             summary = self.query_chat_completion(prompt)
-            logger.debug(f"AI summary succeeded. Excerpt: {summary[:160]}...")
+            logger.debug(f"get_ai_summary succeeded. Excerpt: {summary[:160]}...")
             return summary
         except Exception:
-            logger.error("AI summary failed with exception")
+            logger.error(f"get_ai_summary failed with exception (url {self.config.text.api_base_url})")
             raise
 
     def get_bundle_name_summary(self, summary: str) -> str:
@@ -175,9 +182,9 @@ class AIManager:
 
             logger.debug(f"AI generated bundle name: {bundle_name}")
             if len(bundle_name) > 60:  # arbitrary max length
-                raise ValueError(f"LLM returned a bundle name too long: {bundle_name}")
+                raise ValueError(f"get_bundle_name_summary: LLM returned a bundle name too long: {bundle_name}")
 
             return bundle_name
         except Exception:
-            logger.error("AI bundle name failed with exception")
+            logger.error(f"get_bundle_name_summary failed with exception (url {self.config.text.api_base_url})")
             raise
