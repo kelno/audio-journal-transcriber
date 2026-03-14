@@ -3,6 +3,8 @@ from pathlib import Path
 from abc import ABC, abstractmethod
 import shutil
 
+from transcriber.audio_manipulation import AudioManipulation
+
 from .ai_manager import AIManager
 from .config import TranscribeConfig
 from .exception import EmptyTranscriptException
@@ -35,7 +37,7 @@ type BundleJobs = list[TranscribeBundleJob]
 class CreateBundleJob(TranscribeBundleJob):
     """That's "move audio file into its bundle directory" job."""
 
-    def run(self, output_base_dir: Path, _ai_manager: AIManager):
+    def run(self, output_base_dir: Path, ai_manager: AIManager):
         if not self.bundle.source_audio:
             raise FileNotFoundError("Bundle has no audio file set")
 
@@ -112,7 +114,7 @@ class BundleNameJob(TranscribeBundleJob):
 class DeleteAudioFileJob(TranscribeBundleJob):
     """Remove audio file"""
 
-    def run(self, _output_base_dir: Path, _ai_manager: AIManager):
+    def run(self, output_base_dir: Path, ai_manager: AIManager):
         if not self.bundle.source_audio:
             raise FileNotFoundError("Bundle has no audio file set")
 

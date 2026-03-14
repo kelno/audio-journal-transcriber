@@ -3,6 +3,7 @@
 # ===========================
 # Stage 1 : Builder
 # ===========================
+# https://docs.astral.sh/uv/guides/integration/docker/#available-images
 FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim AS builder
 
 ARG VERSION=dev

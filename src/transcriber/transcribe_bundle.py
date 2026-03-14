@@ -150,7 +150,7 @@ class TranscribeBundle:
     def get_bundle_name(self) -> str:
         """Get or generate the bundle name."""
         if self.bundle_name is None:
-            self.bundle_name = self.generate_dumb_bundle_name(self.source_audio, self.metadata.original_audio_filename)
+            self.bundle_name = self.generate_generic_bundle_name(self.source_audio, self.metadata.original_audio_filename)
         return self.bundle_name
 
     @staticmethod
@@ -160,7 +160,7 @@ class TranscribeBundle:
         return date_from_filename.strftime("%Y-%m-%d")
 
     @classmethod
-    def generate_dumb_bundle_name(cls, audio_path: Path | None, audio_filename: str) -> str:
+    def generate_generic_bundle_name(cls, audio_path: Path | None, audio_filename: str) -> str:
         """Generate a bundle name based on date and audio filename"""
 
         logger.debug(f"Generating bundle name for audio file: [{audio_path}]")

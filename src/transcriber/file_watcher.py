@@ -7,7 +7,6 @@ from typing import Callable, Optional
 from watchdog.events import FileSystemEventHandler, FileSystemEvent
 from watchdog.observers import Observer
 
-from .globals import is_handled_audio_file
 from .logger import logger
 
 
@@ -75,9 +74,6 @@ class FileWatcher(FileSystemEventHandler):
 
         for file_path in self.input_dir.rglob("*"):
             if not file_path.is_file():
-                continue
-
-            if not is_handled_audio_file(file_path.suffix):
                 continue
 
             logger.debug(f"Processing file: {file_path}")
