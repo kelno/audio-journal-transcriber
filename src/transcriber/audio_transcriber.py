@@ -5,7 +5,7 @@ import traceback
 from .ai_manager import AIManager
 from .audio_manipulation import AudioManipulation
 from .config import TranscribeConfig
-from .exception import AudioTranscriberException
+from .exception import AudioTranscriberException, TooShortException
 from .globals import is_handled_audio_file
 from .transcribe_bundle import TranscribeBundle
 from .logger import logger
@@ -41,17 +41,23 @@ class AudioTranscriber:
         unprocessed_bundles = list[BundleJobs]()
         for jobs_bundle in all_jobs_bundles:
             remaining_jobs_in_bundle = jobs_bundle.copy()
-            # We want to skip remaining jobs in a bundle on failure and proceed with next bundles
             for job in jobs_bundle:
                 try:
                     logger.info(f"Processing job: {job}")
                     job.run(store_dir, self.ai_manager)
                     # Remove job from jobs bundle on successful execution
                     remaining_jobs_in_bundle.remove(job)
+                except TooShortException as e:
+                    logger.warning(f"Refused to create bundle from audio file {e.source_audio}: {e}")
+                    if self.config.general.remove_short_files and not self.dry_run:
+                        logger.info(f"Removing too short audio file: {e.source_audio}")
+                        e.source_audio.unlink()
+                    break  # skip remaining jobs in this bundle
                 except Exception:  # pylint: disable=W0718
                     logger.error(f"Error processing [{job}] (skipping any remaining jobs for this bundle). {traceback.format_exc()}")
                     if len(remaining_jobs_in_bundle) > 0:
                         unprocessed_bundles.append(remaining_jobs_in_bundle)
+                    break  # skip remaining jobs in this bundle
 
         return unprocessed_bundles
 
@@ -79,14 +85,8 @@ class AudioTranscriber:
         for path in input_dir.rglob("*"):
             if path.is_file() and is_handled_audio_file(path.suffix):
                 logger.debug(f"Found audio file: [{path}]")
-                try:
-                    bundle = TranscribeBundle.from_audio_file(source_audio=path, min_length=self.config.general.min_length_seconds)
-                    bundles.append(bundle)
-                except AudioTranscriberException as e:
-                    logger.warning(f"Failed to create bundle from audio file {path}, exception {e}")
-                    if self.config.general.remove_short_files and not self.dry_run:
-                        logger.info(f"Removing short audio file: {path}")
-                        path.unlink()
+                bundle = TranscribeBundle.from_audio_file(source_audio=path)
+                bundles.append(bundle)
 
         logger.debug(f"Imported {len(bundles)} audio files as bundles")
         return bundles
@@ -102,7 +102,6 @@ class AudioTranscriber:
         logger.debug(f"Looking for pending jobs in {input_dir}")
 
         logger.info(f"Gathering audio files from input directory: {input_dir}")
-        # TODO: SLOW
         bundles = self.gather_pending_audio_files(input_dir)
         store_dir = self.config.general.store_dir
         logger.info(f"Gathering bundles from managed store directory:  {store_dir}")

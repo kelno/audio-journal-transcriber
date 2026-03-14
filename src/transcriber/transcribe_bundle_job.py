@@ -7,7 +7,7 @@ from transcriber.audio_manipulation import AudioManipulation
 
 from .ai_manager import AIManager
 from .config import TranscribeConfig
-from .exception import EmptyTranscriptException
+from .exception import EmptyTranscriptException, TooShortException
 from .logger import logger
 from .transcribe_bundle import TranscribeBundle
 from .utils import ensure_directory_exists, file_is_in_directory_tree
@@ -45,10 +45,15 @@ class CreateBundleJob(TranscribeBundleJob):
         if self.bundle.source_audio != final_audio_path:
             logger.info(f"Moving audio file from [{self.bundle.source_audio}] to [{final_audio_path}]")
             if not self.dry_run:
+                min_length = self.config.general.min_length_seconds
+                audio_length = AudioManipulation.get_audio_duration(self.bundle.source_audio)
+                if min_length and audio_length < min_length:
+                    raise TooShortException(source_audio=self.bundle.source_audio, audio_length=audio_length, min_length=min_length)
+
                 ensure_directory_exists(final_audio_path.parent)
                 shutil.move(self.bundle.source_audio, final_audio_path)
                 self.bundle.update_audio_path(final_audio_path)
-                self.bundle.set_and_write_original_audio_filename(output_base_dir, final_audio_path.name)
+                self.bundle.init_metadata(output_base_dir=output_base_dir, filename=final_audio_path.name, audio_length=audio_length)
 
 
 @dataclass

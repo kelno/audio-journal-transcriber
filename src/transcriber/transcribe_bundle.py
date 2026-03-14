@@ -4,7 +4,6 @@ from pathlib import Path
 
 import yaml
 
-from .audio_manipulation import AudioManipulation
 from .exception import TooShortException
 from .globals import is_handled_audio_file
 from .utils import (
@@ -24,7 +23,7 @@ class Metadata:
     """A bundle metadata is kept in this single database file as yaml data"""
 
     original_audio_filename: str
-    audio_length: float
+    audio_length: float | None = None
     transcript_model_used: str | None = None
     summary_model_used: str | None = None
     bundle_name_generated: bool = False
@@ -106,18 +105,11 @@ class TranscribeBundle:
         )
 
     @classmethod
-    def from_audio_file(cls, source_audio: Path, min_length: float | None) -> "TranscribeBundle":
-        """Create a TranscribeBundle instance from an audio file.
+    def from_audio_file(cls, source_audio: Path) -> "TranscribeBundle":
+        """Create a TranscribeBundle instance from an audio file"""
 
-        Can throw TooShortException
-        """
-
-        audio_length = AudioManipulation.get_audio_duration(source_audio)
-        if min_length and audio_length < min_length:
-            raise TooShortException(f"Audio file too short ({audio_length} < {min_length} seconds)")
-
-        metadata = Metadata(original_audio_filename=source_audio.name, audio_length=audio_length)
-        bundle_name = TranscribeBundle.generate_dumb_bundle_name(source_audio, source_audio.name)
+        metadata = Metadata(original_audio_filename=source_audio.name)
+        bundle_name = TranscribeBundle.generate_generic_bundle_name(source_audio, source_audio.name)
 
         return cls(
             bundle_name=bundle_name,
@@ -254,8 +246,9 @@ class TranscribeBundle:
         summary_path = self.get_summary_path(output_base_dir)
         summary_path.write_text(summary, encoding="utf-8")
 
-    def set_and_write_original_audio_filename(self, output_base_dir: Path, filename: str):
+    def init_metadata(self, output_base_dir: Path, filename: str, audio_length: float):
         self.metadata.original_audio_filename = filename
+        self.metadata.audio_length = audio_length
         self.write_metadata(output_base_dir)
 
     def set_and_write_bundle_name(self, output_base_dir: Path, bundle_name_summary: str):
