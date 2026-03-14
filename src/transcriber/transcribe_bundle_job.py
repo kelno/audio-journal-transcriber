@@ -53,7 +53,7 @@ class CreateBundleJob(TranscribeBundleJob):
                 ensure_directory_exists(final_audio_path.parent)
                 shutil.move(self.bundle.source_audio, final_audio_path)
                 self.bundle.update_audio_path(final_audio_path)
-                self.bundle.init_metadata(output_base_dir=output_base_dir, filename=final_audio_path.name, audio_length=audio_length)
+                self.bundle.init_metadata(store_base_dir=output_base_dir, filename=final_audio_path.name, audio_length=audio_length)
 
 
 @dataclass
