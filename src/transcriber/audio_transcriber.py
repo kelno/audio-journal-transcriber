@@ -2,8 +2,6 @@ from dataclasses import dataclass
 from pathlib import Path
 import traceback
 
-import httpcore
-
 from .ai_manager import AIManager
 from .audio_manipulation import AudioManipulation
 from .config import TranscribeConfig
@@ -44,16 +42,16 @@ class AudioTranscriber:
         for jobs_bundle in all_jobs_bundles:
             remaining_jobs_in_bundle = jobs_bundle.copy()
             # We want to skip remaining jobs in a bundle on failure and proceed with next bundles
-            try:
-                for job in jobs_bundle:
+            for job in jobs_bundle:
+                try:
                     logger.info(f"Processing job: {job}")
                     job.run(store_dir, self.ai_manager)
                     # Remove job from jobs bundle on successful execution
                     remaining_jobs_in_bundle.remove(job)
-            except Exception:  # pylint: disable=W0718
-                logger.error(f"Error processing [{job}] (skipping any remaining jobs for this bundle). {traceback.format_exc()}")
-                if len(remaining_jobs_in_bundle) > 0:
-                    unprocessed_bundles.append(remaining_jobs_in_bundle)
+                except Exception:  # pylint: disable=W0718
+                    logger.error(f"Error processing [{job}] (skipping any remaining jobs for this bundle). {traceback.format_exc()}")
+                    if len(remaining_jobs_in_bundle) > 0:
+                        unprocessed_bundles.append(remaining_jobs_in_bundle)
 
         return unprocessed_bundles
 
@@ -95,8 +93,8 @@ class AudioTranscriber:
 
     def gather_jobs(self, input_dir: Path) -> list[BundleJobs]:
         """
-        Find audio files in the given subdirectory and its subdirectories.
-        Returns a list of Path objects for each audio file found.
+        Find audio files in the given directory and its subdirectories.
+        Returns a BundleJobs for each audio file found.
         """
         if not input_dir.exists():
             raise FileNotFoundError(f"Input directory does not exist: {input_dir}")
@@ -119,7 +117,8 @@ class AudioTranscriber:
         return jobs
 
     def run(self):
-        """Process all files"""
+        """Process all files
+        Returns unprocessed jobs as BundleJobs"""
 
         self.validate_environment()  # will raise on error
 
