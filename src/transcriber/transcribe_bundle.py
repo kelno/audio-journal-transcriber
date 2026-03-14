@@ -2,6 +2,8 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
+from transcriber.config import get_config
+
 from .metadata import Metadata, MetadataFile
 
 from .globals import is_handled_audio_file
@@ -164,70 +166,70 @@ class TranscribeBundle:
         """Check if the bundle needs a generated name."""
         return not self.metadata.bundle_name_generated
 
-    def get_bundle_dir(self, store_base_dir: Path) -> Path:
+    def get_bundle_dir(self) -> Path:
         """Get the bundle directory path."""
         bundle_name = self.get_bundle_name()
-        return store_base_dir / bundle_name
+        return get_config().general.store_dir / bundle_name
 
-    def get_transcript_path(self, store_base_dir: Path) -> Path:
+    def get_transcript_path(self) -> Path:
         """Get the transcript file path."""
-        bundle_dir = self.get_bundle_dir(store_base_dir)
+        bundle_dir = self.get_bundle_dir()
         return bundle_dir / TRANSCRIPT_FILENAME
 
-    def get_summary_path(self, store_base_dir: Path) -> Path:
+    def get_summary_path(self) -> Path:
         """Get the ai summary file path."""
-        bundle_dir = self.get_bundle_dir(store_base_dir)
+        bundle_dir = self.get_bundle_dir()
         return bundle_dir / SUMMARY_FILENAME
 
-    def get_bundle_audio_path(self, store_base_dir: Path) -> Path:
+    def get_bundle_audio_path(self) -> Path:
         """Get the audio file path within the bundle dir."""
-        bundle_dir = self.get_bundle_dir(store_base_dir)
+        bundle_dir = self.get_bundle_dir()
         final_audio_path = bundle_dir / self.assert_source_audio().name
         return final_audio_path
 
-    def get_meta_file_path(self, store_base_dir: Path) -> Path:
-        bundle_dir = self.get_bundle_dir(store_base_dir)
+    def get_meta_file_path(self) -> Path:
+        bundle_dir = self.get_bundle_dir()
         return bundle_dir / METADATA_FILENAME
 
     def update_audio_path(self, new_audio_path: Path | None):
         """Update the source audio path."""
         self.source_audio = new_audio_path
 
-    def set_and_write_transcript(self, store_base_dir: Path, transcript: str, model_used: str):
+    def set_and_write_transcript(self, transcript: str, model_used: str):
         self.metadata.transcript_model_used = model_used
-        self.persist_metadata(store_base_dir)
+        self.persist_metadata()
         self.transcript = transcript
-        transcript_path = self.get_transcript_path(store_base_dir)
+        transcript_path = self.get_transcript_path()
         transcript_path.write_text(transcript, encoding="utf-8")
 
-    def set_and_write_summary(self, store_base_dir: Path, summary: str, model_used: str):
+    def set_and_write_summary(self, summary: str, model_used: str):
         self.metadata.summary_model_used = model_used
-        self.persist_metadata(store_base_dir)
+        self.persist_metadata()
         self.summary = summary
-        summary_path = self.get_summary_path(store_base_dir)
+        summary_path = self.get_summary_path()
         summary_path.write_text(summary, encoding="utf-8")
 
-    def init_metadata(self, store_base_dir: Path, filename: str, audio_length: float):
+    def init_metadata(self, filename: str, audio_length: float):
         self.metadata.original_audio_filename = filename
         self.metadata.audio_length = audio_length
-        self.persist_metadata(store_base_dir)
+        self.persist_metadata()
 
-    def set_and_write_bundle_name(self, store_base_dir: Path, bundle_name_summary: str):
+    def set_and_write_bundle_name(self, bundle_name_summary: str):
         """Set bundle name and rename the directory"""
-        bundle_path_from = store_base_dir / self.bundle_name
+        bundle_path_from = get_config().general.store_dir / self.bundle_name
         if not bundle_path_from.exists():
             raise FileNotFoundError("Bundle directory not found")
 
         prefix = self.generate_bundle_name_date_prefix(self.source_audio, self.metadata.original_audio_filename)
         new_bundle_name = f"{prefix} {bundle_name_summary}"
 
-        bundle_path_to = store_base_dir / new_bundle_name
+        bundle_path_to = get_config().general.store_dir / new_bundle_name
         bundle_path_from.rename(bundle_path_to)
         self.bundle_name = new_bundle_name
 
         self.metadata.bundle_name_generated = True
-        self.persist_metadata(store_base_dir)
+        self.persist_metadata()
 
-    def persist_metadata(self, store_base_dir: Path):
-        file_path = self.get_meta_file_path(store_base_dir)
+    def persist_metadata(self):
+        file_path = self.get_meta_file_path()
         MetadataFile(self.metadata).write(file_path)

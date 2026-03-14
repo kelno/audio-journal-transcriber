@@ -2,6 +2,7 @@ import threading
 import time
 from pathlib import Path
 
+from transcriber.config import get_config
 from transcriber.transcribe_bundle_job import BundleJobs
 
 from .logger import logger
@@ -28,7 +29,7 @@ def run_daemon_mode(transcriber: AudioTranscriber, unprocessed_bundles: list[Bun
             unprocessed = transcriber.run()
 
     # trigger process_watched_file on any file changes, after state is stable for 5s
-    input_dir: Path = transcriber.config.general.input_dir
+    input_dir: Path = get_config().general.input_dir
     watcher = FileWatcher(input_dir, process_watched_file, stable_delay=5.0)
     watcher.start()
 

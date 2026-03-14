@@ -16,6 +16,9 @@ class GeneralConfig(BaseModel):
     min_length_seconds: float  # 0 means disabled
     remove_short_files: bool
 
+    def __str__(self):
+        return f"GeneralConfig(input_dir={self.input_dir}, store_dir={self.store_dir}, delete_source_audio_after_days={self.delete_source_audio_after_days if self.delete_source_audio_after_days else "disabled"}, min_length_seconds={self.min_length_seconds if self.min_length_seconds else "disabled"}, remove_short_files={self.remove_short_files})"
+
 
 class TextConfig(BaseModel):
     summary_enabled: bool
@@ -30,6 +33,9 @@ class TextConfig(BaseModel):
             self.api_base_url += "/"
         return self
 
+    def __str__(self):
+        return f"TextConfig(summary_enabled={self.summary_enabled}, api_base_url={self.api_base_url}, model={self.model}, api_key={'***' if self.api_key else 'None'}, extra_context={self.extra_context})"
+
 
 class AudioConfig(BaseModel):
     api_base_url: str
@@ -42,6 +48,9 @@ class AudioConfig(BaseModel):
         if not self.api_base_url.endswith("/"):
             self.api_base_url += "/"
         return self
+
+    def __str__(self):
+        return f"AudioConfig(api_base_url={self.api_base_url}, model={self.model}, api_key={'***' if self.api_key else 'None'}, stream={self.stream})"
 
 
 default_toml_file = Path(__file__).parent / "config.default.toml"
@@ -97,3 +106,15 @@ class TranscribeConfig(BaseSettings):
             return None
         else:
             return self.general.min_length_seconds
+
+
+global_config: TranscribeConfig | None = None
+
+
+def get_config() -> TranscribeConfig:
+    global global_config  # pylint: disable=global-statement
+
+    if global_config is None:
+        global_config = TranscribeConfig()  # type: ignore
+
+    return global_config

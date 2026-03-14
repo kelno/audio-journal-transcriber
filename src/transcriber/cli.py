@@ -35,10 +35,8 @@ def main():
 
     configure_logger(debug)
 
-    config = TranscribeConfig()  # type: ignore
-
-    ai_manager = AIManager(config)
-    transcriber = AudioTranscriber(config=config, dry_run=dry_run, ai_manager=ai_manager)
+    ai_manager = AIManager()
+    transcriber = AudioTranscriber(dry_run=dry_run, ai_manager=ai_manager)
     try:
         unprocessed = transcriber.run()
         if daemon:
