@@ -3,23 +3,11 @@ from pathlib import Path
 
 import yaml
 
-
-@dataclass
-class Metadata:
-    """A bundle metadata is kept in this single database file as yaml data"""
-
-    original_audio_filename: str
-    audio_length: float | None = None
-    transcript_model_used: str | None = None
-    summary_model_used: str | None = None
-    bundle_name_generated: bool = False
-    keep_forever: bool = False
+from transcriber.constants import METADATA_FILENAME
 
 
 @dataclass
 class MetadataFile:
-    data: Metadata
-
     @staticmethod
     def _split_frontmatter(text: str) -> str | None:
         """
@@ -42,6 +30,20 @@ class MetadataFile:
 
         return Metadata(**data)
 
-    def write(self, output_file: Path):
-        yaml_text = f"---\n{yaml.safe_dump(asdict(self.data), sort_keys=False).strip()}\n---\n"
+    def write(self, bundle_dir: Path):
+        yaml_text = f"---\n{yaml.safe_dump(asdict(self), sort_keys=False).strip()}\n---\n"
+        output_file = bundle_dir / METADATA_FILENAME
         output_file.write_text(yaml_text, encoding="utf-8")
+
+
+@dataclass
+class Metadata(MetadataFile):
+    """A bundle metadata is kept in this single database file as yaml data"""
+
+    original_audio_filename: str
+    audio_length: float | None = None
+    transcript_model_used: str | None = None
+    summary_model_used: str | None = None
+    bundle_name_generated: bool = False
+    keep_forever: bool = False
+

@@ -3,6 +3,7 @@ from datetime import datetime
 from pathlib import Path
 
 from transcriber.config import get_config
+from transcriber.constants import TRANSCRIPT_FILENAME, SUMMARY_FILENAME, METADATA_FILENAME
 
 from .metadata import Metadata, MetadataFile
 
@@ -13,10 +14,6 @@ from .utils import (
     get_file_modified_date,
 )
 from .logger import logger
-
-TRANSCRIPT_FILENAME = "transcript.md"
-SUMMARY_FILENAME = "summary.md"
-METADATA_FILENAME = "_metadata.md"
 
 
 @dataclass
@@ -187,32 +184,32 @@ class TranscribeBundle:
         final_audio_path = bundle_dir / self.assert_source_audio().name
         return final_audio_path
 
-    def get_meta_file_path(self) -> Path:
-        bundle_dir = self.get_bundle_dir()
-        return bundle_dir / METADATA_FILENAME
-
     def update_audio_path(self, new_audio_path: Path | None):
         """Update the source audio path."""
         self.source_audio = new_audio_path
 
     def set_and_write_transcript(self, transcript: str, model_used: str):
         self.metadata.transcript_model_used = model_used
-        self.persist_metadata()
+        self.metadata.write(self.get_bundle_dir())
         self.transcript = transcript
         transcript_path = self.get_transcript_path()
         transcript_path.write_text(transcript, encoding="utf-8")
 
     def set_and_write_summary(self, summary: str, model_used: str):
         self.metadata.summary_model_used = model_used
-        self.persist_metadata()
+        self.metadata.write(self.get_bundle_dir())
         self.summary = summary
         summary_path = self.get_summary_path()
         summary_path.write_text(summary, encoding="utf-8")
 
+    # Current: Je songeais bouger le maximum de handling de chaque fichier dans des classes séparées
+    # Genre ici on aurait juste un metadata object, qui lui meme après gere les fichiers derriere
+    # et il aurait juste une foncton "persist"
+    # Et hopefully faire pareil avec les autres fichiers (summary, transcript)
     def init_metadata(self, filename: str, audio_length: float):
         self.metadata.original_audio_filename = filename
         self.metadata.audio_length = audio_length
-        self.persist_metadata()
+        self.metadata.write(self.get_bundle_dir())
 
     def set_and_write_bundle_name(self, bundle_name_summary: str):
         """Set bundle name and rename the directory"""
@@ -228,8 +225,4 @@ class TranscribeBundle:
         self.bundle_name = new_bundle_name
 
         self.metadata.bundle_name_generated = True
-        self.persist_metadata()
-
-    def persist_metadata(self):
-        file_path = self.get_meta_file_path()
-        MetadataFile(self.metadata).write(file_path)
+        self.metadata.write(self.get_bundle_dir())
