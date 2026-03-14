@@ -59,8 +59,7 @@ class CreateBundleJob(TranscribeBundleJob):
 class TranscriptionJob(TranscribeBundleJob):
 
     def run(self, ai_manager: AIManager):
-        transcript_path = self.bundle.get_transcript_path()
-        logger.info(f"Transcribing {self.bundle.source_audio} → {transcript_path}")
+        logger.info(f"Transcribing {self.bundle.source_audio}")
 
         if not self.bundle.source_audio:
             raise FileNotFoundError(f"{self}: Bundle has no audio file set")
@@ -78,8 +77,7 @@ class SummaryJob(TranscribeBundleJob):
     """Generate AI summary for the bundle based on transcript."""
 
     def run(self, ai_manager: AIManager):
-        summary_path = self.bundle.get_summary_path()
-        logger.info(f"Summarizing {self.bundle.get_bundle_name()} → {summary_path}")
+        logger.info(f"Summarizing {self.bundle.get_bundle_name()}")
 
         if self.dry_run:
             return
@@ -87,7 +85,7 @@ class SummaryJob(TranscribeBundleJob):
         if not self.bundle.transcript:
             raise ValueError(f"{self}: Cannot generate ai summary without transcript")
 
-        summary_content = ai_manager.get_ai_summary(self.bundle.transcript)
+        summary_content = ai_manager.get_ai_summary(self.bundle.transcript.text)
         logger.info(f"Summary complete: {summary_content[:40]}")
         self.bundle.set_and_write_summary(summary_content, get_config().text.model)
 
@@ -105,7 +103,7 @@ class BundleNameJob(TranscribeBundleJob):
             raise ValueError("Cannot generate bundle name without AI summary.")
 
         try:
-            bundle_name = ai_manager.get_bundle_name_summary(self.bundle.summary)
+            bundle_name = ai_manager.get_bundle_name_summary(self.bundle.summary.text)
         except Exception:
             logger.error(f"{self}: Failed to generate bundle name")
             raise

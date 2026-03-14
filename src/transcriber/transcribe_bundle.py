@@ -4,6 +4,7 @@ from pathlib import Path
 
 from transcriber.config import get_config
 from transcriber.constants import TRANSCRIPT_FILENAME, SUMMARY_FILENAME, METADATA_FILENAME
+from transcriber.text_file import SummaryFile, TextFile, TranscriptFile
 
 from .metadata import Metadata, MetadataFile
 
@@ -20,10 +21,10 @@ from .logger import logger
 class TranscribeBundle:
 
     bundle_name: str  # directory name is derived from here
-    metadata: Metadata
+    metadata: MetadataFile
     source_audio: Path | None
-    transcript: str | None
-    summary: str | None
+    transcript: TextFile | None
+    summary: TextFile | None
 
     @classmethod
     def from_existing_directory(cls, existing_dir: Path) -> "TranscribeBundle":
@@ -43,8 +44,8 @@ class TranscribeBundle:
 
         bundle_name = existing_dir.name
         source_audio: Path | None = None
-        transcript: str | None = None
-        summary: str | None = None
+        transcript: TranscriptFile | None = None
+        summary: SummaryFile | None = None
 
         for file_path in existing_dir.glob("*"):
             if is_handled_audio_file(file_path.suffix):
@@ -52,9 +53,9 @@ class TranscribeBundle:
                     raise ValueError("Multiple audio files found in bundle")  # not yet supported
                 source_audio = file_path
             elif file_path.name == TRANSCRIPT_FILENAME:
-                transcript = file_path.read_text(encoding="utf-8")
+                transcript = TranscriptFile.from_file(file_path)
             elif file_path.name == SUMMARY_FILENAME:
-                summary = file_path.read_text(encoding="utf-8")
+                summary = SummaryFile.from_file(file_path)
 
         return TranscribeBundle(
             bundle_name=bundle_name,
@@ -68,7 +69,7 @@ class TranscribeBundle:
     def from_audio_file(cls, source_audio: Path) -> "TranscribeBundle":
         """Create a TranscribeBundle instance from an audio file"""
 
-        metadata = Metadata(original_audio_filename=source_audio.name)
+        metadata = MetadataFile(original_audio_filename=source_audio.name)
         bundle_name = TranscribeBundle.generate_generic_bundle_name(source_audio, source_audio.name)
 
         return cls(
@@ -168,16 +169,6 @@ class TranscribeBundle:
         bundle_name = self.get_bundle_name()
         return get_config().general.store_dir / bundle_name
 
-    def get_transcript_path(self) -> Path:
-        """Get the transcript file path."""
-        bundle_dir = self.get_bundle_dir()
-        return bundle_dir / TRANSCRIPT_FILENAME
-
-    def get_summary_path(self) -> Path:
-        """Get the ai summary file path."""
-        bundle_dir = self.get_bundle_dir()
-        return bundle_dir / SUMMARY_FILENAME
-
     def get_bundle_audio_path(self) -> Path:
         """Get the audio file path within the bundle dir."""
         bundle_dir = self.get_bundle_dir()
@@ -191,21 +182,15 @@ class TranscribeBundle:
     def set_and_write_transcript(self, transcript: str, model_used: str):
         self.metadata.transcript_model_used = model_used
         self.metadata.write(self.get_bundle_dir())
-        self.transcript = transcript
-        transcript_path = self.get_transcript_path()
-        transcript_path.write_text(transcript, encoding="utf-8")
+        self.transcript = TranscriptFile(transcript)
+        self.transcript.write(self.get_bundle_dir())
 
     def set_and_write_summary(self, summary: str, model_used: str):
         self.metadata.summary_model_used = model_used
         self.metadata.write(self.get_bundle_dir())
-        self.summary = summary
-        summary_path = self.get_summary_path()
-        summary_path.write_text(summary, encoding="utf-8")
+        self.summary = SummaryFile(summary)
+        self.summary.write(self.get_bundle_dir())
 
-    # Current: Je songeais bouger le maximum de handling de chaque fichier dans des classes séparées
-    # Genre ici on aurait juste un metadata object, qui lui meme après gere les fichiers derriere
-    # et il aurait juste une foncton "persist"
-    # Et hopefully faire pareil avec les autres fichiers (summary, transcript)
     def init_metadata(self, filename: str, audio_length: float):
         self.metadata.original_audio_filename = filename
         self.metadata.audio_length = audio_length
