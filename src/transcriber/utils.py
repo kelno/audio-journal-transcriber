@@ -32,7 +32,7 @@ def remove_empty_subdirs(directory: Path):
 # regex pattern to match obisidian recording filenames like "Recording YYYYMMDDHHMMSS"
 DATE_RE_PATTERN_OBSIDIAN_RECORDING = re.compile(r"^Recording (\d{4})(\d{2})(\d{2})\d{6}")
 # regex pattern to match filenames starting with "YYYY-MM-DD_", regular pattern of mine
-DATE_RE_PATTERN_SPLIT = re.compile(r"^(\d{4})-(\d{2})-(\d{2})_")
+DATE_RE_PATTERN_SPLIT = re.compile(r"^(\d{4})-(\d{2})-(\d{2})[_ ]")
 
 
 def extract_date_from_recording_filename(filename: str) -> datetime | None:
