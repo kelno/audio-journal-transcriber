@@ -168,8 +168,9 @@ class AIManager:
             ---
             {summary}"""
         bundle_name = self.query_chat_completion(prompt)
-        # Ai tends to add quotes around the name
-        bundle_name = bundle_name.strip(" \n\"'")
+
+        # Sanitize # Source - https://stackoverflow.com/a/7406369
+        bundle_name = "".join(c for c in bundle_name if c.isalpha() or c.isdigit() or c == " ").rstrip()
 
         logger.debug(f"AI generated bundle name: {bundle_name}")
         if len(bundle_name) > 60:  # arbitrary max length
