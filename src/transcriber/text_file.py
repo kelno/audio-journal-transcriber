@@ -18,6 +18,10 @@ class TextFile:
         output_file = bundle_dir / self.get_filename()
         output_file.write_text(self.text, encoding="utf-8")
 
+    def unlink(self, bundle_dir: Path):
+        output_file = bundle_dir / self.get_filename()
+        output_file.unlink()
+
     @classmethod
     def from_file(cls, file_path: Path):
         text = file_path.read_text(encoding="utf-8")

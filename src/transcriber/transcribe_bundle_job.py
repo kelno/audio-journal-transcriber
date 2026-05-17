@@ -1,7 +1,7 @@
+import shutil
+from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
-from abc import ABC, abstractmethod
-import shutil
 
 from transcriber.audio_manipulation import AudioManipulation
 
@@ -34,42 +34,83 @@ type BundleJobs = list[TranscribeBundleJob]
 
 @dataclass
 class CreateBundleJob(TranscribeBundleJob):
-    """That's "move audio file into its bundle directory" job."""
+    """Move all audio files into the bundle directory."""
 
     def run(self, ai_manager: AIManager):
-        if not self.bundle.source_audio:
-            raise FileNotFoundError("Bundle has no audio file set")
+        if not self.bundle.source_audios:
+            raise FileNotFoundError("Bundle has no audio files set")
 
-        final_audio_path = self.bundle.get_bundle_audio_path()
-        if self.bundle.source_audio != final_audio_path:
-            logger.info(f"Moving audio file from [{self.bundle.source_audio}] to [{final_audio_path}]")
+        final_audio_paths = self.bundle.get_bundle_audio_paths()
+        audio_lengths = []
+        files_to_move = []
+
+        # Check all files and validate
+        for source_path, final_path in zip(
+            self.bundle.source_audios, final_audio_paths
+        ):
+            if source_path != final_path:
+                files_to_move.append((source_path, final_path))
+
+        if files_to_move:
+            logger.info(f"Moving {len(files_to_move)} audio file(s) into bundle")
+
             if not self.dry_run:
                 min_length = get_config().general.min_length_seconds
-                audio_length = AudioManipulation.get_audio_duration(self.bundle.source_audio)
-                if min_length and audio_length < min_length:
-                    raise TooShortException(source_audio=self.bundle.source_audio, audio_length=audio_length, min_length=min_length)
 
-                ensure_directory_exists(final_audio_path.parent)
-                shutil.move(self.bundle.source_audio, final_audio_path)
-                self.bundle.update_audio_path(final_audio_path)
-                self.bundle.init_metadata(filename=final_audio_path.name, audio_length=audio_length)
+                # Validate all files
+                for source_path, _ in files_to_move:
+                    audio_length = AudioManipulation.get_audio_duration(source_path)
+                    if min_length and audio_length < min_length:
+                        raise TooShortException(
+                            source_audio=source_path,
+                            audio_length=audio_length,
+                            min_length=min_length,
+                        )
+                    audio_lengths.append(audio_length)
+
+                # Move all files
+                ensure_directory_exists(final_audio_paths[0].parent)
+                for source_path, final_path in files_to_move:
+                    shutil.move(source_path, final_path)
+
+                self.bundle.update_audio_paths([Path(p) for _, p in files_to_move])
+                self.bundle.init_metadata(
+                    filenames=[p.name for _, p in files_to_move],
+                    audio_lengths=audio_lengths,
+                )
 
 
 @dataclass
 class TranscriptionJob(TranscribeBundleJob):
-
     def run(self, ai_manager: AIManager):
-        logger.info(f"Transcribing {self.bundle.source_audio}")
+        if not self.bundle.source_audios:
+            raise FileNotFoundError(f"{self}: Bundle has no audio files set")
 
-        if not self.bundle.source_audio:
-            raise FileNotFoundError(f"{self}: Bundle has no audio file set")
+        logger.info(f"Transcribing {len(self.bundle.source_audios)} audio file(s)")
 
         if not self.dry_run:
-            transcript_content = ai_manager.transcribe_audio(self.bundle.source_audio)
-            if transcript_content.strip() == "":
-                raise EmptyTranscriptException(f"{self}: Transcription resulted in empty transcript")
+            transcripts = []
+            for audio_path in self.bundle.source_audios:
+                logger.debug(f"Transcribing {audio_path}")
+                transcript_content = ai_manager.transcribe_audio(audio_path)
+                if transcript_content.strip() == "":
+                    raise EmptyTranscriptException(
+                        f"{self}: Transcription of {audio_path} resulted in empty transcript"
+                    )
+                transcripts.append(transcript_content)
 
-            self.bundle.set_and_write_transcript(transcript_content, get_config().audio.model)
+            # Concatenate all transcripts
+            concatenated = "\n\n".join(transcripts)
+
+            # Update original_audio_filenames to reflect current state
+            # This ensures that if new files were added, metadata is synced
+            self.bundle.metadata.original_audio_filenames = [
+                audio.name for audio in self.bundle.source_audios
+            ]
+            self.bundle.metadata.write(self.bundle.get_bundle_dir())
+
+            # Write transcript after metadata is updated
+            self.bundle.set_and_write_transcript(concatenated, get_config().audio.model)
 
 
 @dataclass
@@ -114,33 +155,41 @@ class BundleNameJob(TranscribeBundleJob):
 
 @dataclass
 class DeleteAudioFileJob(TranscribeBundleJob):
-    """Remove audio file"""
+    """Remove all audio files"""
 
     def run(self, ai_manager: AIManager):
-        if not self.bundle.source_audio:
-            raise FileNotFoundError("Bundle has no audio file set")
+        if not self.bundle.source_audios:
+            raise FileNotFoundError("Bundle has no audio files set")
 
-        logger.info(f"Deleting old audio file: {self.bundle.source_audio}")
+        logger.info(f"Deleting {len(self.bundle.source_audios)} audio file(s)")
+
         if not self.dry_run:
-            self.bundle.source_audio.unlink()
-            self.bundle.update_audio_path(None)
+            for audio_path in self.bundle.source_audios:
+                logger.debug(f"Deleting {audio_path}")
+                audio_path.unlink()
+
+            self.bundle.update_audio_paths(None)
 
 
 # Moved here to avoid circular imports
-def gather_bundle_jobs(bundle: TranscribeBundle, store_dir: Path, dry_run: bool) -> BundleJobs:
+def gather_bundle_jobs(
+    bundle: TranscribeBundle, store_dir: Path, dry_run: bool
+) -> BundleJobs:
     """Gather transcription jobs from this bundle. Jobs needs to be run in order."""
     jobs = []
 
     bundle_name = bundle.get_bundle_name()
     logger.debug(f"Gathering jobs for bundle: [{bundle_name}]")
 
-    if bundle.source_audio:
-        is_new_audio = not file_is_in_directory_tree(bundle.source_audio, store_dir)
+    if bundle.source_audios:
+        is_new_audio = not file_is_in_directory_tree(bundle.source_audios[0], store_dir)
         if is_new_audio:
             job = CreateBundleJob(bundle, dry_run)
             jobs.append(job)
 
-        if not is_new_audio and bundle.audio_source_needs_removal(get_config().general.delete_source_audio_after_days):
+        if not is_new_audio and bundle.audio_source_needs_removal(
+            get_config().general.delete_source_audio_after_days
+        ):
             job = DeleteAudioFileJob(bundle, dry_run)
             jobs.append(job)
         elif not bundle.transcript:
@@ -150,7 +199,9 @@ def gather_bundle_jobs(bundle: TranscribeBundle, store_dir: Path, dry_run: bool)
     if get_config().text.summary_enabled:
         if not bundle.summary:
             # First check if transcript exists or TranscriptionJob is scheduled
-            transcript_exists_or_scheduled = bundle.transcript is not None or any(isinstance(j, TranscriptionJob) for j in jobs)
+            transcript_exists_or_scheduled = bundle.transcript is not None or any(
+                isinstance(j, TranscriptionJob) for j in jobs
+            )
             if transcript_exists_or_scheduled:
                 job = SummaryJob(bundle, dry_run)
                 jobs.append(job)
