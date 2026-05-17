@@ -10,5 +10,5 @@ fi
 VERSION="$1"
 
 echo "Building Podman image..."
-podman build --build-arg VERSION="$VERSION" -t "audio-journal-transcriber:$VERSION" -t "audio-journal-transcriber:latest" .
+podman build -platform linux/amd64,linux/arm64 --build-arg VERSION="$VERSION" -t "audio-journal-transcriber:$VERSION" -t "audio-journal-transcriber:latest" .
 echo "Build completed."
