@@ -34,19 +34,29 @@ class TranscribeBundle:
         existing_dir: Path,
         dry_run: bool,
     ) -> "TranscribeBundle":
-        """
-        Create a TranscribeBundle instance from an existing already processed directory.
+        """Create a TranscribeBundle instance from an existing already processed directory.
 
-        Can throw ValueError
+        Args:
+            existing_dir: Path to the existing bundle directory.
+            dry_run: Whether to simulate operations without making changes.
+
+        Returns:
+            TranscribeBundle: The loaded bundle instance.
+
+        Raises:
+            ValueError: If the bundle directory is invalid.
+
         """
 
         meta_file_path = existing_dir / METADATA_FILENAME
         if not meta_file_path.exists():
-            raise ValueError("Bundle directory is invalid (no meta file)")
+            error_msg = "Bundle directory is invalid (no meta file)"
+            raise ValueError(error_msg)
         metadata = MetadataFile.from_file(meta_file_path)
 
         if not metadata:
-            raise ValueError("Bundle directory is invalid (no audio or meta file)")
+            error_msg = "Bundle directory is invalid (no audio or meta file)"
+            raise ValueError(error_msg)
 
         bundle_name = existing_dir.name
         source_audios: list[Path] = []
@@ -62,7 +72,8 @@ class TranscribeBundle:
                 summary = SummaryFile.from_file(file_path)
 
         if not source_audios:
-            raise ValueError("Bundle directory is invalid (no audio files)")
+            error_msg = "Bundle directory is invalid (no audio files)"
+            raise ValueError(error_msg)
 
         # Sort audio files chronologically
         source_audios = cls._sort_audio_files_chronologically(source_audios)

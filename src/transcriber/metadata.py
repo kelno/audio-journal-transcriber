@@ -8,7 +8,7 @@ from transcriber.constants import METADATA_FILENAME
 
 @dataclass
 class Metadata:
-    """A bundle metadata is kept in this single database file as yaml data"""
+    """A bundle metadata is kept in this single database file as YAML data."""
 
     original_audio_filenames: list[str]
     audio_length: float | None = None
@@ -22,8 +22,14 @@ class Metadata:
 class MetadataFile(Metadata):
     @staticmethod
     def _split_frontmatter(text: str) -> str | None:
-        """
-        Returns (frontmatter_yaml, body_text)
+        """Split text into frontmatter YAML and body text.
+
+        Args:
+            text: The text to split.
+
+        Returns:
+            str | None: The frontmatter YAML if found, None otherwise.
+
         """
         if text.startswith("---"):
             parts = text.split("---", 2)
@@ -34,21 +40,40 @@ class MetadataFile(Metadata):
 
     @classmethod
     def from_file(cls, meta_file: Path) -> "MetadataFile":
+        """Create a MetadataFile instance from a metadata file.
+
+        Args:
+            meta_file: Path to the metadata file.
+
+        Returns:
+            MetadataFile: The loaded metadata.
+
+        Raises:
+            ValueError: If the metadata file has invalid format.
+
+        """
         text = meta_file.read_text(encoding="utf-8")
         if front := cls._split_frontmatter(text):
             data = yaml.safe_load(front)
         else:
-            raise ValueError(
-                f"Invalid metadata file {meta_file}, failed to find frontmatter"
-            )
-        # if data has original_audio_filename" key, that's the old format, so we need to convert it to the new format
+            error_msg = f"Invalid metadata file {meta_file}, failed to find frontmatter"
+            raise ValueError(error_msg)
+
+        # If data has "original_audio_filename" key, that's the old format,
+        # so we need to convert it to the new format
         if "original_audio_filename" in data:
             data["original_audio_filenames"] = [data["original_audio_filename"]]
             del data["original_audio_filename"]
 
         return MetadataFile(**data)
 
-    def write(self, bundle_dir: Path):
+    def write(self, bundle_dir: Path) -> None:
+        """Write the metadata to a file in the bundle directory.
+
+        Args:
+            bundle_dir: Path to the bundle directory where the metadata should be written.
+
+        """
         yaml_text = (
             f"---\n{yaml.safe_dump(asdict(self), sort_keys=False).strip()}\n---\n"
         )

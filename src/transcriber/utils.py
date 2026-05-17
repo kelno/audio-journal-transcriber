@@ -6,13 +6,13 @@ import re
 from .logger import logger
 
 
-def ensure_directory_exists(directory):
+def ensure_directory_exists(directory: Path) -> None:
     """Create directory and any necessary parent directories if they don't exist."""
-    if not os.path.exists(directory):
-        os.makedirs(directory)
+    if not directory.exists():
+        directory.mkdir(parents=True, exist_ok=True)
 
 
-def remove_empty_subdirs(directory: Path):
+def remove_empty_subdirs(directory: Path) -> None:
     """Recursively remove directories inside given directory if they're empty."""
     try:
         # Walk bottom-up so we check deepest directories first
@@ -30,15 +30,15 @@ def remove_empty_subdirs(directory: Path):
 
 
 # regex pattern to match obisidian recording filenames like "Recording YYYYMMDDHHMMSS"
-DATE_RE_PATTERN_OBSIDIAN_RECORDING = re.compile(r"^Recording (\d{4})(\d{2})(\d{2})\d{6}")
+DATE_RE_PATTERN_OBSIDIAN_RECORDING = re.compile(
+    r"^Recording (\d{4})(\d{2})(\d{2})\d{6}",
+)
 # regex pattern to match filenames starting with "YYYY-MM-DD_", regular pattern of mine
 DATE_RE_PATTERN_SPLIT = re.compile(r"^(\d{4})-(\d{2})-(\d{2})[_ ]")
 
 
 def extract_date_from_recording_filename(filename: str) -> datetime | None:
-    """
-    Try to extract a date from the audio filename.
-    """
+    """Try to extract a date from the audio filename."""
     m = DATE_RE_PATTERN_OBSIDIAN_RECORDING.match(filename)
     if not m:
         # Try another one
@@ -57,7 +57,7 @@ def extract_date_from_recording_filename(filename: str) -> datetime | None:
 
 
 def file_is_in_directory_tree(file: Path, tree: Path) -> bool:
-
+    """Check if a file is located within a directory tree."""
     root = tree.resolve()
     file_path = file.resolve()
 
@@ -67,8 +67,9 @@ def file_is_in_directory_tree(file: Path, tree: Path) -> bool:
 
 def get_file_modified_date(audio_path: Path) -> datetime:
     """Get the file's date from its last modified time (format: YYYY-MM-DD).
-    Falls back to current date if modification time is unavailable."""
 
+    Falls back to current date if modification time is unavailable.
+    """
     try:
         file_mtime = os.path.getmtime(audio_path)
         file_date = datetime.fromtimestamp(file_mtime)
@@ -81,7 +82,15 @@ def get_file_modified_date(audio_path: Path) -> datetime:
 
 
 def get_days_since_time(time: datetime) -> int:
-    """Get number of days since given time."""
+    """Get number of days since given time.
+
+    Args:
+        time: The datetime to compare against current time.
+
+    Returns:
+        int: Number of days since the given time.
+
+    """
     now = datetime.now(tz=time.tzinfo)
     passed = (now - time).days
     return passed

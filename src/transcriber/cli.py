@@ -6,12 +6,17 @@ from transcriber.daemon import run_daemon_mode
 from transcriber.exception import AudioTranscriberException
 
 from .audio_transcriber import AudioTranscriber
-from .config import TranscribeConfig
 from .logger import configure_logger, logger
 
 
-def main():
-    parser = argparse.ArgumentParser(description="Move, transcribe and summarize audio files into processed bundles.")
+def main() -> None:
+    """Main entry point for the audio transcriber CLI.
+
+    Parses command line arguments and runs the appropriate transcription mode.
+    """
+    parser = argparse.ArgumentParser(
+        description="Move, transcribe and summarize audio files into processed bundles.",
+    )
     parser.add_argument(
         "--dry-run",
         action="store_true",
