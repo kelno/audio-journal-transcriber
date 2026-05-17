@@ -4,7 +4,7 @@ input_dir = "/data/input"
 # The managed output directory where audio files and new files will live
 store_dir = "/data/store"
 # The minimal record length in seconds to process an audio file. 0 = disabled
-min_length_seconds = 5.0
+min_length_seconds = 10.0
 # Remove audio files that are shorter than min_length_seconds
 remove_short_files = true
 # Remove successfully processed audio files after this delay. The date is either the file modification date or the bundle date, whichever is later. 0 = disabled
