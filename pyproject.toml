@@ -15,6 +15,7 @@ dependencies = [
   "pydub",
   "uv>=0.10.2",
   "watchdog>=6.0.0",
+  "tzdata>=2026.2",
 ]
 
 [project.scripts]

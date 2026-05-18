@@ -2,6 +2,7 @@ import argparse
 import sys
 
 from transcriber.ai_manager import AIManager
+from transcriber.config import TranscribeConfig
 from transcriber.daemon import run_daemon_mode
 from transcriber.exception import AudioTranscriberException
 
@@ -40,12 +41,18 @@ def main() -> None:
 
     configure_logger(debug)
 
-    ai_manager = AIManager()
-    transcriber = AudioTranscriber(dry_run=dry_run, ai_manager=ai_manager)
+    # global immutable configuration, loaded automatically by pydantic
+    config = TranscribeConfig()  # pyright: ignore[reportCallIssue]
+    ai_manager = AIManager(config)
+    transcriber = AudioTranscriber(
+        dry_run=dry_run,
+        ai_manager=ai_manager,
+        config=config,
+    )
     try:
         unprocessed = transcriber.run()
         if daemon:
-            run_daemon_mode(transcriber, unprocessed)
+            run_daemon_mode(transcriber, unprocessed, config)
     except AudioTranscriberException as e:
         logger.error(f"AudioTranscriber failed with exception: {e}")
         sys.exit(1)

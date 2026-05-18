@@ -2,7 +2,7 @@ indent-width = 4
 
 [lint]
 select = ["ALL", "D212"]
-ignore = ["D104", "D203", "D212", "E501", "FBT", "PLR0913", "RET504", "TC006", "ERA001", "RET505", "D213", "D401", "D100", "D101", "ANN204", "TRY300"]
+ignore = ["D104", "D203", "D212", "E501", "FBT", "PLR0913", "RET504", "TC006", "ERA001", "RET505", "D213", "D401", "D100", "D101", "ANN204", "TRY300", "T201"]
 
 [format]
 # Like Black, use double quotes for strings.

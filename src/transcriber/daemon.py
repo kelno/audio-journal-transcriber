@@ -2,26 +2,28 @@ import threading
 import time
 from pathlib import Path
 
-from transcriber.config import get_config
+from transcriber.config import TranscribeConfig
 from transcriber.transcribe_bundle_job import BundleJobs
 
-from .logger import logger
-
-from .file_watcher import FileWatcher
 from .audio_transcriber import AudioTranscriber
+from .file_watcher import FileWatcher
+from .logger import logger
 from .retry_manager import RetryManager
 
 
-def run_daemon_mode(transcriber: AudioTranscriber, unprocessed_bundles: list[BundleJobs]):
+def run_daemon_mode(
+    transcriber: AudioTranscriber,
+    unprocessed_bundles: list[BundleJobs],
+    config: TranscribeConfig,
+) -> None:
     """Start file watch and process new files after filesystem quiet period."""
-
     logger.info("Starting daemon mode")
 
     lock: threading.Lock = threading.Lock()
     unprocessed = unprocessed_bundles
     retry_manager = RetryManager(initial_delay=1.0, max_delay=3600.0)
 
-    def process_watched_file(_file_path: Path):
+    def process_watched_file(_file_path: Path) -> None:
         nonlocal unprocessed
         with lock:
             # Reset retry delay on file changes
@@ -29,7 +31,7 @@ def run_daemon_mode(transcriber: AudioTranscriber, unprocessed_bundles: list[Bun
             unprocessed = transcriber.run()
 
     # trigger process_watched_file on any file changes, after state is stable for 5s
-    input_dir: Path = get_config().general.input_dir
+    input_dir: Path = config.general.input_dir
     watcher = FileWatcher(input_dir, process_watched_file, stable_delay=5.0)
     watcher.start()
 

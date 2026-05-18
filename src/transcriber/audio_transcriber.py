@@ -4,7 +4,7 @@ from pathlib import Path
 
 from transcriber.ai_manager import AIManager
 from transcriber.audio_manipulation import AudioManipulation
-from transcriber.config import get_config
+from transcriber.config import TranscribeConfig
 from transcriber.exception import AudioTranscriberException, TooShortException
 from transcriber.globals import is_handled_audio_file
 from transcriber.transcribe_bundle import TranscribeBundle
@@ -20,6 +20,7 @@ class AudioTranscriber:
 
     dry_run: bool
     ai_manager: AIManager
+    config: TranscribeConfig
 
     def __post_init__(self) -> None:
         """Initialize the audio transcriber."""
@@ -27,7 +28,7 @@ class AudioTranscriber:
             logger.warning("!!! DRY RUN MODE !!!")
         logger.info(
             f"{type(self).__name__} initialized with\n"
-            f"General configuration: {get_config().general}",
+            f"General configuration: {self.config.general}",
         )
 
     def process_jobs(self, all_jobs_bundles: list[BundleJobs]) -> list[BundleJobs]:
@@ -46,14 +47,17 @@ class AudioTranscriber:
             for job in jobs_bundle:
                 try:
                     logger.info(f"Processing job: {job}")
-                    job.run(self.ai_manager)
+                    job.run(
+                        ai_manager=self.ai_manager,
+                        config=self.config,
+                    )
                     # Remove job from jobs bundle on successful execution
                     remaining_jobs_in_bundle.remove(job)
                 except TooShortException as e:
                     logger.warning(
                         f"Refused to create bundle from audio file {e.source_audio}: {e}",
                     )
-                    if get_config().general.remove_short_files and not self.dry_run:
+                    if self.config.general.remove_short_files and not self.dry_run:
                         logger.info(f"Removing too short audio file: {e.source_audio}")
                         e.source_audio.unlink()
                     break  # skip remaining jobs in this bundle
@@ -73,7 +77,7 @@ class AudioTranscriber:
 
     def validate_environment(self) -> None:
         """Raise if missing any environment requirements."""
-        input_dir = get_config().general.input_dir
+        input_dir = self.config.general.input_dir
         if not input_dir.exists():
             msg = f"Input directory does not exist: {input_dir}"
             raise AudioTranscriberException(msg)
@@ -89,7 +93,10 @@ class AudioTranscriber:
         for path in input_dir.rglob("*"):
             if path.is_file() and is_handled_audio_file(path.suffix):
                 logger.debug(f"Found audio file: [{path}]")
-                bundle = TranscribeBundle.from_audio_file(source_audio=path)
+                bundle = TranscribeBundle.from_audio_file(
+                    source_audio=path,
+                    config=self.config,
+                )
                 bundles.append(bundle)
 
         logger.debug(f"Imported {len(bundles)} audio files as bundles")
@@ -109,16 +116,27 @@ class AudioTranscriber:
 
         logger.info(f"Gathering audio files from input directory: {input_dir}")
         bundles = self.gather_pending_audio_files(input_dir)
-        store_dir = get_config().general.store_dir
+        store_dir = self.config.general.store_dir
         logger.info(f"Gathering bundles from managed store directory:  {store_dir}")
         bundles.extend(
-            TranscribeBundle.gather_existing_bundles(store_dir, self.dry_run)
+            TranscribeBundle.gather_existing_bundles(
+                store_dir,
+                self.dry_run,
+                config=self.config,
+            )
         )
 
         jobs: list[BundleJobs] = [
             bundle_jobs
             for bundle in bundles
-            if (bundle_jobs := gather_bundle_jobs(bundle, store_dir, self.dry_run))
+            if (
+                bundle_jobs := gather_bundle_jobs(
+                    bundle,
+                    store_dir,
+                    self.dry_run,
+                    config=self.config,
+                )
+            )
         ]
 
         return jobs
@@ -130,8 +148,8 @@ class AudioTranscriber:
         """
         self.validate_environment()  # will raise on error
 
-        input_dir = get_config().general.input_dir
-        store_dir = get_config().general.store_dir
+        input_dir = self.config.general.input_dir
+        store_dir = self.config.general.store_dir
 
         # Create store_dir if needed
         ensure_directory_exists(store_dir)

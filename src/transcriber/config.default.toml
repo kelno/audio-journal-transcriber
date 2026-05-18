@@ -9,6 +9,8 @@ min_length_seconds = 10.0
 remove_short_files = true
 # Remove successfully processed audio files after this delay. The date is either the file modification date or the bundle date, whichever is later. 0 = disabled
 delete_source_audio_after_days = 0
+# IANA time zone, to use to interpret filenames dates
+timezone = "Europe/Brussels"
 
 [text]
 # Whether to generate summaries from transcripts

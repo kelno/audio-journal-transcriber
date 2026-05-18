@@ -1,4 +1,5 @@
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 from pydantic import BaseModel, model_validator
 from pydantic_settings import (
@@ -17,6 +18,7 @@ class GeneralConfig(BaseModel):
     delete_source_audio_after_days: int  # 0 means disabled
     min_length_seconds: float  # 0 means disabled
     remove_short_files: bool
+    timezone: ZoneInfo
 
     def __str__(self) -> str:
         """Return a string representation of the GeneralConfig."""
@@ -142,27 +144,3 @@ class TranscribeConfig(BaseSettings):
             if self.general.min_length_seconds > 0.0
             else None
         )
-
-
-_global_config: TranscribeConfig | None = None
-
-
-def get_config() -> TranscribeConfig:
-    """Get the global configuration instance.
-
-    Returns:
-        TranscribeConfig: The global configuration instance.
-
-    Note:
-        Uses a global variable for singleton pattern. This is intentional for
-        maintaining a single configuration instance throughout the application.
-
-    """
-    # Disable global-statement warning as this is intentional for singleton pattern
-    global _global_config  # noqa: PLW0603
-
-    if _global_config is None:
-        # TranscribeConfig will automatically load from TOML files and environment variables
-        _global_config = TranscribeConfig()  # pyright: ignore[reportCallIssue]
-
-    return _global_config
