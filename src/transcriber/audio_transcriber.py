@@ -8,8 +8,19 @@ from transcriber.config import TranscribeConfig
 from transcriber.exception import AudioTranscriberException, TooShortException
 from transcriber.globals import is_handled_audio_file
 from transcriber.transcribe_bundle import TranscribeBundle
-from transcriber.transcribe_bundle_job import BundleJobs, gather_bundle_jobs
-from transcriber.utils import ensure_directory_exists, remove_empty_subdirs
+from transcriber.transcribe_bundle_job import (
+    BundleJobs,
+    BundleNameJob,
+    CreateBundleJob,
+    DeleteAudioFileJob,
+    SummaryJob,
+    TranscriptionJob,
+)
+from transcriber.utils import (
+    ensure_directory_exists,
+    file_is_in_directory_tree,
+    remove_empty_subdirs,
+)
 
 from .logger import logger
 
@@ -123,21 +134,66 @@ class AudioTranscriber:
                 store_dir,
                 self.dry_run,
                 config=self.config,
-            )
+            ),
         )
 
+        # one BundleJobs per bundle
         jobs: list[BundleJobs] = [
             bundle_jobs
             for bundle in bundles
             if (
-                bundle_jobs := gather_bundle_jobs(
-                    bundle,
-                    store_dir,
-                    self.dry_run,
-                    config=self.config,
+                bundle_jobs := self.gather_bundle_jobs(
+                    bundle, store_dir, self.dry_run, config=self.config
                 )
             )
         ]
+
+        return jobs
+
+    # Moved here to avoid circular imports
+    def gather_bundle_jobs(
+        self,
+        bundle: TranscribeBundle,
+        store_dir: Path,
+        dry_run: bool,
+        config: TranscribeConfig,
+    ) -> BundleJobs:
+        """Gather transcription jobs from this bundle. Jobs needs to be run in order."""
+        jobs = []
+
+        bundle_name = bundle.get_bundle_name(config=config)
+        logger.debug(f"Gathering jobs for bundle: [{bundle_name}]")
+
+        if bundle.source_audios:
+            is_new_audio = not file_is_in_directory_tree(
+                bundle.source_audios[0],
+                store_dir,
+            )
+            if is_new_audio:
+                job = CreateBundleJob(bundle, dry_run)
+                jobs.append(job)
+
+            if not is_new_audio and bundle.audio_source_needs_removal(config):
+                job = DeleteAudioFileJob(bundle, dry_run)
+                jobs.append(job)
+            elif not bundle.transcript:
+                job = TranscriptionJob(bundle, dry_run)
+                jobs.append(job)
+
+        if config.text.summary_enabled:
+            if not bundle.summary:
+                # First check if transcript exists or TranscriptionJob is scheduled
+                transcript_exists_or_scheduled = bundle.transcript is not None or any(
+                    isinstance(j, TranscriptionJob) for j in jobs
+                )
+                if transcript_exists_or_scheduled:
+                    job = SummaryJob(bundle, dry_run)
+                    jobs.append(job)
+
+            # always needs to be done after summary as this relies on summary content
+            if bundle.needs_naming():
+                job = BundleNameJob(bundle, dry_run)
+                jobs.append(job)
 
         return jobs
 
