@@ -21,11 +21,11 @@ class Metadata:
 @dataclass
 class MetadataFile(Metadata):
     @staticmethod
-    def _split_frontmatter(text: str) -> str | None:
+    def _extract_frontmatter(text: str) -> str | None:
         """Split text into frontmatter YAML and body text.
 
         Args:
-            text: The text to split.
+            text: The full text to extract frontmatter from.
 
         Returns:
             str | None: The frontmatter YAML if found, None otherwise.
@@ -33,7 +33,7 @@ class MetadataFile(Metadata):
         """
         if text.startswith("---"):
             parts = text.split("---", 2)
-            if len(parts) >= 2:
+            if len(parts) >= 2:  # noqa: PLR2004
                 _, front, _body = parts
                 return front.strip()
         return None
@@ -53,8 +53,8 @@ class MetadataFile(Metadata):
 
         """
         text = meta_file.read_text(encoding="utf-8")
-        if front := cls._split_frontmatter(text):
-            data = yaml.safe_load(front)
+        if frontmatter := cls._extract_frontmatter(text):
+            data = yaml.safe_load(frontmatter)
         else:
             error_msg = f"Invalid metadata file {meta_file}, failed to find frontmatter"
             raise ValueError(error_msg)

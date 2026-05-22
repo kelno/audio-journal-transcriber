@@ -267,7 +267,9 @@ class TranscribeBundle:
         logger.debug(f"Generating bundle name for audio file: [{audio_path}]")
 
         prefix = cls.generate_bundle_name_date_prefix(
-            audio_path, audio_filename, config
+            audio_path,
+            audio_filename,
+            config,
         )
         return f"{prefix}_{Path(audio_filename).stem}"
 
@@ -383,7 +385,10 @@ class TranscribeBundle:
         self.summary.write(self.get_bundle_dir(config))
 
     def init_metadata(
-        self, filenames: list[str], audio_lengths: list[float], config: TranscribeConfig
+        self,
+        filenames: list[str],
+        audio_lengths: list[float],
+        config: TranscribeConfig,
     ) -> None:
         """Initialize metadata with multiple files."""
         self.metadata.original_audio_filenames = filenames

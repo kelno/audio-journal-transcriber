@@ -2,13 +2,12 @@ import threading
 import time
 from pathlib import Path
 
+from transcriber.audio_transcriber import AudioTranscriber
 from transcriber.config import TranscribeConfig
+from transcriber.file_watcher import FileWatcher
+from transcriber.logger import logger
+from transcriber.retry_manager import RetryManager
 from transcriber.transcribe_bundle_job import BundleJobs
-
-from .audio_transcriber import AudioTranscriber
-from .file_watcher import FileWatcher
-from .logger import logger
-from .retry_manager import RetryManager
 
 
 def run_daemon_mode(
