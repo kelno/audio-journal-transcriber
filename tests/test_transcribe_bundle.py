@@ -229,7 +229,8 @@ class TestTranscribeBundleFromExistingDirectory:
         fake_fs.write_file(bundle_dir / "meeting.mp3", "fake audio")
 
         with pytest.raises(
-            ValueError, match="Bundle directory is invalid.*no meta file"
+            ValueError,
+            match=r"Bundle directory is invalid.*no meta file",
         ):
             TranscribeBundle.from_existing_directory(
                 existing_dir=bundle_dir,
@@ -260,7 +261,8 @@ class TestTranscribeBundleFromExistingDirectory:
         fake_fs.write_file(bundle_dir / METADATA_FILENAME, metadata_yaml)
 
         with pytest.raises(
-            ValueError, match="Bundle directory is invalid.*no audio files"
+            ValueError,
+            match=r"Bundle directory is invalid.*no audio files",
         ):
             TranscribeBundle.from_existing_directory(
                 existing_dir=bundle_dir,
@@ -505,7 +507,7 @@ class TestTranscribeBundleRenaming:
             config=fake_config,
         )
 
-        with pytest.raises(FileNotFoundError, match="Bundle directory.*not found"):
+        with pytest.raises(FileNotFoundError, match=r"Bundle directory.*not found"):
             bundle.set_and_write_bundle_name("New Name")
 
 

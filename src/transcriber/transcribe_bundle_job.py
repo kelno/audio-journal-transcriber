@@ -27,6 +27,7 @@ class TranscribeBundleJob(ABC):
 
     def __str__(self) -> str:
         """Return a string representation of the job."""
+        # not using get_bundle_name because it might not be usable yet
         return f"{self.__class__.__name__}({self.bundle.bundle_name})"
 
 
@@ -54,7 +55,7 @@ class CreateBundleJob(TranscribeBundleJob):
             error_msg = "Bundle has no audio files set"
             raise FileNotFoundError(error_msg)
 
-        final_audio_paths = self.bundle.get_bundle_audio_paths(config=config)
+        final_audio_paths = self.bundle.get_bundle_audio_paths()
         audio_lengths = []
         files_to_move = []
 
@@ -93,7 +94,6 @@ class CreateBundleJob(TranscribeBundleJob):
                 self.bundle.init_metadata(
                     filenames=[p.name for _, p in files_to_move],
                     audio_lengths=audio_lengths,
-                    config=config,
                 )
 
 
@@ -138,10 +138,13 @@ class TranscriptionJob(TranscribeBundleJob):
             self.bundle.metadata.original_audio_filenames = [
                 audio.name for audio in self.bundle.source_audios
             ]
-            self.bundle.metadata.write(self.bundle.get_bundle_dir(config))
+            self.bundle.metadata.write(
+                self.bundle.get_bundle_dir(),
+                self.bundle.fs_service,
+            )
 
             # Write transcript after metadata is updated
-            self.bundle.set_and_write_transcript(concatenated, config)
+            self.bundle.set_and_write_transcript(concatenated)
 
 
 @dataclass
@@ -160,7 +163,7 @@ class SummaryJob(TranscribeBundleJob):
             ValueError: If transcript is not available for summarization.
 
         """
-        logger.info(f"Summarizing {self.bundle.get_bundle_name(config=config)}")
+        logger.info(f"Summarizing {self.bundle.get_bundle_name()}")
 
         if self.dry_run:
             return
@@ -171,7 +174,7 @@ class SummaryJob(TranscribeBundleJob):
 
         summary_content = ai_manager.get_ai_summary(self.bundle.transcript.text)
         logger.info(f"Summary complete: {summary_content[:40]}")
-        self.bundle.set_and_write_summary(summary_content, config)
+        self.bundle.set_and_write_summary(summary_content)
 
 
 @dataclass
@@ -185,7 +188,7 @@ class BundleNameJob(TranscribeBundleJob):
         config: TranscribeConfig,
     ) -> None:
         """Main function."""
-        logger.info(f"Generating bundle name for {self.bundle.get_bundle_name(config)}")
+        logger.info(f"Generating bundle name for {self.bundle.get_bundle_name()}")
         if self.dry_run:
             return
 
@@ -200,7 +203,7 @@ class BundleNameJob(TranscribeBundleJob):
             raise
 
         logger.info(f"Generated bundle name: {bundle_name}")
-        self.bundle.set_and_write_bundle_name(bundle_name, config=config)
+        self.bundle.set_and_write_bundle_name(bundle_name)
 
 
 @dataclass
@@ -219,10 +222,39 @@ class DeleteAudioFileJob(TranscribeBundleJob):
             raise FileNotFoundError(msg)
 
         logger.info(f"Deleting {len(self.bundle.source_audios)} audio file(s)")
+        if self.dry_run:
+            return
 
-        if not self.dry_run:
-            for audio_path in self.bundle.source_audios:
-                logger.debug(f"Deleting {audio_path}")
-                audio_path.unlink()
+        for audio_path in self.bundle.source_audios:
+            logger.debug(f"Deleting {audio_path}")
+            audio_path.unlink()
 
-            self.bundle.update_audio_paths(None)
+        self.bundle.update_audio_paths(None)
+
+
+@dataclass
+class GatherCommandsJob(TranscribeBundleJob):
+    @override
+    def run(
+        self,
+        ai_manager: AIManager,
+        config: TranscribeConfig,
+    ) -> None:
+        """Main function."""
+        logger.info(f"Gathering commands for {self.bundle.get_bundle_name()}")
+        if self.dry_run:
+            return
+
+        if not self.bundle.transcript:
+            msg = f"{self}: Cannot generate commands without transcript"
+            raise ValueError(msg)
+
+        commands: list[str] = []
+        try:
+            commands = ai_manager.extract_commands(self.bundle.transcript.text)
+        except Exception:
+            logger.error(f"{self}: Failed to extract commands")
+            raise
+
+        logger.debug(f"{self}: Successfully extracted commands (len {len(commands)}")
+        self.bundle.set_and_write_commands(commands)

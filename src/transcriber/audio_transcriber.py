@@ -14,6 +14,7 @@ from transcriber.transcribe_bundle_job import (
     BundleNameJob,
     CreateBundleJob,
     DeleteAudioFileJob,
+    GatherCommandsJob,
     SummaryJob,
     TranscriptionJob,
 )
@@ -185,9 +186,13 @@ class AudioTranscriber:
             if not is_new_audio and bundle.audio_source_needs_removal():
                 job = DeleteAudioFileJob(bundle, dry_run)
                 jobs.append(job)
-            elif not bundle.transcript:
-                job = TranscriptionJob(bundle, dry_run)
-                jobs.append(job)
+            else:
+                if not bundle.transcript:
+                    job = TranscriptionJob(bundle, dry_run)
+                    jobs.append(job)
+                if not bundle.commands:
+                    job = GatherCommandsJob(bundle, dry_run)
+                    jobs.append(job)
 
         if config.text.summary_enabled:
             if not bundle.summary:

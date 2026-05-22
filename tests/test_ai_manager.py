@@ -277,3 +277,48 @@ class TestAIManagerBundleName:
         # Act & Assert
         with pytest.raises(ValueError, match=FakeChatClientWithErrors.ERROR_MESSAGE):
             ai_manager.get_bundle_name_summary("summary")
+
+    def test_extract_commands_no_commands(
+        self,
+        fake_config: TranscribeConfig,
+    ) -> None:
+        """Test extract_commands function."""
+        # Arrange
+        fake_chat_client = FakeChatClient("none")
+        fake_audio_client = FakeAudioClient()
+        ai_manager = AIManager(
+            audio_client=fake_audio_client,
+            chat_client=fake_chat_client,
+            config=fake_config,
+        )
+
+        commands = ai_manager.extract_commands("Whatever text without command")
+        assert commands == []
+
+    def test_extract_commands_with_commands(
+        self,
+        fake_config: TranscribeConfig,
+    ) -> None:
+        """Test extract_commands function.
+
+        The main breaking point of this function is still what the AI returns.
+        This test does not cover that part and only makes sure extract_commands returns the data in the correct format.
+        """
+        command1 = "Eat a sandwich"
+        command2 = "Do a backflip"
+
+        # Arrange
+        fake_chat_client = FakeChatClient(f"{command1}\n{command2}")
+        fake_audio_client = FakeAudioClient()
+        ai_manager = AIManager(
+            audio_client=fake_audio_client,
+            chat_client=fake_chat_client,
+            config=fake_config,
+        )
+
+        commands = ai_manager.extract_commands(
+            f"""Hello, start command {command1} end command.
+            Then the next day I did enjoy the sun. start command {command2} end commend.
+            That's it for today!""",
+        )
+        assert commands == [command1, command2]

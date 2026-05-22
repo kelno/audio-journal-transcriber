@@ -1,15 +1,16 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 
 from transcriber.config import TranscribeConfig
 from transcriber.constants import (
+    COMMANDS_FILENAME,
     METADATA_FILENAME,
     SUMMARY_FILENAME,
     TRANSCRIPT_FILENAME,
 )
 from transcriber.file_system import FileSystemService, RealFileSystemService
-from transcriber.text_file import SummaryFile, TextFile, TranscriptFile
+from transcriber.text_file import CommandsFile, SummaryFile, TextFile, TranscriptFile
 
 from .globals import is_handled_audio_file
 from .logger import logger
@@ -23,13 +24,15 @@ from .utils import (
 
 @dataclass
 class TranscribeBundle:
-    bundle_name: str  # directory name is derived from here
-    metadata: MetadataFile
-    source_audios: list[Path]
-    transcript: TextFile | None
-    summary: TextFile | None
     fs_service: FileSystemService
     config: TranscribeConfig
+
+    bundle_name: str  # directory name is derived from here
+    metadata: MetadataFile
+    source_audios: list[Path] = field(default_factory=list)
+    transcript: TextFile | None = None
+    summary: TextFile | None = None
+    commands: TextFile | None = None
 
     @classmethod
     def from_existing_directory(
@@ -68,6 +71,7 @@ class TranscribeBundle:
         source_audios: list[Path] = []
         transcript: TranscriptFile | None = None
         summary: SummaryFile | None = None
+        commands: CommandsFile | None = None
 
         for file_path in fs_service.list_directory(existing_dir):
             if is_handled_audio_file(file_path.suffix):
@@ -76,10 +80,28 @@ class TranscribeBundle:
                 transcript = TranscriptFile.from_file(file_path, fs_service)
             elif file_path.name == SUMMARY_FILENAME:
                 summary = SummaryFile.from_file(file_path, fs_service)
+            elif file_path.name == COMMANDS_FILENAME:
+                commands = CommandsFile.from_file(file_path, fs_service)
 
         if not source_audios:
             error_msg = "Bundle directory is invalid (no audio files)"
             raise ValueError(error_msg)
+
+        # Consistency checks
+        if summary and not transcript:
+            summary = None
+            logger.warning(
+                f"Summary file found without transcript file for {existing_dir}. Removing summary file.",
+            )
+            if not dry_run:
+                fs_service.delete_file(existing_dir / SUMMARY_FILENAME)
+        if commands and not transcript:
+            commands = None
+            logger.warning(
+                f"Commands file found without transcript file for {existing_dir}. Removing commands file.",
+            )
+            if not dry_run:
+                fs_service.delete_file(existing_dir / COMMANDS_FILENAME)
 
         # Sort audio files chronologically
         source_audios = cls._sort_audio_files_chronologically(source_audios, config)
@@ -94,6 +116,7 @@ class TranscribeBundle:
             source_audios=source_audios,
             transcript=transcript,
             summary=summary,
+            commands=commands,
             fs_service=fs_service,
             config=config,
         )
@@ -126,8 +149,6 @@ class TranscribeBundle:
             bundle_name=bundle_name,
             metadata=metadata,
             source_audios=[source_audio],
-            transcript=None,
-            summary=None,
             fs_service=fs_service,
             config=config,
         )
@@ -163,8 +184,6 @@ class TranscribeBundle:
             bundle_name=bundle_name,
             metadata=metadata,
             source_audios=source_audios,
-            transcript=None,
-            summary=None,
             fs_service=fs_service,
             config=config,
         )
@@ -385,6 +404,18 @@ class TranscribeBundle:
         self.metadata.write(self.get_bundle_dir(), self.fs_service)
         self.summary = SummaryFile(summary)
         self.summary.write(self.get_bundle_dir(), self.fs_service)
+
+    def set_and_write_commands(
+        self,
+        commands: list[str],
+    ) -> None:
+        """Set and write the commands to memory and disk."""
+        self.metadata.write(self.get_bundle_dir(), self.fs_service)
+        # join commands list into a single string
+        # with each command on a new line
+        commands_str = "\n".join(commands)
+        self.commands = CommandsFile(commands_str)
+        self.commands.write(self.get_bundle_dir(), self.fs_service)
 
     def init_metadata(
         self,
