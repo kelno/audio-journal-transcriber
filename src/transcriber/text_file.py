@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import override
 
 from transcriber.constants import SUMMARY_FILENAME, TRANSCRIPT_FILENAME
+from transcriber.file_system import FileSystemService
 
 
 @dataclass
@@ -22,38 +23,41 @@ class TextFile:
         """
         ...
 
-    def write(self, bundle_dir: Path) -> None:
+    def write(self, bundle_dir: Path, fs_service: FileSystemService) -> None:
         """Write the text content to a file in the bundle directory.
 
         Args:
             bundle_dir: Path to the bundle directory where the file should be written.
+            fs_service: FileSystemService instance for writing files.
 
         """
         output_file = bundle_dir / self.get_filename()
-        output_file.write_text(self.text, encoding="utf-8")
+        fs_service.write_file(output_file, self.text)
 
-    def unlink(self, bundle_dir: Path) -> None:
+    def unlink(self, bundle_dir: Path, fs_service: FileSystemService) -> None:
         """Delete the text file from the bundle directory.
 
         Args:
             bundle_dir: Path to the bundle directory containing the file to delete.
+            fs_service: FileSystemService instance for deleting files.
 
         """
         output_file = bundle_dir / self.get_filename()
-        output_file.unlink()
+        fs_service.delete_file(output_file)
 
     @classmethod
-    def from_file(cls, file_path: Path) -> "TextFile":
+    def from_file(cls, file_path: Path, fs_service: FileSystemService) -> "TextFile":
         """Create a TextFile instance from an existing file.
 
         Args:
             file_path: Path to the file to read.
+            fs_service: FileSystemService instance for reading files.
 
         Returns:
             TextFile: An instance of the appropriate TextFile subclass.
 
         """
-        text = file_path.read_text(encoding="utf-8")
+        text = fs_service.read_file(file_path)
         return cls(text=text)
 
 
@@ -67,17 +71,22 @@ class SummaryFile(TextFile):
 
     @classmethod
     @override
-    def from_file(cls, file_path: Path) -> "SummaryFile":
+    def from_file(
+        cls,
+        file_path: Path,
+        fs_service: FileSystemService,
+    ) -> "SummaryFile":
         """Create a SummaryFile instance from an existing file.
 
         Args:
             file_path: Path to the file to read.
+            fs_service: FileSystemService instance for reading files.
 
         Returns:
             SummaryFile: A SummaryFile instance.
 
         """
-        text = file_path.read_text(encoding="utf-8")
+        text = fs_service.read_file(file_path)
         return cls(text=text)
 
 
@@ -91,15 +100,20 @@ class TranscriptFile(TextFile):
 
     @classmethod
     @override
-    def from_file(cls, file_path: Path) -> "TranscriptFile":
+    def from_file(
+        cls,
+        file_path: Path,
+        fs_service: FileSystemService,
+    ) -> "TranscriptFile":
         """Create a TranscriptFile instance from an existing file.
 
         Args:
             file_path: Path to the file to read.
+            fs_service: FileSystemService instance for reading files.
 
         Returns:
             TranscriptFile: A TranscriptFile instance.
 
         """
-        text = file_path.read_text(encoding="utf-8")
+        text = fs_service.read_file(file_path)
         return cls(text=text)

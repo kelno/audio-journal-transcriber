@@ -4,6 +4,7 @@ from pathlib import Path
 import yaml
 
 from transcriber.constants import METADATA_FILENAME
+from transcriber.file_system import FileSystemService
 
 
 @dataclass
@@ -39,11 +40,16 @@ class MetadataFile(Metadata):
         return None
 
     @classmethod
-    def from_file(cls, meta_file: Path) -> "MetadataFile":
+    def from_file(
+        cls,
+        meta_file: Path,
+        fs_service: FileSystemService,
+    ) -> "MetadataFile":
         """Create a MetadataFile instance from a metadata file.
 
         Args:
             meta_file: Path to the metadata file.
+            fs_service: FileSystemService instance for reading files.
 
         Returns:
             MetadataFile: The loaded metadata.
@@ -52,7 +58,7 @@ class MetadataFile(Metadata):
             ValueError: If the metadata file has invalid format.
 
         """
-        text = meta_file.read_text(encoding="utf-8")
+        text = fs_service.read_file(meta_file)
         if frontmatter := cls._extract_frontmatter(text):
             data = yaml.safe_load(frontmatter)
         else:
@@ -67,15 +73,16 @@ class MetadataFile(Metadata):
 
         return MetadataFile(**data)
 
-    def write(self, bundle_dir: Path) -> None:
+    def write(self, bundle_dir: Path, fs_service: FileSystemService) -> None:
         """Write the metadata to a file in the bundle directory.
 
         Args:
             bundle_dir: Path to the bundle directory where the metadata should be written.
+            fs_service: FileSystemService instance for writing files.
 
         """
         yaml_text = (
             f"---\n{yaml.safe_dump(asdict(self), sort_keys=False).strip()}\n---\n"
         )
         output_file = bundle_dir / METADATA_FILENAME
-        output_file.write_text(yaml_text, encoding="utf-8")
+        fs_service.write_file(output_file, yaml_text)

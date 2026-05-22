@@ -6,6 +6,7 @@ from transcriber.ai_manager import AIManager
 from transcriber.audio_manipulation import AudioManipulation
 from transcriber.config import TranscribeConfig
 from transcriber.exception import AudioTranscriberException, TooShortException
+from transcriber.file_system import FileSystemService, RealFileSystemService
 from transcriber.globals import is_handled_audio_file
 from transcriber.transcribe_bundle import TranscribeBundle
 from transcriber.transcribe_bundle_job import (
@@ -32,9 +33,12 @@ class AudioTranscriber:
     dry_run: bool
     ai_manager: AIManager
     config: TranscribeConfig
+    fs_service: FileSystemService | None = None
 
     def __post_init__(self) -> None:
         """Initialize the audio transcriber."""
+        if self.fs_service is None:
+            self.fs_service = RealFileSystemService()  # type: ignore[union-attr]
         if self.dry_run:
             logger.warning("!!! DRY RUN MODE !!!")
         logger.info(
@@ -107,6 +111,7 @@ class AudioTranscriber:
                 bundle = TranscribeBundle.from_audio_file(
                     source_audio=path,
                     config=self.config,
+                    fs_service=self.fs_service,  # type: ignore[arg-type]
                 )
                 bundles.append(bundle)
 
@@ -134,6 +139,7 @@ class AudioTranscriber:
                 store_dir,
                 self.dry_run,
                 config=self.config,
+                fs_service=self.fs_service,  # type: ignore[arg-type]
             ),
         )
 
