@@ -16,6 +16,7 @@ dependencies = [
   "uv>=0.10.2",
   "watchdog>=6.0.0",
   "tzdata>=2026.2",
+  "pytest>=9.0.3",
 ]
 
 [project.scripts]

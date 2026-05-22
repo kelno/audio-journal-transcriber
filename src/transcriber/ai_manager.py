@@ -1,133 +1,63 @@
-import json
 from dataclasses import dataclass
 from pathlib import Path
-from urllib.parse import urljoin
 
-import requests
-from openai import OpenAI
-
+from transcriber.clients.clients import AudioTranscriptionClient, ChatCompletionClient
 from transcriber.config import TranscribeConfig
+from transcriber.logger import logger
 
-from .logger import logger
-
-BUNDLE_NAME_MAX_LENGTH = 60
+BUNDLE_NAME_MAX_LENGTH = 60  # arbitrary max length
 
 
 @dataclass
 class AIManager:
     """Manages interactions with AI models for transcription and summarization."""
 
+    audio_client: AudioTranscriptionClient
+    chat_client: ChatCompletionClient
     config: TranscribeConfig
 
     def __post_init__(self):
+        """Initialize logging after dataclass fields are set."""
         logger.debug("AIManager initialized")
         logger.debug(f"Audio configuration: {self.config.audio}")
         logger.debug(f"Text configuration: {self.config.text}")
 
     def transcribe_audio(self, audio_path: Path) -> str:
-        """Transcribe an audio file using an OpenAI-compatible API with streaming.
+        """Transcribe an audio file.
 
-        Writes output directly to file.
+        Delegates to the injected audio_client instead of doing HTTP directly.
         """
         logger.debug(f"AIManager Transcribing: {audio_path}")
-
-        with Path.open(audio_path, "rb") as audio_file:
-            files = {
-                "file": (
-                    audio_path.name,
-                    audio_file,
-                    "multipart/form-data",
-                ),
-            }
-            data = {
-                "model": self.config.audio.model,
-                "stream": "true" if self.config.audio.stream else "false",
-            }
-            url = urljoin(self.config.audio.api_base_url, "audio/transcriptions")
-            response = requests.post(
-                url=url,
-                files=files,
-                data=data,
-                headers={"Authorization": f"Bearer {self.config.audio.api_key}"},
-                stream=True,  # post option, delay body parsing
-                timeout=(
-                    60 if self.config.audio.stream else 600
-                ),  # 1 min for streaming, 10 min for non-streaming
-            )
-
-        if response.status_code == 200:
-            return self.extract_streaming_response(response)
-        else:
-            msg = f"Transcription failed with status code {response.status_code} and response: {response.text}"
-            raise ValueError(msg)
-
-    def extract_streaming_response(self, response: requests.Response) -> str:
-        """Process a streaming response from the transcription API and write directly to file.
-
-        Returns the complete transcript as a string.
-        """
-        logger.debug("Processing streaming response")
-        text_chunks = []
-
-        for line in response.iter_lines():
-            if line:
-                try:
-                    json_str = line.decode("utf-8").removeprefix("data: ")
-                    if json_str.strip() == "[DONE]":
-                        break
-                    result = json.loads(json_str)
-                    if "text" in result:
-                        text = result["text"]
-                        text_chunks.append(text)
-                        print(text, end="", flush=True)
-                except Exception:
-                    logger.error(f"Error decoding line:\n{line}")
-                    raise
-
-        print("\n")
-        complete_transcript = " ".join(text_chunks)
-
-        return complete_transcript
+        return self.audio_client.transcribe(audio_path)
 
     def query_chat_completion(self, prompt: str) -> str:
-        """Query the OpenAI API with the given prompt.
+        """Query the chat completion API with the given prompt.
 
-        Returns the output string on success, or None on failure.
+        Delegates to the injected chat_client instead of doing HTTP directly.
 
         Raises:
-            ValueError: When OpenAI client returns an invalid answer.
-            *: Pass through any exceptions from the OpenAI client.
+            ValueError: When client returns an invalid answer.
 
         """
-        client = OpenAI(
-            base_url=self.config.text.api_base_url,
-            api_key=self.config.text.api_key,
-        )
+        messages = [
+            {
+                "role": "system",
+                "content": "You are part of an automated pipeline to transcribe and summarize texts.",
+            },
+            {
+                "role": "user",
+                "content": prompt,
+            },
+        ]
 
-        # https://platform.openai.com/docs/api-reference/chat/create
-        completion = client.chat.completions.create(
-            model=self.config.text.model,
-            messages=[
-                {
-                    "role": "system",
-                    "content": "You are part of an automated pipeline to transcribe and summarize texts.",
-                },
-                {"role": "user", "content": prompt},
-            ],
-        )
+        response = self.chat_client.create_completion(messages)
 
-        if len(completion.choices) == 0:
-            msg = f"query_chat_completion failed: no choices returned: {completion}"
+        if not response:
+            msg = "Empty response from chat client"
             logger.error(msg)
             raise ValueError(msg)
 
-        completion = completion.choices[0].message.content
-        if not completion:
-            msg = f"query_chat_completion failed: empty content: {completion}"
-            logger.error(msg)
-            raise ValueError(msg)
-
-        return completion
+        return response
 
     def get_ai_summary(self, transcript: str) -> str:
         """Generate AI summary from transcript.
@@ -159,7 +89,7 @@ class AIManager:
             # Summary
             [Comprehensive summary in natural language]
             # Action items
-            [List of actionable points only if clearly stated in the transcript; otherwise write “(None)”]
+            [List of actionable points only if clearly stated in the transcript; otherwise write "(None)"]
             ```
             {extra_context_prompt}
             ---
@@ -196,7 +126,7 @@ class AIManager:
         ).rstrip()
 
         logger.debug(f"AI generated bundle name: {bundle_name}")
-        if len(bundle_name) > BUNDLE_NAME_MAX_LENGTH:  # arbitrary max length
+        if len(bundle_name) > BUNDLE_NAME_MAX_LENGTH:
             msg = f"get_bundle_name_summary: LLM returned a bundle name too long: {bundle_name}"
             raise ValueError(msg)
 

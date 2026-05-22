@@ -2,12 +2,12 @@ import argparse
 import sys
 
 from transcriber.ai_manager import AIManager
+from transcriber.audio_transcriber import AudioTranscriber
+from transcriber.clients.openai_clients import OpenAIAudioClient, OpenAIChatClient
 from transcriber.config import TranscribeConfig
 from transcriber.daemon import run_daemon_mode
 from transcriber.exception import AudioTranscriberException
-
-from .audio_transcriber import AudioTranscriber
-from .logger import configure_logger, logger
+from transcriber.logger import configure_logger, logger
 
 
 def main() -> None:
@@ -43,7 +43,18 @@ def main() -> None:
 
     # global immutable configuration, loaded automatically by pydantic
     config = TranscribeConfig()  # pyright: ignore[reportCallIssue]
-    ai_manager = AIManager(config)
+
+    # Create real clients
+    audio_client = OpenAIAudioClient(config.audio)
+    chat_client = OpenAIChatClient(config.text)
+
+    # Inject clients into AIManager
+    ai_manager = AIManager(
+        audio_client=audio_client,
+        chat_client=chat_client,
+        config=config,
+    )
+
     transcriber = AudioTranscriber(
         dry_run=dry_run,
         ai_manager=ai_manager,

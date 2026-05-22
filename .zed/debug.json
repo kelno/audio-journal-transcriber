@@ -1,6 +1,6 @@
 [
   {
-    "name": "Transcribe",
+    "label": "Transcribe",
     "adapter": "Debugpy",
     "request": "launch",
     "console": "integratedTerminal",
@@ -9,7 +9,7 @@
     "justMyCode": false,
   },
   {
-    "name": "Transcribe (debug)",
+    "label": "Transcribe (debug)",
     "adapter": "Debugpy",
     "request": "launch",
     "console": "integratedTerminal",
@@ -18,7 +18,7 @@
     "justMyCode": false,
   },
   {
-    "name": "Transcribe (daemon)",
+    "label": "Transcribe (daemon)",
     "adapter": "Debugpy",
     "request": "launch",
     "console": "integratedTerminal",
@@ -27,12 +27,21 @@
     "justMyCode": false,
   },
   {
-    "name": "(DRY RUN) Transcribe",
+    "label": "(DRY RUN) Transcribe",
     "adapter": "Debugpy",
     "request": "launch",
     "console": "integratedTerminal",
     "module": "transcriber",
     "args": ["--dry-run", "--debug"],
+    "justMyCode": false,
+  },
+  {
+    "label": "Run tests",
+    "adapter": "Debugpy",
+    "request": "launch",
+    "console": "integratedTerminal",
+    "module": "pytest",
+    "args": ["-v"],
     "justMyCode": false,
   },
 ]
