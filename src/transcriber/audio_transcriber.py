@@ -170,7 +170,7 @@ class AudioTranscriber:
         """Gather transcription jobs from this bundle. Jobs needs to be run in order."""
         jobs = []
 
-        bundle_name = bundle.get_bundle_name(config=config)
+        bundle_name = bundle.get_bundle_name()
         logger.debug(f"Gathering jobs for bundle: [{bundle_name}]")
 
         if bundle.source_audios:
@@ -182,7 +182,7 @@ class AudioTranscriber:
                 job = CreateBundleJob(bundle, dry_run)
                 jobs.append(job)
 
-            if not is_new_audio and bundle.audio_source_needs_removal(config):
+            if not is_new_audio and bundle.audio_source_needs_removal():
                 job = DeleteAudioFileJob(bundle, dry_run)
                 jobs.append(job)
             elif not bundle.transcript:
