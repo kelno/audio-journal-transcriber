@@ -126,7 +126,8 @@ class TranscribeBundle:
             config=config,
         )
 
-        if found_filenames != original_filenames:
+        # TODO: move that out of constructor
+        if found_filenames and found_filenames != original_filenames:
             logger.info(
                 f"Bundle {bundle_name} has new unprocessed audio files. "
                 f"Original: {original_filenames}, Found: {found_filenames}",
