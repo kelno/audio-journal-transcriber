@@ -1,3 +1,7 @@
+from typing import final
+
+
+@final
 class RetryManager:
     """Manages exponential backoff retries."""
 
@@ -13,11 +17,11 @@ class RetryManager:
         self.max_delay = max_delay
         self.current_delay = initial_delay
 
-    def reset_delay(self):
+    def reset_delay(self) -> None:
         """Reset the retry delay to the initial value."""
         self.current_delay = self.initial_delay
 
-    def increase_delay(self):
+    def increase_delay(self) -> None:
         """Double the retry delay, capping it at max_delay."""
         self.current_delay = min(self.current_delay * 2, self.max_delay)
 

@@ -5,7 +5,7 @@ from transcriber.ai_manager import AIManager
 from transcriber.audio_manipulation import AudioManipulation
 from transcriber.config import TranscribeConfig
 from transcriber.exception import AudioTranscriberException, TooShortException
-from transcriber.file_system import FileSystemService, RealFileSystemService
+from transcriber.files.file_system import FileSystemService, RealFileSystemService
 from transcriber.globals import is_handled_audio_file
 from transcriber.transcribe_bundle import TranscribeBundle
 from transcriber.transcribe_bundle_job import (

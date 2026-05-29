@@ -4,7 +4,7 @@ from pathlib import Path
 import yaml
 
 from transcriber.constants import METADATA_FILENAME
-from transcriber.file_system import FileSystemService
+from transcriber.files.file_system import FileSystemService
 
 
 @dataclass

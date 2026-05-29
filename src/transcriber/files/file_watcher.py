@@ -1,18 +1,19 @@
 from __future__ import annotations
 
 import threading
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable, Optional
+from typing import final
 
-from watchdog.events import FileSystemEventHandler, FileSystemEvent
+from watchdog.events import FileSystemEvent, FileSystemEventHandler
 from watchdog.observers import Observer
 
-from .logger import logger
-
+from transcriber.logger import logger
 
 Callback = Callable[[Path], None]
 
 
+@final
 class FileWatcher(FileSystemEventHandler):
     """
     Debounced filesystem watcher.
@@ -28,13 +29,15 @@ class FileWatcher(FileSystemEventHandler):
     delay: Fire events after no file changes in the whole input_dir for given time
     """
 
-    def __init__(self, input_dir: Path, callback: Callback, stable_delay: float = 5.0) -> None:
+    def __init__(
+        self, input_dir: Path, callback: Callback, stable_delay: float = 5.0
+    ) -> None:
         self.input_dir = input_dir
         self.callback = callback
         self.stable_delay = stable_delay
 
         self._observer = Observer()
-        self._timer: Optional[threading.Timer] = None
+        self._timer: threading.Timer | None = None
         self._lock = threading.Lock()
 
     def start(self) -> None:

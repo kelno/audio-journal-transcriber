@@ -11,8 +11,8 @@ from transcriber.constants import (
     SUMMARY_FILENAME,
     TRANSCRIPT_FILENAME,
 )
-from transcriber.metadata import MetadataFile
-from transcriber.text_file import SummaryFile, TranscriptFile
+from transcriber.files.metadata import MetadataFile
+from transcriber.files.text_file import SummaryFile, TranscriptFile
 from transcriber.transcribe_bundle import TranscribeBundle
 
 from .fake_file_system import FakeFileSystemService

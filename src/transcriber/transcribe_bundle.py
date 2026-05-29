@@ -10,13 +10,17 @@ from transcriber.constants import (
     SUMMARY_FILENAME,
     TRANSCRIPT_FILENAME,
 )
-from transcriber.file_system import FileSystemService, RealFileSystemService
-from transcriber.text_file import CommandsFile, SummaryFile, TextFile, TranscriptFile
-
-from .globals import is_handled_audio_file
-from .logger import logger
-from .metadata import MetadataFile
-from .utils import (
+from transcriber.files.commands_file import CommandsFile
+from transcriber.files.file_system import FileSystemService, RealFileSystemService
+from transcriber.files.metadata import MetadataFile
+from transcriber.files.text_file import (
+    SummaryFile,
+    TextFile,
+    TranscriptFile,
+)
+from transcriber.globals import is_handled_audio_file
+from transcriber.logger import logger
+from transcriber.utils import (
     extract_date_from_recording_filename,
     get_days_since_time,
     get_file_modified_date,

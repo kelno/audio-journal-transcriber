@@ -3,7 +3,7 @@
 from pathlib import Path
 from typing import override
 
-from transcriber.file_system import FileSystemService
+from transcriber.files.file_system import FileSystemService
 
 
 class FakeFileSystemService(FileSystemService):
