@@ -136,7 +136,8 @@ class FakeFileSystemService(FileSystemService):
         self.operations.clear()
 
     def get_operations(
-        self, operation_type: str | None = None
+        self,
+        operation_type: str | None = None,
     ) -> list[tuple[str, Path]]:
         """Get all operations, optionally filtered by type.
 

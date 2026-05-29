@@ -34,40 +34,24 @@ class TranscribeBundle:
     summary: TextFile | None = None
     commands: TextFile | None = None
 
-    @classmethod
-    def from_existing_directory(
-        cls,
-        existing_dir: Path,
-        dry_run: bool,
-        config: TranscribeConfig,
-        fs_service: FileSystemService,
-    ) -> "TranscribeBundle":
-        """Create a TranscribeBundle instance from an existing already processed directory.
-
-        Args:
-            existing_dir: Path to the existing bundle directory.
-            dry_run: Whether to simulate operations without making changes.
-            config: The configuration object containing timezone and other settings.
-            fs_service: FileSystemService instance for file operations.
-
-        Returns:
-            TranscribeBundle: The loaded bundle instance.
-
-        Raises:
-            ValueError: If the bundle directory is invalid.
-
-        """
+    @staticmethod
+    def _load_bundle_files(
+        existing_dir: Path, fs_service: FileSystemService
+    ) -> tuple[
+        MetadataFile,
+        list[Path],
+        TranscriptFile | None,
+        SummaryFile | None,
+        CommandsFile | None,
+    ]:
+        """Load audio paths and text files from bundle directory."""
         meta_file_path = existing_dir / METADATA_FILENAME
         if not fs_service.file_exists(meta_file_path):
             error_msg = "Bundle directory is invalid (no meta file)"
             raise ValueError(error_msg)
 
         metadata = MetadataFile.from_file(meta_file_path, fs_service)
-        if not metadata:
-            error_msg = "Bundle directory is invalid (no audio or meta file)"
-            raise ValueError(error_msg)
 
-        bundle_name = existing_dir.name
         source_audios: list[Path] = []
         transcript: TranscriptFile | None = None
         summary: SummaryFile | None = None
@@ -83,25 +67,36 @@ class TranscribeBundle:
             elif file_path.name == COMMANDS_FILENAME:
                 commands = CommandsFile.from_file(file_path, fs_service)
 
-        if not source_audios:
-            error_msg = "Bundle directory is invalid (no audio files)"
-            raise ValueError(error_msg)
+        return metadata, source_audios, transcript, summary, commands
 
-        # Consistency checks
-        if summary and not transcript:
-            summary = None
-            logger.warning(
-                f"Summary file found without transcript file for {existing_dir}. Removing summary file.",
-            )
-            if not dry_run:
-                fs_service.delete_file(existing_dir / SUMMARY_FILENAME)
-        if commands and not transcript:
-            commands = None
-            logger.warning(
-                f"Commands file found without transcript file for {existing_dir}. Removing commands file.",
-            )
-            if not dry_run:
-                fs_service.delete_file(existing_dir / COMMANDS_FILENAME)
+    @classmethod
+    def from_existing_directory(
+        cls,
+        existing_dir: Path,
+        dry_run: bool,
+        config: TranscribeConfig,
+        fs_service: FileSystemService,
+    ) -> "TranscribeBundle":
+        """Load an existing saved TranscribeBundle instance from a directory.
+
+        Args:
+            existing_dir: Path to the existing bundle directory.
+            dry_run: Whether to simulate operations without making changes.
+            config: The configuration object containing timezone and other settings.
+            fs_service: FileSystemService instance for file operations.
+
+        Returns:
+            TranscribeBundle: The loaded bundle instance.
+
+        Raises:
+            ValueError: If the bundle directory is invalid.
+
+        """
+        bundle_name = existing_dir.name
+        metadata, source_audios, transcript, summary, commands = cls._load_bundle_files(
+            existing_dir,
+            fs_service,
+        )
 
         # Sort audio files chronologically
         source_audios = cls._sort_audio_files_chronologically(source_audios, config)
@@ -137,7 +132,7 @@ class TranscribeBundle:
         config: TranscribeConfig,
         fs_service: FileSystemService,
     ) -> "TranscribeBundle":
-        """Create a TranscribeBundle instance from an audio file."""
+        """Create a new TranscribeBundle instance from an audio file."""
         metadata = MetadataFile(original_audio_filenames=[source_audio.name])
         bundle_name = TranscribeBundle.generate_generic_bundle_name(
             source_audio,
@@ -161,7 +156,7 @@ class TranscribeBundle:
         bundle_name: str | None = None,
         fs_service: FileSystemService | None = None,
     ) -> "TranscribeBundle":
-        """Create a TranscribeBundle from multiple audio files."""
+        """Create a new TranscribeBundle from multiple audio files."""
         if not source_audios:
             msg = "Must provide at least one audio file"
             raise ValueError(msg)
@@ -187,6 +182,29 @@ class TranscribeBundle:
             fs_service=fs_service,
             config=config,
         )
+
+    def cleanup_inconsistencies(
+        self,
+        dry_run: bool,
+    ) -> None:
+        """Cleanup known existing bundle inconsistencies. Must be called explictily.
+
+        Will remove summary and/or commands (both in this instance and in files) if no transcript file exists.
+        """
+        if self.summary and not self.transcript:
+            self.summary = None
+            logger.warning(
+                f"Summary file found without transcript file for {self}. Removing summary file.",
+            )
+            if not dry_run:
+                self.fs_service.delete_file(self.get_bundle_dir() / SUMMARY_FILENAME)
+        if self.commands and not self.transcript:
+            self.commands = None
+            logger.warning(
+                f"Commands file found without transcript file for {self}. Removing commands file.",
+            )
+            if not dry_run:
+                self.fs_service.delete_file(self.get_bundle_dir() / COMMANDS_FILENAME)
 
     @staticmethod
     def _sort_audio_files_chronologically(
@@ -344,6 +362,7 @@ class TranscribeBundle:
                         config,
                         fs_service,
                     )
+                    bundle.cleanup_inconsistencies(dry_run)
                     bundles.append(bundle)
                 except ValueError as e:
                     logger.error(

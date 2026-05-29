@@ -178,6 +178,7 @@ class TestTranscribeBundleFromExistingDirectory:
             config=fake_config,
             fs_service=fake_fs,
         )
+        bundle.cleanup_inconsistencies(False)
 
         assert bundle.bundle_name == "2025-01-15_meeting"
         assert bundle.source_audios == [bundle_dir / "meeting.mp3"]
@@ -213,6 +214,7 @@ class TestTranscribeBundleFromExistingDirectory:
             config=fake_config,
             fs_service=fake_fs,
         )
+        bundle.cleanup_inconsistencies(False)
 
         assert bundle.transcript is not None
         assert isinstance(bundle.transcript, TranscriptFile)
@@ -231,38 +233,6 @@ class TestTranscribeBundleFromExistingDirectory:
         with pytest.raises(
             ValueError,
             match=r"Bundle directory is invalid.*no meta file",
-        ):
-            TranscribeBundle.from_existing_directory(
-                existing_dir=bundle_dir,
-                dry_run=False,
-                config=fake_config,
-                fs_service=fake_fs,
-            )
-
-    def test_from_existing_directory_raises_on_missing_audio_files(
-        self,
-        fake_config: TranscribeConfig,
-        fake_fs: FakeFileSystemService,
-    ) -> None:
-        """Test that loading raises if no audio files are found."""
-        bundle_dir = Path("/store/2025-01-15_meeting")
-        metadata_yaml = (
-            "---\n"
-            "original_audio_filenames: [meeting.mp3]\n"
-            "audio_length: null\n"
-            "transcript_model_used: null\n"
-            "summary_model_used: null\n"
-            "bundle_name_generated: false\n"
-            "keep_forever: false\n"
-            "---\n"
-        )
-
-        fake_fs.create_directory(bundle_dir)
-        fake_fs.write_file(bundle_dir / METADATA_FILENAME, metadata_yaml)
-
-        with pytest.raises(
-            ValueError,
-            match=r"Bundle directory is invalid.*no audio files",
         ):
             TranscribeBundle.from_existing_directory(
                 existing_dir=bundle_dir,
