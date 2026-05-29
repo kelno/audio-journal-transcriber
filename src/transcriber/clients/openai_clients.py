@@ -86,6 +86,7 @@ class OpenAIAudioClient(AudioTranscriptionClient):
                         text_chunks.append(text)
                         if not print_done:
                             logger.debug(f"Transcript streaming start: {text} [...]")
+                            print_done = True
                 except Exception as e:
                     logger.error(f"Error decoding line:\n{line}\n{e}")
                     raise
