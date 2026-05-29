@@ -1,6 +1,7 @@
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
+from typing import override
 
 from transcriber.config import TranscribeConfig
 from transcriber.constants import (
@@ -33,6 +34,10 @@ class TranscribeBundle:
     transcript: TextFile | None = None
     summary: TextFile | None = None
     commands: TextFile | None = None
+
+    @override
+    def __str__(self) -> str:
+        return f'TranscribeBundle:"{self.bundle_name}"'
 
     @staticmethod
     def _load_bundle_files(

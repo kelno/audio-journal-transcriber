@@ -127,7 +127,7 @@ class AIManager:
             {transcript}
         """
         summary = self.query_chat_completion(prompt)
-        logger.debug(f"get_ai_summary succeeded. Excerpt: {summary[:160]}...")
+        logger.debug(f"get_ai_summary succeeded. Excerpt: {summary[:160]} [...]")
         return summary
 
     def get_bundle_name_summary(self, summary: str) -> str:

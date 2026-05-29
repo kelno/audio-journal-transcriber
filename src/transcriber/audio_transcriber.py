@@ -91,7 +91,7 @@ class AudioTranscriber:
                     break  # skip remaining jobs in this bundle
                 except Exception as e:  # pylint: disable=broad-exception-caught
                     logger.error(
-                        f"Error processing [{job}] (skipping any remaining jobs for this bundle). {e} {traceback.format_exc()}",
+                        f"Error processing [{job}] (skipping any remaining jobs for this bundle). {e}",
                     )
                     if len(remaining_jobs_in_bundle) > 0:
                         unprocessed_bundles.append(remaining_jobs_in_bundle)
