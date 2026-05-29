@@ -196,7 +196,7 @@ class TranscribeBundle:
         """Sort audio files by extracted filename date, or fallback to modification time."""
         tz = config.general.timezone
 
-        def get_sort_key(file_path: Path) -> tuple:
+        def get_sort_key(file_path: Path) -> tuple[int, datetime]:
             # Try to extract date from filename
             filename_date = extract_date_from_recording_filename(file_path.name, tz)
             if filename_date:
@@ -256,20 +256,6 @@ class TranscribeBundle:
         else:
             msg = f"Could not find any date for file {audio_filename}"
             raise ValueError(msg)
-
-    def get_bundle_name(
-        self,
-    ) -> str:
-        """Get or generate the bundle name."""
-        if self.bundle_name is None:
-            self.bundle_name = self.generate_generic_bundle_name(
-                self.source_audios[0] if self.source_audios else None,
-                self.metadata.original_audio_filenames[0]
-                if self.metadata.original_audio_filenames
-                else "",
-                self.config,
-            )
-        return self.bundle_name
 
     @staticmethod
     def generate_bundle_name_date_prefix(
@@ -348,7 +334,7 @@ class TranscribeBundle:
         fs_service: FileSystemService,
     ) -> list["TranscribeBundle"]:
         """Find and load all bundles from output_dir."""
-        bundles = []
+        bundles: list[TranscribeBundle] = []
         for dir_path in fs_service.list_directory(output_dir):
             if fs_service.directory_exists(dir_path):
                 try:
@@ -373,8 +359,7 @@ class TranscribeBundle:
 
     def get_bundle_dir(self) -> Path:
         """Get the bundle directory path."""
-        bundle_name = self.get_bundle_name()
-        return self.config.general.store_dir / bundle_name
+        return self.config.general.store_dir / self.bundle_name
 
     def get_bundle_audio_paths(self) -> list[Path]:
         """Get all audio file paths within the bundle dir."""

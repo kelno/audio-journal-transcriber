@@ -1,6 +1,7 @@
 """Fake in-memory file system service for testing."""
 
 from pathlib import Path
+from typing import override
 
 from transcriber.file_system import FileSystemService
 
@@ -17,14 +18,17 @@ class FakeFileSystemService(FileSystemService):
         self.directories: set[Path] = set()
         self.operations: list[tuple[str, Path]] = []
 
+    @override
     def file_exists(self, path: Path) -> bool:
         """Check if a file exists."""
         return path in self.files
 
+    @override
     def directory_exists(self, path: Path) -> bool:
         """Check if a directory exists."""
         return path in self.directories
 
+    @override
     def read_file(self, path: Path) -> str:
         """Read file contents.
 
@@ -38,15 +42,17 @@ class FakeFileSystemService(FileSystemService):
         self.operations.append(("read", path))
         return self.files[path]
 
+    @override
     def write_file(self, path: Path, content: str) -> None:
         """Write file contents."""
         # Ensure parent directory exists
         parent = path.parent
-        if parent != Path(".") and not self.directory_exists(parent):
+        if not self.directory_exists(parent):
             self.create_directory(parent)
         self.files[path] = content
         self.operations.append(("write", path))
 
+    @override
     def delete_file(self, path: Path) -> None:
         """Delete a file.
 
@@ -60,19 +66,17 @@ class FakeFileSystemService(FileSystemService):
         del self.files[path]
         self.operations.append(("delete", path))
 
+    @override
     def create_directory(self, path: Path) -> None:
         """Create a directory."""
-        # Don't create root or current directory
-        if path == Path(".") or str(path) == "":
-            return
-
         self.directories.add(path)
         # Also create parent directories
         parent = path.parent
-        if parent != path and parent != Path("."):  # Avoid infinite recursion
+        if parent != path:  # Avoid infinite recursion
             self.create_directory(parent)
         self.operations.append(("mkdir", path))
 
+    @override
     def rename_directory(self, from_path: Path, to_path: Path) -> None:
         """Rename/move a directory.
 
@@ -110,19 +114,18 @@ class FakeFileSystemService(FileSystemService):
 
         self.operations.append(("rename", from_path))
 
+    @override
     def list_directory(self, path: Path) -> list[Path]:
         """List all items (files and directories) in a directory."""
         items = []
 
         # Add files directly in this directory
-        for file_path in self.files:
-            if file_path.parent == path:
-                items.append(file_path)
+        items = [item for item in self.files if item.parent == path]
 
         # Add directories directly in this directory
-        for dir_path in self.directories:
-            if dir_path.parent == path:
-                items.append(dir_path)
+        items.extend(
+            dir_path for dir_path in self.directories if dir_path.parent == path
+        )
 
         return items
 

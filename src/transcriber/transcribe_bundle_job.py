@@ -25,9 +25,9 @@ class TranscribeBundleJob(ABC):
     def run(self, ai_manager: AIManager, config: TranscribeConfig) -> None:
         """Perform the job's main work."""
 
+    @override
     def __str__(self) -> str:
         """Return a string representation of the job."""
-        # not using get_bundle_name because it might not be usable yet
         return f"{self.__class__.__name__}({self.bundle.bundle_name})"
 
 
@@ -56,8 +56,8 @@ class CreateBundleJob(TranscribeBundleJob):
             raise FileNotFoundError(error_msg)
 
         final_audio_paths = self.bundle.get_bundle_audio_paths()
-        audio_lengths = []
-        files_to_move = []
+        audio_lengths: list[float] = []
+        files_to_move: list[tuple[Path, Path]] = []
 
         # Check all files and validate
         for source_path, final_path in zip(
@@ -121,7 +121,7 @@ class TranscriptionJob(TranscribeBundleJob):
         logger.info(f"Transcribing {len(self.bundle.source_audios)} audio file(s)")
 
         if not self.dry_run:
-            transcripts = []
+            transcripts: list[str] = []
             for audio_path in self.bundle.source_audios:
                 logger.debug(f"Transcribing {audio_path}")
                 transcript_content = ai_manager.transcribe_audio(audio_path)
@@ -163,7 +163,7 @@ class SummaryJob(TranscribeBundleJob):
             ValueError: If transcript is not available for summarization.
 
         """
-        logger.info(f"Summarizing {self.bundle.get_bundle_name()}")
+        logger.info(f"Summarizing {self.bundle.bundle_name}")
 
         if self.dry_run:
             return
@@ -188,7 +188,7 @@ class BundleNameJob(TranscribeBundleJob):
         config: TranscribeConfig,
     ) -> None:
         """Main function."""
-        logger.info(f"Generating bundle name for {self.bundle.get_bundle_name()}")
+        logger.info(f"Generating bundle name for {self.bundle.bundle_name}")
         if self.dry_run:
             return
 
@@ -241,7 +241,7 @@ class GatherCommandsJob(TranscribeBundleJob):
         config: TranscribeConfig,
     ) -> None:
         """Main function."""
-        logger.info(f"Gathering commands for {self.bundle.get_bundle_name()}")
+        logger.info(f"Gathering commands for {self.bundle.bundle_name}")
         if self.dry_run:
             return
 

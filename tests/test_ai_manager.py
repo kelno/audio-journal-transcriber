@@ -113,7 +113,7 @@ class TestAIManagerChatCompletion:
         messages = fake_chat_client.completion_calls[0]
 
         # Check structure
-        assert len(messages) == 2  # noqa: PLR2004
+        assert len(messages) == 2
         assert messages[0]["role"] == "system"
         assert messages[1]["role"] == "user"
         assert messages[1]["content"] == "My prompt"

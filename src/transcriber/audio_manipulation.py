@@ -61,9 +61,9 @@ class AudioManipulation:
 
         """
         try:
-            audio = AudioSegment.from_file(str(file_path))
-            duration = audio.duration_seconds
-            if duration <= 0:
+            audio: AudioSegment = AudioSegment.from_file(str(file_path))
+            duration: float = audio.duration_seconds
+            if duration <= 0.0:
                 error_msg = "Audio duration is zero or negative"
                 raise ValueError(error_msg)  # noqa: TRY301
 

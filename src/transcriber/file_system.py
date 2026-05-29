@@ -2,6 +2,7 @@
 
 from abc import ABC, abstractmethod
 from pathlib import Path
+from typing import override
 
 
 class FileSystemService(ABC):
@@ -114,34 +115,42 @@ class FileSystemService(ABC):
 class RealFileSystemService(FileSystemService):
     """Real file system operations."""
 
+    @override
     def file_exists(self, path: Path) -> bool:
         """Check if a file exists."""
         return path.is_file()
 
+    @override
     def directory_exists(self, path: Path) -> bool:
         """Check if a directory exists."""
         return path.is_dir()
 
+    @override
     def read_file(self, path: Path) -> str:
         """Read file contents."""
         return path.read_text(encoding="utf-8")
 
+    @override
     def write_file(self, path: Path, content: str) -> None:
         """Write file contents."""
         path.write_text(content, encoding="utf-8")
 
+    @override
     def delete_file(self, path: Path) -> None:
         """Delete a file."""
         path.unlink()
 
+    @override
     def create_directory(self, path: Path) -> None:
         """Create a directory."""
         path.mkdir(parents=True, exist_ok=True)
 
+    @override
     def rename_directory(self, from_path: Path, to_path: Path) -> None:
         """Rename/move a directory."""
         from_path.rename(to_path)
 
+    @override
     def list_directory(self, path: Path) -> list[Path]:
         """List all items (files and directories) in a directory."""
         return list(path.glob("*"))

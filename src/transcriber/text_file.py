@@ -1,4 +1,4 @@
-from abc import abstractmethod
+from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
 from typing import override
@@ -12,7 +12,7 @@ from transcriber.file_system import FileSystemService
 
 
 @dataclass
-class TextFile:
+class TextFile(ABC):
     """Base class for text files in a bundle."""
 
     text: str

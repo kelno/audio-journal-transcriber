@@ -16,6 +16,7 @@ from transcriber.transcribe_bundle_job import (
     DeleteAudioFileJob,
     GatherCommandsJob,
     SummaryJob,
+    TranscribeBundleJob,
     TranscriptionJob,
 )
 from transcriber.utils import (
@@ -34,12 +35,23 @@ class AudioTranscriber:
     dry_run: bool
     ai_manager: AIManager
     config: TranscribeConfig
-    fs_service: FileSystemService | None = None
+    fs_service: FileSystemService
+
+    def __init__(
+        self,
+        dry_run: bool,
+        ai_manager: AIManager,
+        config: TranscribeConfig,
+        fs_service: FileSystemService | None = None,
+    ) -> None:
+        """Initialize the audio transcriber."""
+        self.dry_run = dry_run
+        self.ai_manager = ai_manager
+        self.config = config
+        self.fs_service = fs_service or RealFileSystemService()
 
     def __post_init__(self) -> None:
         """Initialize the audio transcriber."""
-        if self.fs_service is None:
-            self.fs_service = RealFileSystemService()  # type: ignore[union-attr]
         if self.dry_run:
             logger.warning("!!! DRY RUN MODE !!!")
         logger.info(
@@ -104,7 +116,7 @@ class AudioTranscriber:
 
     def gather_pending_audio_files(self, input_dir: Path) -> list[TranscribeBundle]:
         """Import audio files from the input directory as TranscriptBundle instances."""
-        bundles = []
+        bundles: list[TranscribeBundle] = []
 
         for path in input_dir.rglob("*"):
             if path.is_file() and is_handled_audio_file(path.suffix):
@@ -169,10 +181,9 @@ class AudioTranscriber:
         config: TranscribeConfig,
     ) -> BundleJobs:
         """Gather transcription jobs from this bundle. Jobs needs to be run in order."""
-        jobs = []
+        jobs: list[TranscribeBundleJob] = []
 
-        bundle_name = bundle.get_bundle_name()
-        logger.debug(f"Gathering jobs for bundle: [{bundle_name}]")
+        logger.debug(f"Gathering jobs for bundle: [{bundle.bundle_name}]")
 
         if bundle.source_audios:
             is_new_audio = not file_is_in_directory_tree(

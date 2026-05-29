@@ -34,7 +34,7 @@ class MetadataFile(Metadata):
         """
         if text.startswith("---"):
             parts = text.split("---", 2)
-            if len(parts) >= 2:  # noqa: PLR2004
+            if len(parts) >= 2:
                 _, front, _body = parts
                 return front.strip()
         return None

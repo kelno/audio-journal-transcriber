@@ -1,0 +1,12 @@
+{
+  "include": ["src", "tests"],
+  "venv": ".venv",
+  "exclude": ["**/.venv", "**/.venv/**"],
+
+  "reportImplicitStringConcatenation": false,
+  "reportMissingTypeStubs": false,
+  "reportUnusedCallResult": false,
+  "reportAny": false,
+  "reportUnknownMemberType": false,
+  "reportUnknownVariableType": false,
+}

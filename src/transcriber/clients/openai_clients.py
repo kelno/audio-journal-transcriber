@@ -1,5 +1,8 @@
+# pyright: reportAny=false, reportArgumentType=false
+
 import json
 from pathlib import Path
+from typing import final, override
 from urllib.parse import urljoin
 
 import requests
@@ -14,6 +17,7 @@ from .clients import AudioTranscriptionClient, ChatCompletionClient
 HTTP_OK = 200
 
 
+@final
 class OpenAIAudioClient(AudioTranscriptionClient):
     """Real implementation for OpenAI audio transcription API."""
 
@@ -26,6 +30,7 @@ class OpenAIAudioClient(AudioTranscriptionClient):
         """
         self.config = config
 
+    @override
     def transcribe(self, audio_path: Path) -> str:
         """Transcribe audio file using OpenAI-compatible API with streaming."""
         logger.debug(f"Transcribing: {audio_path}")
@@ -66,7 +71,7 @@ class OpenAIAudioClient(AudioTranscriptionClient):
 
         """
         logger.debug("Processing streaming response")
-        text_chunks = []
+        text_chunks: list[str] = []
 
         for line in response.iter_lines():
             if line:
@@ -88,6 +93,7 @@ class OpenAIAudioClient(AudioTranscriptionClient):
         return complete_transcript
 
 
+@final
 class OpenAIChatClient(ChatCompletionClient):
     """Real implementation for OpenAI chat completion API."""
 
@@ -100,16 +106,19 @@ class OpenAIChatClient(ChatCompletionClient):
         """
         self.config = config
 
+    @override
     def create_completion(self, messages: list[dict[str, str]]) -> str:
         """Generate a chat completion using OpenAI API."""
         client = OpenAI(
             base_url=self.config.api_base_url,
             api_key=self.config.api_key,
         )
-
         completion = client.chat.completions.create(
             model=self.config.model,
             messages=messages,
+            extra_body={
+                "parent_id": None,
+            },  # Fixes an issue with OpenWebUI 0.9.5, until https://github.com/open-webui/open-webui/commit/bc244fdc90504824b76654880898bf3f6649c299 is published
         )
 
         if len(completion.choices) == 0:
