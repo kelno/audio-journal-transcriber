@@ -72,6 +72,7 @@ class OpenAIAudioClient(AudioTranscriptionClient):
         """
         logger.debug("Processing streaming response")
         text_chunks: list[str] = []
+        print_done = False
 
         for line in response.iter_lines():
             if line:
@@ -83,12 +84,12 @@ class OpenAIAudioClient(AudioTranscriptionClient):
                     if "text" in result:
                         text = result["text"]
                         text_chunks.append(text)
-                        print(text, end="", flush=True)
+                        if not print_done:
+                            logger.debug(f"Transcript streaming start: {text} [...]")
                 except Exception as e:
                     logger.error(f"Error decoding line:\n{line}\n{e}")
                     raise
 
-        print("\n")
         complete_transcript = " ".join(text_chunks)
         return complete_transcript
 
