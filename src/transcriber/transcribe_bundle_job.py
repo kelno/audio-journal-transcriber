@@ -198,8 +198,8 @@ class BundleNameJob(TranscribeBundleJob):
 
         try:
             bundle_name = ai_manager.get_bundle_name_summary(self.bundle.summary.text)
-        except Exception:
-            logger.error(f"{self}: Failed to generate bundle name")
+        except Exception as e:
+            logger.error(f"{self}: Failed to generate bundle name: {e}")
             raise
 
         logger.info(f"Generated bundle name: {bundle_name}")
@@ -252,8 +252,8 @@ class GatherCommandsJob(TranscribeBundleJob):
         commands: list[str] = []
         try:
             commands = ai_manager.extract_commands(self.bundle.transcript.text)
-        except Exception:
-            logger.error(f"{self}: Failed to extract commands")
+        except Exception as e:
+            logger.error(f"{self}: Failed to extract commands: {e}")
             raise
 
         logger.debug(f"{self}: Successfully extracted commands (len {len(commands)}")

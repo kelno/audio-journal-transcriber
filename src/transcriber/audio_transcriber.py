@@ -89,9 +89,9 @@ class AudioTranscriber:
                         logger.info(f"Removing too short audio file: {e.source_audio}")
                         e.source_audio.unlink()
                     break  # skip remaining jobs in this bundle
-                except Exception:  # pylint: disable=broad-exception-caught #noqa: BLE001
+                except Exception as e:  # pylint: disable=broad-exception-caught
                     logger.error(
-                        f"Error processing [{job}] (skipping any remaining jobs for this bundle). {traceback.format_exc()}",
+                        f"Error processing [{job}] (skipping any remaining jobs for this bundle). {e} {traceback.format_exc()}",
                     )
                     if len(remaining_jobs_in_bundle) > 0:
                         unprocessed_bundles.append(remaining_jobs_in_bundle)

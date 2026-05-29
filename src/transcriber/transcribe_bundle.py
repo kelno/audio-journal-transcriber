@@ -36,7 +36,8 @@ class TranscribeBundle:
 
     @staticmethod
     def _load_bundle_files(
-        existing_dir: Path, fs_service: FileSystemService
+        existing_dir: Path,
+        fs_service: FileSystemService,
     ) -> tuple[
         MetadataFile,
         list[Path],

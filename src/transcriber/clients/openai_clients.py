@@ -84,8 +84,8 @@ class OpenAIAudioClient(AudioTranscriptionClient):
                         text = result["text"]
                         text_chunks.append(text)
                         print(text, end="", flush=True)
-                except Exception:
-                    logger.error(f"Error decoding line:\n{line}")
+                except Exception as e:
+                    logger.error(f"Error decoding line:\n{line}\n{e}")
                     raise
 
         print("\n")

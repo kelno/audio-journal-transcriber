@@ -41,7 +41,9 @@ class AudioManipulation:
         elif isinstance(exception, CouldntDecodeError):
             logger.error(f"Unsupported or corrupted audio file: {file_path}")
         else:
-            logger.error(f"Unexpected error reading {file_path}")
+            logger.error(
+                f"Unexpected error {type(exception).__name__}: reading {file_path}",
+            )
         raise exception
 
     @staticmethod
@@ -72,7 +74,7 @@ class AudioManipulation:
             AudioManipulation._handle_audio_error(file_path, e)
         except CouldntDecodeError as e:
             AudioManipulation._handle_audio_error(file_path, e)
-        except Exception as e:  # pylint: disable=broad-exception-caught # noqa: BLE001
+        except Exception as e:  # pylint: disable=broad-exception-caught
             AudioManipulation._handle_audio_error(file_path, e)
 
         # This line should never be reached, but satisfies the linter
