@@ -424,11 +424,7 @@ class TranscribeBundle:
         commands: list[str],
     ) -> None:
         """Set and write the commands to memory and disk."""
-        self.metadata.write(self.get_bundle_dir(), self.fs_service)
-        # join commands list into a single string
-        # with each command on a new line
-        commands_str = "\n".join(commands)
-        self.commands = CommandsFile(commands_str)
+        self.commands = CommandsFile.from_command_list(commands)
         self.commands.write(self.get_bundle_dir(), self.fs_service)
 
     def init_metadata(

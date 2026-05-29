@@ -6,7 +6,11 @@ import pytest
 from transcriber.ai_manager import AIManager
 from transcriber.config import AudioConfig, GeneralConfig, TextConfig, TranscribeConfig
 
-from .fake_clients import FakeAudioClient, FakeChatClient, FakeChatClientWithErrors
+from .fake_clients import (
+    FakeAudioClient,
+    FakeChatClient,
+    FakeChatClientWithErrors,
+)
 
 
 @pytest.fixture

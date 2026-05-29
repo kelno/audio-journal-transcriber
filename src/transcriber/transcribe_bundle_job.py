@@ -259,5 +259,5 @@ class GatherCommandsJob(TranscribeBundleJob):
             logger.error(f"{self}: Failed to extract commands: {e}")
             raise
 
-        logger.debug(f"{self}: Successfully extracted commands (len {len(commands)}")
+        logger.debug(f"{self}: Successfully extracted commands (len {len(commands)})")
         self.bundle.set_and_write_commands(commands)
