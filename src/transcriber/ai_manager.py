@@ -30,12 +30,12 @@ class AIManager:
         logger.debug(f"AIManager Transcribing: {audio_path}")
         return self.audio_client.transcribe(audio_path)
 
-    def extract_commands(self, text: str) -> list[str]:
+    def extract_commands(self, text: str, bundle_name: str) -> list[str]:
         """Extract commands from text.
 
         Delegates to the injected text_client instead of doing HTTP directly.
         """
-        logger.debug(f"AIManager Extracting commands from: {text}")
+        logger.debug(f"AIManager Extracting commands for {bundle_name}")
         commands: list[str] = []
         prompt = f"""
         You are part of an automated pipeline that transcribes personal audio recordings and summarizes them.

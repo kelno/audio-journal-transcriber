@@ -292,7 +292,10 @@ class TestAIManagerBundleName:
             config=fake_config,
         )
 
-        commands = ai_manager.extract_commands("Whatever text without command")
+        commands = ai_manager.extract_commands(
+            "Whatever text without command",
+            "TestBundle",
+        )
         assert commands == []
 
     def test_extract_commands_with_commands(
@@ -320,5 +323,6 @@ class TestAIManagerBundleName:
             f"""Hello, start command {command1} end command.
             Then the next day I did enjoy the sun. start command {command2} end commend.
             That's it for today!""",
+            "TestBundle",
         )
         assert commands == [command1, command2]
