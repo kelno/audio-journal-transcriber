@@ -35,9 +35,9 @@ class TranscribeBundle:
     bundle_name: str  # directory name is derived from here
     metadata: MetadataFile
     source_audios: list[Path] = field(default_factory=list)
-    transcript: TextFile | None = None
-    summary: TextFile | None = None
-    commands: TextFile | None = None
+    transcript: TranscriptFile | None = None
+    summary: SummaryFile | None = None
+    commands: CommandsFile | None = None
 
     @override
     def __str__(self) -> str:
@@ -258,9 +258,12 @@ class TranscribeBundle:
                 self.transcript.unlink(self.get_bundle_dir(), self.fs_service)
             if self.summary:
                 self.summary.unlink(self.get_bundle_dir(), self.fs_service)
+            if self.commands:
+                self.commands.unlink(self.get_bundle_dir(), self.fs_service)
 
         self.transcript = None
         self.summary = None
+        self.commands = None
 
     @staticmethod
     def get_date_for_filename(
