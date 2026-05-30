@@ -1,9 +1,10 @@
 from pathlib import Path
-from typing import override
+from typing import final, override
 
 from transcriber.clients.clients import AudioTranscriptionClient, ChatCompletionClient
 
 
+@final
 class FakeAudioClient(AudioTranscriptionClient):
     """Test fake that returns hardcoded transcriptions."""
 
@@ -17,12 +18,14 @@ class FakeAudioClient(AudioTranscriptionClient):
         self.response = response
         self.transcribed_files: list[Path] = []  # Track which files were transcribed
 
+    @override
     def transcribe(self, audio_path: Path) -> str:
         """Return the fake response, tracking which files were transcribed."""
         self.transcribed_files.append(audio_path)
         return self.response
 
 
+@final
 class FakeChatClient(ChatCompletionClient):
     """Test fake that returns hardcoded completions."""
 
@@ -43,6 +46,7 @@ class FakeChatClient(ChatCompletionClient):
         return self.response
 
 
+@final
 class FakeChatClientWithErrors(ChatCompletionClient):
     """Test fake that simulates API errors."""
 

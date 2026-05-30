@@ -89,7 +89,7 @@ def generic_bundle(
         config=fake_config,
     )
 
-    fake_fs.write_file(generic_bundle_dir / METADATA_FILENAME, "Metadata")
+    bundle.init_metadata([audio_filename], [3600.0])  # create valid metadata + write file
     fake_fs.write_file(generic_bundle_dir / audio_filename, "Audio")
     return bundle
 
@@ -584,27 +584,11 @@ class TestGatherExistingBundles:
         self,
         fake_config: TranscribeConfig,
         fake_fs: FakeFileSystemService,
+        generic_bundle: TranscribeBundle,
     ) -> None:
         """Test that gather_existing_bundles skips invalid bundles."""
         store_dir = fake_config.general.store_dir
-        valid_bundle_dir = store_dir / "2025-01-15_valid"
         invalid_bundle_dir = store_dir / "2025-01-15_invalid"
-
-        metadata_yaml = (
-            "---\n"
-            "original_audio_filenames: [meeting.mp3]\n"
-            "audio_length: null\n"
-            "transcript_model_used: null\n"
-            "summary_model_used: null\n"
-            "bundle_name_generated: false\n"
-            "keep_forever: false\n"
-            "---\n"
-        )
-
-        # Create valid bundle
-        fake_fs.create_directory(valid_bundle_dir)
-        fake_fs.write_file(valid_bundle_dir / METADATA_FILENAME, metadata_yaml)
-        fake_fs.write_file(valid_bundle_dir / "meeting.mp3", "audio")
 
         # Create invalid bundle (missing metadata)
         fake_fs.create_directory(invalid_bundle_dir)
@@ -617,8 +601,9 @@ class TestGatherExistingBundles:
             fs_service=fake_fs,
         )
 
+        # at this point we have 1 valid bundle (generic_bundle) and 1 invalid one
         assert len(bundles) == 1
-        assert bundles[0].bundle_name == "2025-01-15_valid"
+        assert bundles[0].bundle_name == generic_bundle.bundle_name
 
 
 class TestTranscribeBundleIntegration:
