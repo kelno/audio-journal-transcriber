@@ -54,11 +54,11 @@ class CommandsFile(TextFile):
             self.commands = [
                 Command.from_dict(cmd) for cmd in commands_data if isinstance(cmd, dict)
             ]
-        except yaml.YAMLError as e:
-            logger.warning(
-                f"Failed to parse YAML commands: {e}. Using empty command list.",
+        except yaml.YAMLError:
+            logger.error(
+                f"Failed to parse YAML commands: {self.text}.",
             )
-            self.commands = []
+            raise
 
     @override
     def get_filename(self) -> str:
