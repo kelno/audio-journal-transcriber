@@ -7,7 +7,7 @@ from typing import override
 
 import yaml
 
-from transcriber.commands.commands import Command
+from transcriber.commands.command import Command
 from transcriber.constants import COMMANDS_FILENAME
 from transcriber.files.file_system import FileSystemService
 from transcriber.files.text_file import TextFile

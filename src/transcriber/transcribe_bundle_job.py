@@ -1,10 +1,13 @@
 import shutil
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import override
 
 from transcriber.audio_manipulation import AudioManipulation
+from transcriber.commands.command_interpreter import interpret_command
+from transcriber.commands.command_type import COMMAND_REGISTRY
 
 from .ai_manager import AIManager
 from .config import TranscribeConfig
@@ -290,4 +293,34 @@ class RunCommandsJob(TranscribeBundleJob):
             return
 
         for cmd in self.bundle.commands.commands:
-            pass  # NYI
+            if cmd.executed:
+                logger.debug(f"Skipping already executed command: {cmd.text}")
+                continue
+
+            try:
+                if cmd.matched_type is not None:
+                    matched_type = cmd.matched_type
+                    logger.debug(
+                        f"Using existing match for '{cmd.text}': {matched_type.value}",
+                    )
+                else:
+                    matched_type = interpret_command(cmd.text, ai_manager)
+                    cmd.matched_type = matched_type
+                    logger.debug(
+                        f"Matched command '{cmd.text}' to type: {matched_type.value}",
+                    )
+                    # NYI: persist the match to command file
+
+                logger.info(f"Executing {matched_type} command: {cmd.text}")
+                handler = COMMAND_REGISTRY[matched_type].handler
+                if handler:
+                    handler(self.bundle, config)
+
+                cmd.executed = True
+                cmd.executed_at = datetime.now(config.general.timezone)
+                # NYI persist execution to file
+
+            except Exception:
+                # On error, stop processing remaining commands to avoid partial state.
+                logger.error(f"Failed to process command '{cmd.text}'")
+                raise

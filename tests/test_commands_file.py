@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from transcriber.commands import Command
+from transcriber.commands.command import Command
 from transcriber.files.commands_file import CommandsFile
 
 from .fake_file_system import FakeFileSystemService
