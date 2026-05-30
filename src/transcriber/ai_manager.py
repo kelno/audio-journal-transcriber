@@ -97,9 +97,7 @@ class AIManager:
 
         """
         extra_context_prompt = (
-            f"Some extra context:\n{self.config.text.extra_context}"
-            if self.config.text.extra_context is not None
-            else ""
+            f"Some extra context:\n{self.config.text.extra_context}" if self.config.text.extra_context is not None else ""
         )
         prompt = f"""
             You are part of an automated pipeline that transcribes personal audio recordings and summarizes them.
@@ -151,9 +149,7 @@ class AIManager:
         bundle_name = self.query_chat_completion(prompt)
 
         # Sanitize (Source: https://stackoverflow.com/a/7406369)
-        bundle_name = "".join(
-            c for c in bundle_name if c.isalpha() or c.isdigit() or c == " "
-        ).rstrip()
+        bundle_name = "".join(c for c in bundle_name if c.isalpha() or c.isdigit() or c == " ").rstrip()
 
         logger.debug(f"AI generated bundle name: {bundle_name}")
         if len(bundle_name) > BUNDLE_NAME_MAX_LENGTH:

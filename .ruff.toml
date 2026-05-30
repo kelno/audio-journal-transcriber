@@ -1,5 +1,5 @@
 indent-width = 4
-line-length = 150
+line-length = 140
 
 [lint]
 select = ["ALL", "D212"]

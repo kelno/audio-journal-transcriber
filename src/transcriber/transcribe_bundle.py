@@ -205,10 +205,7 @@ class TranscribeBundle:
         # Check if existing audio files match metadata
         original_audio_filenames = set(self.metadata.original_audio_filenames)
         current_audio_filenames = {f.name for f in self.source_audios}
-        if (
-            current_audio_filenames
-            and current_audio_filenames != original_audio_filenames
-        ):
+        if current_audio_filenames and current_audio_filenames != original_audio_filenames:
             logger.info(
                 f"Bundle {self.bundle_name} has audio files not matching metadata. "
                 f"Original: {original_audio_filenames}, Found: {current_audio_filenames}",
@@ -327,11 +324,7 @@ class TranscribeBundle:
         The date is either the file modification date or the bundle date, whichever is latest.
         """
         tz = self.config.general.timezone
-        if (
-            not self.source_audios
-            or self.metadata.keep_forever
-            or self.config.general.delete_source_audio_after_days <= 0
-        ):
+        if not self.source_audios or self.metadata.keep_forever or self.config.general.delete_source_audio_after_days <= 0:
             return False
 
         bundle_date = self.get_date_from_bundle_name()
@@ -452,9 +445,7 @@ class TranscribeBundle:
 
         prefix = self.generate_bundle_name_date_prefix(
             self.source_audios[0] if self.source_audios else None,
-            self.metadata.original_audio_filenames[0]
-            if self.metadata.original_audio_filenames
-            else "",
+            self.metadata.original_audio_filenames[0] if self.metadata.original_audio_filenames else "",
             self.config,
         )
         new_bundle_name = f"{prefix} {bundle_name_summary}"

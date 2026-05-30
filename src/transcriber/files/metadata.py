@@ -81,8 +81,6 @@ class MetadataFile(Metadata):
             fs_service: FileSystemService instance for writing files.
 
         """
-        yaml_text = (
-            f"---\n{yaml.safe_dump(asdict(self), sort_keys=False).strip()}\n---\n"
-        )
+        yaml_text = f"---\n{yaml.safe_dump(asdict(self), sort_keys=False).strip()}\n---\n"
         output_file = bundle_dir / METADATA_FILENAME
         fs_service.write_file(output_file, yaml_text)

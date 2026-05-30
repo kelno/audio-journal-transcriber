@@ -93,20 +93,14 @@ class FakeFileSystemService(FileSystemService):
         self.directories.add(to_path)
 
         # Move all files under this directory
-        files_to_move = {
-            path: content
-            for path, content in self.files.items()
-            if str(path).startswith(str(from_path))
-        }
+        files_to_move = {path: content for path, content in self.files.items() if str(path).startswith(str(from_path))}
         for old_path, content in files_to_move.items():
             new_path = Path(str(old_path).replace(str(from_path), str(to_path), 1))
             del self.files[old_path]
             self.files[new_path] = content
 
         # Move all subdirectories
-        dirs_to_move = [
-            d for d in self.directories if str(d).startswith(str(from_path))
-        ]
+        dirs_to_move = [d for d in self.directories if str(d).startswith(str(from_path))]
         for old_dir in dirs_to_move:
             self.directories.remove(old_dir)
             new_dir = Path(str(old_dir).replace(str(from_path), str(to_path), 1))
@@ -123,9 +117,7 @@ class FakeFileSystemService(FileSystemService):
         items = [item for item in self.files if item.parent == path]
 
         # Add directories directly in this directory
-        items.extend(
-            dir_path for dir_path in self.directories if dir_path.parent == path
-        )
+        items.extend(dir_path for dir_path in self.directories if dir_path.parent == path)
 
         return items
 

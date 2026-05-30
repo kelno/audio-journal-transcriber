@@ -46,14 +46,10 @@ class CommandsFile(TextFile):
                 ]
                 return
             elif not isinstance(commands_data, list):
-                msg = (
-                    f"Expected top-level YAML list, got {type(commands_data).__name__}"
-                )
+                msg = f"Expected top-level YAML list, got {type(commands_data).__name__}"
                 raise TypeError(msg)
 
-            self.commands = [
-                Command.from_dict(cmd) for cmd in commands_data if isinstance(cmd, dict)
-            ]
+            self.commands = [Command.from_dict(cmd) for cmd in commands_data if isinstance(cmd, dict)]
         except yaml.YAMLError:
             logger.error(
                 f"Failed to parse YAML commands: {self.text}.",

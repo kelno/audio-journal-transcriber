@@ -55,8 +55,7 @@ class AudioTranscriber:
         if self.dry_run:
             logger.warning("!!! DRY RUN MODE !!!")
         logger.info(
-            f"{type(self).__name__} initialized with\n"
-            f"General configuration: {self.config.general}",
+            f"{type(self).__name__} initialized with\nGeneral configuration: {self.config.general}",
         )
 
     def process_jobs(self, all_jobs_bundles: list[BundleJobs]) -> list[BundleJobs]:
@@ -213,9 +212,7 @@ class AudioTranscriber:
         if config.text.summary_enabled:
             if not bundle.summary:
                 # First check if transcript exists or TranscriptionJob is scheduled
-                transcript_exists_or_scheduled = bundle.transcript is not None or any(
-                    isinstance(j, TranscriptionJob) for j in jobs
-                )
+                transcript_exists_or_scheduled = bundle.transcript is not None or any(isinstance(j, TranscriptionJob) for j in jobs)
                 if transcript_exists_or_scheduled:
                     job = SummaryJob(bundle, dry_run)
                     jobs.append(job)

@@ -1,10 +1,12 @@
 from pathlib import Path
+from typing import final
 
 
 class AudioTranscriberException(Exception):
     """Base exception for audio transcriber errors."""
 
 
+@final
 class TooShortException(AudioTranscriberException):
     """Audio length is too short to process."""
 
@@ -14,5 +16,6 @@ class TooShortException(AudioTranscriberException):
         self.source_audio = source_audio
 
 
+@final
 class EmptyTranscriptException(AudioTranscriberException):
     """Transcript is empty after transcription."""

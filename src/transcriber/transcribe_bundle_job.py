@@ -302,7 +302,7 @@ class RunCommandsJob(TranscribeBundleJob):
                     logger.debug(f"Matched command '{cmd.text}' to type: {matched_type.value}")
                     # NYI: persist the match to command file
 
-                logger.info(f"Executing {matched_type} command: {cmd.text}")
+                logger.info(f"Executing {matched_type} command, original text: {cmd.text}")
                 handler = COMMAND_REGISTRY[matched_type].handler
                 if handler:
                     handler(self.bundle, config)

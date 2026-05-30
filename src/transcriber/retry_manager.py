@@ -12,6 +12,7 @@ class RetryManager:
         Args:
             initial_delay: Initial retry delay in seconds.
             max_delay: Maximum retry delay in seconds.
+
         """
         self.initial_delay = initial_delay
         self.max_delay = max_delay

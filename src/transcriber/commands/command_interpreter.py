@@ -30,9 +30,7 @@ def interpret_command(command_string: str, ai_manager: AIManager) -> CommandType
 
     # Build the command registry description for the prompt
     command_descriptions = "\n".join(
-        f"- {meta.command_type.value.upper()}: {meta.description} "
-        f"(aliases: {', '.join(meta.aliases or [])})"
-        for meta in COMMAND_REGISTRY.values()
+        f"- {meta.command_type.value.upper()}: {meta.description} (aliases: {', '.join(meta.aliases or [])})" for meta in COMMAND_REGISTRY.values()
     )
 
     prompt = f"""

@@ -29,9 +29,7 @@ class FileWatcher(FileSystemEventHandler):
     delay: Fire events after no file changes in the whole input_dir for given time
     """
 
-    def __init__(
-        self, input_dir: Path, callback: Callback, stable_delay: float = 5.0
-    ) -> None:
+    def __init__(self, input_dir: Path, callback: Callback, stable_delay: float = 5.0) -> None:
         self.input_dir = input_dir
         self.callback = callback
         self.stable_delay = stable_delay
