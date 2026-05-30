@@ -138,9 +138,7 @@ class TranscriptionJob(TranscribeBundleJob):
 
             # Update original_audio_filenames to reflect current state
             # This ensures that if new files were added, metadata is synced
-            self.bundle.metadata.original_audio_filenames = [
-                audio.name for audio in self.bundle.source_audios
-            ]
+            self.bundle.metadata.original_audio_filenames = [audio.name for audio in self.bundle.source_audios]
             self.bundle.metadata.write(
                 self.bundle.get_bundle_dir(),
                 self.bundle.fs_service,
@@ -256,10 +254,7 @@ class GatherCommandsJob(TranscribeBundleJob):
 
         commands: list[str] = []
         try:
-            commands = ai_manager.extract_commands(
-                self.bundle.transcript.text,
-                self.bundle.bundle_name,
-            )
+            commands = ai_manager.extract_commands(self.bundle.transcript.text, self.bundle.bundle_name)
         except Exception as e:
             logger.error(f"{self}: Failed to extract commands: {e}")
             raise
@@ -300,15 +295,11 @@ class RunCommandsJob(TranscribeBundleJob):
             try:
                 if cmd.matched_type is not None:
                     matched_type = cmd.matched_type
-                    logger.debug(
-                        f"Using existing match for '{cmd.text}': {matched_type.value}",
-                    )
+                    logger.debug(f"Using existing match for '{cmd.text}': {matched_type.value}")
                 else:
                     matched_type = interpret_command(cmd.text, ai_manager)
                     cmd.matched_type = matched_type
-                    logger.debug(
-                        f"Matched command '{cmd.text}' to type: {matched_type.value}",
-                    )
+                    logger.debug(f"Matched command '{cmd.text}' to type: {matched_type.value}")
                     # NYI: persist the match to command file
 
                 logger.info(f"Executing {matched_type} command: {cmd.text}")

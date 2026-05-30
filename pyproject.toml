@@ -1,6 +1,6 @@
 [project]
 name = "audio-journal-transcriber"
-version = "0.1.1"
+version = "0.2.7"
 description = "Automated pipeline for transcribing and summarizing personal recordings."
 authors = [{ name = "Kelno", email = "kelnowm@gmail.com" }]
 requires-python = ">=3.13"
@@ -24,13 +24,5 @@ dependencies = [
 # This creates a console command
 transcriber = "transcriber.cli:main"
 
-[project.optional-dependencies]
-dev = [
-   "black",
-]
-
 [tool.uv]
 package = true
-
-[tool.black]
-line-length = 160
