@@ -83,7 +83,6 @@ class TranscribeBundle:
     def from_existing_directory(
         cls,
         existing_dir: Path,
-        dry_run: bool,
         config: TranscribeConfig,
         fs_service: FileSystemService,
     ) -> "TranscribeBundle":
@@ -91,7 +90,6 @@ class TranscribeBundle:
 
         Args:
             existing_dir: Path to the existing bundle directory.
-            dry_run: Whether to simulate operations without making changes.
             config: The configuration object containing timezone and other settings.
             fs_service: FileSystemService instance for file operations.
 
@@ -111,10 +109,6 @@ class TranscribeBundle:
         # Sort audio files chronologically
         source_audios = cls._sort_audio_files_chronologically(source_audios, config)
 
-        # Check if there are new unprocessed audio files
-        found_filenames = {f.name for f in source_audios}
-        original_filenames = set(metadata.original_audio_filenames)
-
         bundle = TranscribeBundle(
             bundle_name=bundle_name,
             metadata=metadata,
@@ -125,15 +119,6 @@ class TranscribeBundle:
             fs_service=fs_service,
             config=config,
         )
-
-        # TODO: move that out of constructor
-        if found_filenames and found_filenames != original_filenames:
-            logger.info(
-                f"Bundle {bundle_name} has new unprocessed audio files. "
-                f"Original: {original_filenames}, Found: {found_filenames}",
-            )
-            bundle.refresh(dry_run)
-
         return bundle
 
     @classmethod
@@ -201,6 +186,7 @@ class TranscribeBundle:
         """Cleanup known existing bundle inconsistencies. Must be called explictily.
 
         Will remove summary and/or commands (both in this instance and in files) if no transcript file exists.
+        Will refresh the whole bundle if the audio files are inconsistent with the metadata.
         """
         if self.summary and not self.transcript:
             self.summary = None
@@ -216,6 +202,19 @@ class TranscribeBundle:
             )
             if not dry_run:
                 self.fs_service.delete_file(self.get_bundle_dir() / COMMANDS_FILENAME)
+
+        # Check if existing audio files match metadata
+        original_audio_filenames = set(self.metadata.original_audio_filenames)
+        current_audio_filenames = {f.name for f in self.source_audios}
+        if (
+            current_audio_filenames
+            and current_audio_filenames != original_audio_filenames
+        ):
+            logger.info(
+                f"Bundle {self.bundle_name} has audio files not matching metadata. "
+                f"Original: {original_audio_filenames}, Found: {current_audio_filenames}",
+            )
+            self.refresh(dry_run)
 
     @staticmethod
     def _sort_audio_files_chronologically(
@@ -251,6 +250,7 @@ class TranscribeBundle:
 
         Used when bundle content changes (e.g., new audio files added).
         """
+        logger.info(f"Refreshingbundle {self.bundle_name}")
         self.metadata.bundle_name_generated = False
         if not dry_run:
             self.metadata.write(self.get_bundle_dir(), self.fs_service)
@@ -369,7 +369,6 @@ class TranscribeBundle:
                 try:
                     bundle = TranscribeBundle.from_existing_directory(
                         dir_path,
-                        dry_run,
                         config,
                         fs_service,
                     )
