@@ -9,4 +9,5 @@
   "reportAny": false,
   "reportUnknownMemberType": false,
   "reportUnknownVariableType": false,
+  "reportUnusedParameter": false, // already handled by Ruff
 }
