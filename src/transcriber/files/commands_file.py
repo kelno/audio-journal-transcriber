@@ -7,7 +7,7 @@ from typing import override
 
 import yaml
 
-from transcriber.commands import Command
+from transcriber.commands.commands import Command
 from transcriber.constants import COMMANDS_FILENAME
 from transcriber.files.file_system import FileSystemService
 from transcriber.files.text_file import TextFile
@@ -133,3 +133,12 @@ class CommandsFile(TextFile):
         """
         output_file = bundle_dir / self.get_filename()
         fs_service.write_file(output_file, self.to_yaml())
+
+    def has_non_executed_commands(self) -> bool:
+        """Check if there are any commands that have not been executed.
+
+        Returns:
+            bool: True if there are non-executed commands, False otherwise.
+
+        """
+        return any(not command.executed for command in self.commands)

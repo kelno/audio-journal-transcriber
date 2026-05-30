@@ -15,7 +15,6 @@ from transcriber.files.file_system import FileSystemService, RealFileSystemServi
 from transcriber.files.metadata import MetadataFile
 from transcriber.files.text_file import (
     SummaryFile,
-    TextFile,
     TranscriptFile,
 )
 from transcriber.globals import is_handled_audio_file

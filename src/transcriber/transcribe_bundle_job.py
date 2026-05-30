@@ -234,6 +234,8 @@ class DeleteAudioFileJob(TranscribeBundleJob):
 
 @dataclass
 class GatherCommandsJob(TranscribeBundleJob):
+    """Gather raw commands from transcription, not interpreting them yet."""
+
     @override
     def run(
         self,
@@ -261,3 +263,31 @@ class GatherCommandsJob(TranscribeBundleJob):
 
         logger.debug(f"{self}: Successfully extracted commands (len {len(commands)})")
         self.bundle.set_and_write_commands(commands)
+
+
+@dataclass
+class RunCommandsJob(TranscribeBundleJob):
+    """Try to run non-executed commands for a bundle."""
+
+    @override
+    def run(
+        self,
+        ai_manager: AIManager,
+        config: TranscribeConfig,
+    ) -> None:
+        if not self.bundle.commands:
+            msg = f"{self}: Cannot run commands without commands file"
+            raise ValueError(msg)
+
+        if not self.bundle.commands.commands:
+            return  # no commands to run, that's valid
+        if not any(not cmd.executed for cmd in self.bundle.commands.commands):
+            logger.debug(f"All commands already executed for {self.bundle.bundle_name}")
+            return
+
+        logger.info(f"Running commands for {self.bundle.bundle_name}")
+        if self.dry_run:
+            return
+
+        for cmd in self.bundle.commands.commands:
+            pass  # NYI
