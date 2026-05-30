@@ -24,7 +24,7 @@ class Command:
         return {
             "text": self.text,
             "executed": self.executed,
-            "executed_at": self.executed_at.isoformat() if self.executed_at else None,
+            "executed_at": self.executed_at.isoformat(timespec="seconds") if self.executed_at else None,
             "matched_type": self.matched_type.value if self.matched_type else None,
         }
 

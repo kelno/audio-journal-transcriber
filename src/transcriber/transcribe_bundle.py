@@ -1,8 +1,10 @@
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import override
+from typing import cast, override
 
+from transcriber.commands.command import Command
+from transcriber.commands.command_type import CommandType
 from transcriber.config import TranscribeConfig
 from transcriber.constants import (
     COMMANDS_FILENAME,
@@ -421,6 +423,34 @@ class TranscribeBundle:
         """Set and write the commands to memory and disk."""
         self.commands = CommandsFile.from_command_list(commands)
         self.commands.write(self.get_bundle_dir(), self.fs_service)
+
+    def assert_command(self, cmd_text: str) -> Command:
+        """Get a command by text. Command must exists, else throws exception."""
+        if not self.commands:
+            msg = "Trying to set command matched but bundle has no command"
+            raise ValueError(msg)
+
+        for cmd in self.commands.commands:
+            if cmd.text == cmd_text:  # we identify command by text
+                return cmd
+
+        msg = f"Failed to find command {cmd_text} in bundle {self}"
+        raise ValueError(msg)
+
+    def set_command_type(self, cmd_text: str, matched_type: CommandType) -> None:
+        """Mark a raw command with it's matched type."""
+        cmd = self.assert_command(cmd_text)
+        cmd.matched_type = matched_type
+
+        cast(CommandsFile, self.commands).write(self.get_bundle_dir(), self.fs_service)
+
+    def set_command_executed(self, cmd_text: str) -> None:
+        """Mark a raw command as executed."""
+        cmd = self.assert_command(cmd_text)
+        cmd.executed = True
+        cmd.executed_at = datetime.now(self.config.general.timezone)
+
+        cast(CommandsFile, self.commands).write(self.get_bundle_dir(), self.fs_service)
 
     def init_metadata(
         self,

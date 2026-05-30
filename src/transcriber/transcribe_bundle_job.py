@@ -259,6 +259,9 @@ class GatherCommandsJob(TranscribeBundleJob):
             logger.error(f"{self}: Failed to extract commands: {e}")
             raise
 
+        # remove duplicate commands
+        commands = list(dict.fromkeys(commands))
+
         logger.debug(f"{self}: Successfully extracted commands (len {len(commands)})")
         self.bundle.set_and_write_commands(commands)
 
@@ -298,18 +301,15 @@ class RunCommandsJob(TranscribeBundleJob):
                     logger.debug(f"Using existing match for '{cmd.text}': {matched_type.value}")
                 else:
                     matched_type = interpret_command(cmd.text, ai_manager)
-                    cmd.matched_type = matched_type
                     logger.debug(f"Matched command '{cmd.text}' to type: {matched_type.value}")
-                    # NYI: persist the match to command file
+                    self.bundle.set_command_type(cmd.text, matched_type)
 
                 logger.info(f"Executing {matched_type} command, original text: {cmd.text}")
                 handler = COMMAND_REGISTRY[matched_type].handler
                 if handler:
                     handler(self.bundle, config)
 
-                cmd.executed = True
-                cmd.executed_at = datetime.now(config.general.timezone)
-                # NYI persist execution to file
+                self.bundle.set_command_executed(cmd.text)
 
             except Exception:
                 # On error, stop processing remaining commands to avoid partial state.
