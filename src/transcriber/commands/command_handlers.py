@@ -1,5 +1,3 @@
-# pyright: reportUnusedParameter=false
-#
 """Command handlers for executing command operations.
 
 Contains the implementation logic for each command type.
@@ -7,13 +5,35 @@ Contains the implementation logic for each command type.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Protocol
 
 from transcriber.logger import logger
 
 if TYPE_CHECKING:
     from transcriber.config import TranscribeConfig
     from transcriber.transcribe_bundle import TranscribeBundle
+
+
+class CommandHandler(Protocol):
+    """Interface for command handler functions.
+
+    All command handlers must implement this signature to be compatible
+    with the command registry.
+
+    """
+
+    def __call__(self, bundle: TranscribeBundle, config: TranscribeConfig) -> None:
+        """Execute the command.
+
+        Args:
+            bundle: The transcribe bundle to operate on.
+            config: The transcribe configuration.
+
+        Raises:
+            Exception: Any error that occurs during command execution.
+
+        """
+        ...
 
 
 def handle_merge(bundle: TranscribeBundle, config: TranscribeConfig) -> None:

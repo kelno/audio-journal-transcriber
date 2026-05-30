@@ -6,7 +6,7 @@ from typing import override
 
 from transcriber.audio_manipulation import AudioManipulation
 from transcriber.commands.command_interpreter import interpret_command
-from transcriber.commands.command_type import COMMAND_REGISTRY
+from transcriber.commands.command_registry import COMMAND_REGISTRY
 
 from .ai_manager import AIManager
 from .config import TranscribeConfig

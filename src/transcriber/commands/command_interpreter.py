@@ -4,7 +4,8 @@ Matches user commands to predefined command types using LLM-assisted matching.
 """
 
 from transcriber.ai_manager import AIManager
-from transcriber.commands.command_type import COMMAND_REGISTRY, CommandType
+from transcriber.commands.command_registry import COMMAND_REGISTRY
+from transcriber.commands.command_type import CommandType
 from transcriber.logger import logger
 
 
@@ -30,7 +31,8 @@ def interpret_command(command_string: str, ai_manager: AIManager) -> CommandType
 
     # Build the command registry description for the prompt
     command_descriptions = "\n".join(
-        f"- {meta.command_type.value.upper()}: {meta.description} (aliases: {', '.join(meta.aliases or [])})" for meta in COMMAND_REGISTRY.values()
+        f"- {meta.command_type.value.upper()}: {meta.description} (aliases: {', '.join(meta.aliases or [])})"
+        for meta in COMMAND_REGISTRY.values()
     )
 
     prompt = f"""
