@@ -7,10 +7,12 @@ import pytest
 
 from transcriber.config import AudioConfig, GeneralConfig, TextConfig, TranscribeConfig
 from transcriber.constants import (
+    COMMANDS_FILENAME,
     METADATA_FILENAME,
     SUMMARY_FILENAME,
     TRANSCRIPT_FILENAME,
 )
+from transcriber.files.commands_file import CommandsFile
 from transcriber.files.metadata import MetadataFile
 from transcriber.files.text_file import SummaryFile, TranscriptFile
 from transcriber.transcribe_bundle import TranscribeBundle
@@ -165,16 +167,17 @@ class TestTranscribeBundleFromExistingDirectory:
             "keep_forever: false\n"
             "---\n"
         )
+        transcript_content = "This is the transcript."
 
         # Set up fake file system
         fake_fs.create_directory(bundle_dir)
         fake_fs.write_file(bundle_dir / METADATA_FILENAME, metadata_yaml)
         fake_fs.write_file(bundle_dir / "meeting.mp3", b"fake audio content".decode())
+        fake_fs.write_file(bundle_dir / TRANSCRIPT_FILENAME, transcript_content)
 
         # Load bundle
         bundle = TranscribeBundle.from_existing_directory(
             existing_dir=bundle_dir,
-            dry_run=False,
             config=fake_config,
             fs_service=fake_fs,
         )
@@ -183,42 +186,8 @@ class TestTranscribeBundleFromExistingDirectory:
         assert bundle.bundle_name == "2025-01-15_meeting"
         assert bundle.source_audios == [bundle_dir / "meeting.mp3"]
         assert bundle.metadata.audio_length == 3600.0
-
-    def test_from_existing_directory_loads_transcript(
-        self,
-        fake_config: TranscribeConfig,
-        fake_fs: FakeFileSystemService,
-    ) -> None:
-        """Test that transcript is loaded if it exists."""
-        bundle_dir = Path("/store/2025-01-15_meeting")
-        metadata_yaml = (
-            "---\n"
-            "original_audio_filenames: [meeting.mp3]\n"
-            "audio_length: null\n"
-            "transcript_model_used: null\n"
-            "summary_model_used: null\n"
-            "bundle_name_generated: false\n"
-            "keep_forever: false\n"
-            "---\n"
-        )
-        transcript_content = "This is the transcript."
-
-        fake_fs.create_directory(bundle_dir)
-        fake_fs.write_file(bundle_dir / METADATA_FILENAME, metadata_yaml)
-        fake_fs.write_file(bundle_dir / "meeting.mp3", "fake audio")
-        fake_fs.write_file(bundle_dir / TRANSCRIPT_FILENAME, transcript_content)
-
-        bundle = TranscribeBundle.from_existing_directory(
-            existing_dir=bundle_dir,
-            dry_run=False,
-            config=fake_config,
-            fs_service=fake_fs,
-        )
-        bundle.cleanup_inconsistencies(False)
-
         assert bundle.transcript is not None
         assert isinstance(bundle.transcript, TranscriptFile)
-        assert bundle.transcript.text == transcript_content
 
     def test_from_existing_directory_raises_on_missing_metadata(
         self,
@@ -236,7 +205,6 @@ class TestTranscribeBundleFromExistingDirectory:
         ):
             TranscribeBundle.from_existing_directory(
                 existing_dir=bundle_dir,
-                dry_run=False,
                 config=fake_config,
                 fs_service=fake_fs,
             )
@@ -260,6 +228,7 @@ class TestTranscribeBundleWriteOperations:
             source_audios=[bundle_dir / "meeting.mp3"],
             transcript=None,
             summary=None,
+            commands=None,
             fs_service=fake_fs,
             config=fake_config,
         )
@@ -293,6 +262,7 @@ class TestTranscribeBundleWriteOperations:
             source_audios=[bundle_dir / "meeting.mp3"],
             transcript=None,
             summary=None,
+            commands=None,
             fs_service=fake_fs,
             config=fake_config,
         )
@@ -307,6 +277,38 @@ class TestTranscribeBundleWriteOperations:
         # Check file was written
         assert fake_fs.file_exists(bundle_dir / SUMMARY_FILENAME)
         assert fake_fs.read_file(bundle_dir / SUMMARY_FILENAME) == summary_text
+
+    def test_set_and_write_commands(
+        self,
+        fake_config: TranscribeConfig,
+        fake_fs: FakeFileSystemService,
+    ) -> None:
+        """Test setting and writing commands."""
+        bundle_dir = fake_config.general.store_dir / "2025-01-15_meeting"
+        fake_fs.create_directory(bundle_dir)
+
+        bundle = TranscribeBundle(
+            bundle_name="2025-01-15_meeting",
+            metadata=MetadataFile(original_audio_filenames=["meeting.mp3"]),
+            source_audios=[bundle_dir / "meeting.mp3"],
+            transcript=None,
+            summary=None,
+            commands=None,
+            fs_service=fake_fs,
+            config=fake_config,
+        )
+
+        one_command = "do the thing"
+        two_command = "do the other thing"
+        bundle.set_and_write_commands([one_command, two_command])
+
+        # Check summary was set
+        assert bundle.commands is not None
+        assert one_command in [item.text for item in bundle.commands.commands]
+        assert two_command in [item.text for item in bundle.commands.commands]
+
+        # Check file was written
+        assert fake_fs.file_exists(bundle_dir / COMMANDS_FILENAME)
 
     def test_init_metadata(
         self,
@@ -337,6 +339,45 @@ class TestTranscribeBundleWriteOperations:
         assert fake_fs.file_exists(bundle_dir / METADATA_FILENAME)
 
 
+class TestTranscribeBundleCleanupInconsistencies:
+    """Tests cleanup_inconsistencies."""
+
+    def test_cleanup_inconsistencies_removes_inconsistent_files(
+        self,
+        fake_config: TranscribeConfig,
+        fake_fs: FakeFileSystemService,
+    ) -> None:
+        """Test that cleanup_inconsistencies removes inconsistent files."""
+        bundle_dir = fake_config.general.store_dir / "2025-01-15_meeting"
+        fake_fs.create_directory(bundle_dir)
+
+        bundle = TranscribeBundle(
+            fs_service=fake_fs,
+            config=fake_config,
+            bundle_name="2025-01-15_meeting",
+            metadata=MetadataFile(original_audio_filenames=["meeting.mp3"]),
+            source_audios=[bundle_dir / "another_audio_file.mp3"],
+            transcript=TranscriptFile("test transcript"),
+            summary=SummaryFile("test summary"),
+            commands=CommandsFile(""),
+        )
+
+        fake_fs.write_file(bundle_dir / METADATA_FILENAME, "Old metadata")
+        fake_fs.write_file(bundle_dir / "another_audio_file.mp3", "Old audio")
+        fake_fs.write_file(bundle_dir / TRANSCRIPT_FILENAME, "Old transcript")
+        fake_fs.write_file(bundle_dir / SUMMARY_FILENAME, "Old summary")
+        fake_fs.write_file(bundle_dir / COMMANDS_FILENAME, "Old commands")
+
+        bundle.cleanup_inconsistencies(dry_run=False)
+
+        # the audio file should be kept
+        assert fake_fs.file_exists(bundle_dir / "another_audio_file.mp3")
+        # but other files deleted
+        assert not fake_fs.file_exists(bundle_dir / TRANSCRIPT_FILENAME)
+        assert not fake_fs.file_exists(bundle_dir / SUMMARY_FILENAME)
+        assert not fake_fs.file_exists(bundle_dir / COMMANDS_FILENAME)
+
+
 class TestTranscribeBundleRefresh:
     """Tests for refresh operation."""
 
@@ -355,19 +396,24 @@ class TestTranscribeBundleRefresh:
             source_audios=[bundle_dir / "meeting.mp3"],
             transcript=TranscriptFile("Old transcript"),
             summary=SummaryFile("Old summary"),
+            commands=CommandsFile(""),
             fs_service=fake_fs,
             config=fake_config,
         )
 
         # Write files first
+        fake_fs.write_file(bundle_dir / METADATA_FILENAME, "Old metadata")
+        fake_fs.write_file(bundle_dir / "meeting.mp3", "Old audio")
         fake_fs.write_file(bundle_dir / TRANSCRIPT_FILENAME, "Old transcript")
         fake_fs.write_file(bundle_dir / SUMMARY_FILENAME, "Old summary")
+        fake_fs.write_file(bundle_dir / COMMANDS_FILENAME, "Old commands")
 
         bundle.refresh(dry_run=False)
 
         # Check they were cleared from bundle
         assert bundle.transcript is None
         assert bundle.summary is None
+        assert bundle.commands is None
 
         # Check metadata was updated (bundle_name_generated = False)
         assert bundle.metadata.bundle_name_generated is False
@@ -375,6 +421,7 @@ class TestTranscribeBundleRefresh:
         # Check files were deleted
         assert not fake_fs.file_exists(bundle_dir / TRANSCRIPT_FILENAME)
         assert not fake_fs.file_exists(bundle_dir / SUMMARY_FILENAME)
+        assert not fake_fs.file_exists(bundle_dir / COMMANDS_FILENAME)
 
     def test_refresh_dry_run_does_not_delete_files(
         self,
@@ -398,16 +445,19 @@ class TestTranscribeBundleRefresh:
         # Write files first
         fake_fs.write_file(bundle_dir / TRANSCRIPT_FILENAME, "Transcript")
         fake_fs.write_file(bundle_dir / SUMMARY_FILENAME, "Summary")
+        fake_fs.write_file(bundle_dir / COMMANDS_FILENAME, "Commands")
 
         bundle.refresh(dry_run=True)
 
         # Files should still exist
         assert fake_fs.file_exists(bundle_dir / TRANSCRIPT_FILENAME)
         assert fake_fs.file_exists(bundle_dir / SUMMARY_FILENAME)
+        assert fake_fs.file_exists(bundle_dir / COMMANDS_FILENAME)
 
         # But transcript and summary should be cleared from bundle
         assert bundle.transcript is None
         assert bundle.summary is None
+        assert bundle.commands is None
 
 
 class TestTranscribeBundleRenaming:
@@ -604,7 +654,6 @@ class TestTranscribeBundleIntegration:
         # Step 5: Reload bundle from disk
         reloaded = TranscribeBundle.from_existing_directory(
             existing_dir=bundle_dir,
-            dry_run=False,
             config=fake_config,
             fs_service=fake_fs,
         )
@@ -640,7 +689,6 @@ class TestTranscribeBundleIntegration:
         # Load bundle - should detect new file and trigger refresh
         bundle = TranscribeBundle.from_existing_directory(
             existing_dir=bundle_dir,
-            dry_run=False,
             config=fake_config,
             fs_service=fake_fs,
         )

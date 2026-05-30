@@ -4,6 +4,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
+import yaml
 
 from transcriber.commands import Command
 from transcriber.files.commands_file import CommandsFile
@@ -114,7 +115,7 @@ class TestCommandsFileSerialization:
         cmd_file = CommandsFile(text="")
 
         yaml_str = cmd_file.to_yaml()
-        assert yaml_str == "[]\n"
+        assert yaml_str == "--- []\n"
 
     def test_to_yaml_with_commands(self) -> None:
         """Test serializing commands to YAML."""
@@ -149,7 +150,7 @@ class TestCommandsFileSerialization:
   executed: false
   invalid: [unclosed bracket
 """
-        with pytest.raises(ValueError, match="Failed to parse YAML commands"):
+        with pytest.raises(yaml.YAMLError):
             CommandsFile(text=invalid_yaml)
 
     def test_parse_yaml_invalid_structure_missing_text(self) -> None:
@@ -178,8 +179,8 @@ class TestCommandsFileSerialization:
 executed: false
 """
         # Should create empty commands list since root is not a list
-        cmd_file = CommandsFile(text=invalid_yaml)
-        assert len(cmd_file.commands) == 0
+        with pytest.raises(TypeError, match="YAML list"):
+            CommandsFile(text=invalid_yaml)
 
 
 class TestCommandsFileWriteRead:
@@ -236,7 +237,7 @@ class TestCommandsFileWriteRead:
         fs_service.write_file(bundle_dir / "_commands.md", invalid_yaml)
 
         # Should raise ValueError
-        with pytest.raises(ValueError, match="Failed to parse YAML commands"):
+        with pytest.raises(yaml.YAMLError):
             CommandsFile.from_file(bundle_dir / "_commands.md", fs_service)
 
 
