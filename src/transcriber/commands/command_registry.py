@@ -1,5 +1,6 @@
 from transcriber.commands.command_handlers import (
     handle_delete,
+    handle_ignore,
     handle_merge,
     handle_unknown,
 )
@@ -14,8 +15,8 @@ def _build_registry() -> dict[CommandType, CommandMetadata]:
     return {
         CommandType.MERGE: CommandMetadata(
             command_type=CommandType.MERGE,
-            description="Combine or merge the current recording with the previous one.",
-            aliases=["combine", "join", "concatenate"],
+            description="Combine the current recording with the previous one.",
+            aliases=["merge", "join", "concatenate", "add"],
             handler=handle_merge,
         ),
         CommandType.DELETE: CommandMetadata(

@@ -44,8 +44,9 @@ You are a command matcher in an automated pipeline. Your task is to match user c
 **Matching Instructions:**
 1. Only match a command if you are VERY CONFIDENT it maps to one of the available commands.
 2. Consider both the exact wording and semantic meaning.
-3. If the command is ambiguous or doesn't clearly match any known command, respond with exactly: "UNKNOWN"
-4. Your response must be ONLY the command type in uppercase (e.g., "MERGE", "DELETE", or "UNKNOWN") with no other text.
+3. The commands can be given in any language, not only english.
+4. If the command is ambiguous or doesn't clearly match any known command, respond with exactly: "UNKNOWN"
+5. Your response must be ONLY the command type in uppercase (e.g., "MERGE", "DELETE", or "UNKNOWN") with no other text.
 
 **User Command:**
 {command_string}
@@ -84,9 +85,12 @@ def extract_commands(text: str, bundle_name: str, ai_manager: AIManager) -> list
         - If no commands are found, return the exact 4 characters string "none"
         - Do not include any other text or delimiters or special formatting in the response
     Vocal commands are defined as follows:
-        - The user says "start command" or "début commande"
-        - The user says "stop command" or "fin commande"
+        - It starts when the user says "start command"
+        - It ends with "stop command" or "validate command"
+        - A user can also say "cancel command", in this case just ignore the command
+        - Words can be translated + or be out of order. "fin commande" is valid, as well as "command stop"
         - The command is whatever the user says between those two, without extra processing
+
 
     Transcript: {text}
     """
