@@ -20,45 +20,6 @@ from transcriber.transcribe_bundle import TranscribeBundle
 from .fake_file_system import FakeFileSystemService
 
 
-@pytest.fixture
-def generic_bundle_dir(
-    fake_fs: FakeFileSystemService,
-    fake_config: TranscribeConfig,
-) -> Path:
-    """Get a generic bundle directory, creating it in filesystem."""
-    bundle_name = "2025-01-15_meeting"
-    bundle_dir = fake_config.general.store_dir / bundle_name
-    fake_fs.create_directory(bundle_dir)
-    return bundle_dir
-
-
-@pytest.fixture
-def generic_bundle(
-    fake_config: TranscribeConfig,
-    fake_fs: FakeFileSystemService,
-    generic_bundle_dir: Path,
-) -> TranscribeBundle:
-    """Create a generic bundle, containing only the audio & metadata.
-
-    Will create directory and files in dir.
-    """
-    audio_filename = "meeting.mp3"
-    bundle = TranscribeBundle(
-        bundle_name=generic_bundle_dir.name,
-        metadata=MetadataFile(original_audio_filenames=[audio_filename]),
-        source_audios=[generic_bundle_dir / audio_filename],
-        transcript=None,
-        summary=None,
-        commands=None,
-        fs_service=fake_fs,
-        config=fake_config,
-    )
-
-    bundle.init_metadata([audio_filename], [3600.0])  # create valid metadata + write file
-    fake_fs.write_file(generic_bundle_dir / audio_filename, "Audio")
-    return bundle
-
-
 class TestTranscribeBundleFromAudioFile:
     """Tests for creating bundles from a single audio file."""
 
@@ -155,41 +116,29 @@ class TestTranscribeBundleFromAudioFiles:
 class TestTranscribeBundleFromExistingDirectory:
     """Tests for loading bundles from existing directories."""
 
+    @pytest.mark.usefixtures("generic_bundle")
     def test_from_existing_directory_loads_bundle(
         self,
         fake_config: TranscribeConfig,
         fake_fs: FakeFileSystemService,
+        generic_bundle_dir: Path,
     ) -> None:
         """Test loading a bundle from an existing directory."""
-        bundle_dir = Path("/store/2025-01-15_meeting")
-        metadata_yaml = (
-            "---\n"
-            "original_audio_filenames: [meeting.mp3]\n"
-            "audio_length: 3600.0\n"
-            "transcript_model_used: null\n"
-            "summary_model_used: null\n"
-            "bundle_name_generated: false\n"
-            "keep_forever: false\n"
-            "---\n"
-        )
         transcript_content = "This is the transcript."
 
-        # Set up fake file system
-        fake_fs.create_directory(bundle_dir)
-        fake_fs.write_file(bundle_dir / METADATA_FILENAME, metadata_yaml)
-        fake_fs.write_file(bundle_dir / "meeting.mp3", b"fake audio content".decode())
-        fake_fs.write_file(bundle_dir / TRANSCRIPT_FILENAME, transcript_content)
+        fake_fs.write_file(generic_bundle_dir / TRANSCRIPT_FILENAME, transcript_content)
+        # other files are loaded by generic_bundle fixture
 
         # Load bundle
         bundle = TranscribeBundle.from_existing_directory(
-            existing_dir=bundle_dir,
+            existing_dir=generic_bundle_dir,
             config=fake_config,
             fs_service=fake_fs,
         )
         bundle.cleanup_inconsistencies(False)
 
         assert bundle.bundle_name == "2025-01-15_meeting"
-        assert bundle.source_audios == [bundle_dir / "meeting.mp3"]
+        assert bundle.source_audios == [generic_bundle_dir / "meeting.mp3"]
         assert bundle.metadata.audio_length == 3600.0
         assert bundle.transcript is not None
         assert isinstance(bundle.transcript, TranscriptFile)
