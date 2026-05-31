@@ -1,17 +1,20 @@
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
 import yaml
+from pydantic import BaseModel, Field
 
 from transcriber.constants import METADATA_FILENAME
 from transcriber.files.file_system import FileSystemService
 
 
-@dataclass
-class Metadata:
-    """A bundle metadata is kept in this single database file as YAML data."""
+class Metadata(BaseModel):
+    """A bundle metadata is kept in this single database file as YAML data.
 
-    original_audio_filenames: list[str]
+    We use pydantic BaseModel to ensure validity as data loaded from the file could be bad.
+    """
+
+    original_audio_filenames: list[str] = Field(min_length=0)
     audio_length: float | None = None
     transcript_model_used: str | None = None
     summary_model_used: str | None = None
@@ -19,7 +22,6 @@ class Metadata:
     keep_forever: bool = False
 
 
-@dataclass
 class MetadataFile(Metadata):
     @staticmethod
     def _extract_frontmatter(text: str) -> str | None:
@@ -71,7 +73,7 @@ class MetadataFile(Metadata):
             data["original_audio_filenames"] = [data["original_audio_filename"]]
             del data["original_audio_filename"]
 
-        return MetadataFile(**data)
+        return MetadataFile.model_validate(data)
 
     def write(self, bundle_dir: Path, fs_service: FileSystemService) -> None:
         """Write the metadata to a file in the bundle directory.
