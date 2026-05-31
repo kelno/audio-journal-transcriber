@@ -362,6 +362,9 @@ class TranscribeBundle:
         """Find and load all bundles from output_dir."""
         bundles: list[TranscribeBundle] = []
         for dir_path in fs_service.list_directory(output_dir):
+            # Exclude if the directory starts with an underscore or is an hidden file
+            if dir_path.name.startswith("_") or dir_path.name.startswith("."):
+                continue
             if fs_service.directory_exists(dir_path):
                 try:
                     bundle = TranscribeBundle.from_existing_directory(
