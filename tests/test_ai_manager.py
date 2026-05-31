@@ -5,41 +5,13 @@ import pytest
 
 from transcriber.ai_manager import AIManager
 from transcriber.commands.command_interpreter import extract_commands
-from transcriber.config import AudioConfig, GeneralConfig, TextConfig, TranscribeConfig
+from transcriber.config import TranscribeConfig
 
 from .fake_clients import (
     FakeAudioClient,
     FakeChatClient,
     FakeChatClientWithErrors,
 )
-
-
-@pytest.fixture
-def fake_config() -> TranscribeConfig:
-    """Create a minimal config for testing."""
-    return TranscribeConfig(
-        general=GeneralConfig(
-            input_dir=Path("/fake/input"),
-            store_dir=Path("/fake/store"),
-            delete_source_audio_after_days=0,
-            min_length_seconds=0.0,
-            remove_short_files=False,
-            timezone=ZoneInfo("UTC"),
-        ),
-        text=TextConfig(
-            summary_enabled=True,
-            api_base_url="https://api.example.com",
-            model="gpt-4",
-            api_key="test-key",
-            extra_context=None,
-        ),
-        audio=AudioConfig(
-            api_base_url="https://api.example.com",
-            model="whisper-1",
-            api_key="test-key",
-            stream=False,
-        ),
-    )
 
 
 class TestAIManagerTranscription:

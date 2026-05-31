@@ -1,12 +1,11 @@
 """Tests for TranscribeBundle with FakeFileSystemService."""
 
 from pathlib import Path
-from zoneinfo import ZoneInfo
 
 import pytest
 
 from transcriber.commands.command_type import CommandType
-from transcriber.config import AudioConfig, GeneralConfig, TextConfig, TranscribeConfig
+from transcriber.config import TranscribeConfig
 from transcriber.constants import (
     COMMANDS_FILENAME,
     METADATA_FILENAME,
@@ -19,40 +18,6 @@ from transcriber.files.text_file import SummaryFile, TranscriptFile
 from transcriber.transcribe_bundle import TranscribeBundle
 
 from .fake_file_system import FakeFileSystemService
-
-
-@pytest.fixture
-def fake_config() -> TranscribeConfig:
-    """Create a minimal config for testing."""
-    return TranscribeConfig(
-        general=GeneralConfig(
-            input_dir=Path("/fake/input"),
-            store_dir=Path("/fake/store"),
-            delete_source_audio_after_days=0,
-            min_length_seconds=0.0,
-            remove_short_files=False,
-            timezone=ZoneInfo("UTC"),
-        ),
-        text=TextConfig(
-            summary_enabled=True,
-            api_base_url="https://api.example.com",
-            model="gpt-4",
-            api_key="test-key",
-            extra_context=None,
-        ),
-        audio=AudioConfig(
-            api_base_url="https://api.example.com",
-            model="whisper-1",
-            api_key="test-key",
-            stream=False,
-        ),
-    )
-
-
-@pytest.fixture
-def fake_fs() -> FakeFileSystemService:
-    """Create a fresh fake file system for each test."""
-    return FakeFileSystemService()
 
 
 @pytest.fixture

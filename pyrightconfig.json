@@ -10,4 +10,5 @@
   "reportUnknownMemberType": false,
   "reportUnknownVariableType": false,
   "reportUnusedParameter": false, // already handled by Ruff
+  "reportUnusedImport": false, // already handled by Ruff
 }

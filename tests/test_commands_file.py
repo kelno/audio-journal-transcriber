@@ -6,10 +6,9 @@ from pathlib import Path
 import pytest
 import yaml
 
+from tests.fake_file_system import FakeFileSystemService
 from transcriber.commands.command import Command
 from transcriber.files.commands_file import CommandsFile
-
-from .fake_file_system import FakeFileSystemService
 
 
 class TestCommandCreation:
@@ -186,20 +185,19 @@ executed: false
 class TestCommandsFileWriteRead:
     """Test CommandsFile file I/O operations."""
 
-    def test_write_and_read_roundtrip(self) -> None:
+    def test_write_and_read_roundtrip(self, fake_fs: FakeFileSystemService) -> None:
         """Test writing and reading back a CommandsFile."""
-        fs_service = FakeFileSystemService()
         original = CommandsFile.from_command_list(["play music", "pause", "stop"])
         original.mark_executed(0, UTC)
 
         # Write to file
         bundle_dir = Path("/fake/bundle")
-        original.write(bundle_dir, fs_service)
+        original.write(bundle_dir, fake_fs)
 
         # Read back
         loaded = CommandsFile.from_file(
             bundle_dir / "_commands.md",
-            fs_service,
+            fake_fs,
         )
 
         assert len(loaded.commands) == 3
@@ -211,34 +209,32 @@ class TestCommandsFileWriteRead:
         assert loaded.commands[2].text == "stop"
         assert loaded.commands[2].executed is False
 
-    def test_read_invalid_commands_file(self) -> None:
+    def test_read_invalid_commands_file(self, fake_fs: FakeFileSystemService) -> None:
         """Test reading an invalid _commands.md file raises ValueError."""
-        fs_service = FakeFileSystemService()
         bundle_dir = Path("/fake/bundle")
 
         # Write invalid YAML to file
         invalid_yaml = """- text: play music
   executed: "not a boolean"
 """
-        fs_service.write_file(bundle_dir / "_commands.md", invalid_yaml)
+        fake_fs.write_file(bundle_dir / "_commands.md", invalid_yaml)
 
         # Trying to read should raise ValueError
         with pytest.raises(TypeError, match="Invalid command data"):
-            CommandsFile.from_file(bundle_dir / "_commands.md", fs_service)
+            CommandsFile.from_file(bundle_dir / "_commands.md", fake_fs)
 
-    def test_read_completely_invalid_yaml(self) -> None:
+    def test_read_completely_invalid_yaml(self, fake_fs: FakeFileSystemService) -> None:
         """Test reading a completely malformed YAML file."""
-        fs_service = FakeFileSystemService()
         bundle_dir = Path("/fake/bundle")
 
         # Write completely invalid YAML
         invalid_yaml = """this is: [not: valid: yaml
 """
-        fs_service.write_file(bundle_dir / "_commands.md", invalid_yaml)
+        fake_fs.write_file(bundle_dir / "_commands.md", invalid_yaml)
 
         # Should raise ValueError
         with pytest.raises(yaml.YAMLError):
-            CommandsFile.from_file(bundle_dir / "_commands.md", fs_service)
+            CommandsFile.from_file(bundle_dir / "_commands.md", fake_fs)
 
 
 class TestCommandsFileMarkExecuted:

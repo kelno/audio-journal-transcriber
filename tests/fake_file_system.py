@@ -3,6 +3,7 @@
 from pathlib import Path
 from typing import override
 
+import pytest
 from transcriber.files.file_system import FileSystemService
 
 
@@ -171,3 +172,9 @@ class FakeFileSystemService(FileSystemService):
         if operation_type is None:
             return self.operations
         return [op for op in self.operations if op[0] == operation_type]
+
+
+@pytest.fixture
+def fake_fs(fake_config: TranscribeConfig) -> FakeFileSystemService:
+    """Create a fresh fake file system for each test."""
+    return FakeFileSystemService(fake_config)
