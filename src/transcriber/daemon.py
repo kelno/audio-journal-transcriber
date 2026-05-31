@@ -42,6 +42,7 @@ def run_daemon_mode(
                 if len(unprocessed) > 0:
                     logger.info(f"Retrying {len(unprocessed)} failed bundles...")
                     unprocessed = transcriber.run()
+                    logger.debug("Finished daemon update loop")
                     if len(unprocessed) == 0:
                         retry_manager.reset_delay()
                     else:

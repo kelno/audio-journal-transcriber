@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import final, override
+from typing import override
 from zoneinfo import ZoneInfo
 
 from pydantic import BaseModel, model_validator

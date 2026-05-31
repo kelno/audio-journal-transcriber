@@ -306,11 +306,8 @@ class RunCommandsJob(TranscribeBundleJob):
 
                 logger.info(f"Executing {matched_type} command for bundle {self.bundle}")
                 handler = COMMAND_REGISTRY[matched_type].handler
-                success = handler(self.bundle, config, cmd.text)
-                if success:
-                    self.bundle.set_command_executed(cmd.text)
-                else:
-                    logger.error(f"Command {matched_type} reported failure for bundle {self.bundle}")
+                handler(self.bundle, config, cmd.text)
+                self.bundle.set_command_executed(cmd.text)
 
             except Exception:
                 # On error, stop processing remaining commands to avoid partial state.
