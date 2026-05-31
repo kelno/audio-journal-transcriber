@@ -63,8 +63,36 @@ class FakeFileSystemService(FileSystemService):
         if path not in self.files:
             msg = f"File not found: {path}"
             raise FileNotFoundError(msg)
+
         del self.files[path]
         self.operations.append(("delete", path))
+
+    @override
+    def delete_directory(self, path: Path) -> None:
+        """Delete a directory.
+
+        Raises:
+            FileNotFoundError: If the directory does not exist.
+
+        """
+        if path not in self.directories:
+            msg = f"Directory not found: {path}"
+            raise FileNotFoundError(msg)
+
+        # Remove the directory itself
+        self.directories.remove(path)
+
+        # Remove all files under this directory
+        files_to_delete = [file_path for file_path in self.files if str(file_path).startswith(str(path))]
+        for file_path in files_to_delete:
+            del self.files[file_path]
+
+        # Remove all subdirectories
+        dirs_to_delete = [dir_path for dir_path in self.directories if str(dir_path).startswith(str(path))]
+        for dir_path in dirs_to_delete:
+            self.directories.remove(dir_path)
+
+        self.operations.append(("rmdir", path))
 
     @override
     def create_directory(self, path: Path) -> None:

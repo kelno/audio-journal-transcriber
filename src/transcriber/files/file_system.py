@@ -1,5 +1,6 @@
 """Abstract file system service for dependency injection."""
 
+import shutil
 from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import override
@@ -75,6 +76,19 @@ class FileSystemService(ABC):
         ...
 
     @abstractmethod
+    def delete_directory(self, path: Path) -> None:
+        """Delete a file.
+
+        Args:
+            path: Path to the file to delete.
+
+        Raises:
+            FileNotFoundError: If the file does not exist.
+
+        """
+        ...
+
+    @abstractmethod
     def create_directory(self, path: Path) -> None:
         """Create a directory.
 
@@ -137,8 +151,27 @@ class RealFileSystemService(FileSystemService):
 
     @override
     def delete_file(self, path: Path) -> None:
-        """Delete a file."""
+        """Delete a file.
+
+        Raises:
+            FileNotFoundError: If the file does not exist.
+
+        """
+        if not path.exists():
+            msg = f"File not found: {path}"
+            raise FileNotFoundError(msg)
+
         path.unlink()
+
+    @override
+    def delete_directory(self, path: Path) -> None:
+        """Delete a directory.
+
+        Raises:
+            FileNotFoundError: If the directory does not exist.
+
+        """
+        shutil.rmtree(path)
 
     @override
     def create_directory(self, path: Path) -> None:
