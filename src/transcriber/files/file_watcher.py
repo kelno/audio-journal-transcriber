@@ -3,7 +3,7 @@ from __future__ import annotations
 import threading
 from collections.abc import Callable
 from pathlib import Path
-from typing import final
+from typing import final, override
 
 from watchdog.events import FileSystemEvent, FileSystemEventHandler
 from watchdog.observers import Observer
@@ -11,6 +11,12 @@ from watchdog.observers import Observer
 from transcriber.logger import logger
 
 Callback = Callable[[Path], None]
+"""
+Callback type alias for file processing functions.
+
+Args:
+    file_path: Path to the file that should be processed
+"""
 
 
 @final
@@ -30,6 +36,16 @@ class FileWatcher(FileSystemEventHandler):
     """
 
     def __init__(self, input_dir: Path, callback: Callback, stable_delay: float = 5.0) -> None:
+        """
+        Initialize the FileWatcher.
+
+        Args:
+            input_dir: Directory path to watch for file changes
+            callback: Function to call when files are ready for processing
+            stable_delay: Time in seconds to wait for filesystem quiet period
+                         before processing files (default: 5.0 seconds)
+
+        """
         self.input_dir = input_dir
         self.callback = callback
         self.stable_delay = stable_delay
@@ -39,11 +55,13 @@ class FileWatcher(FileSystemEventHandler):
         self._lock = threading.Lock()
 
     def start(self) -> None:
+        """Start watching the input directory for filesystem events."""
         self._observer.schedule(self, self.input_dir.as_posix(), recursive=True)
         self._observer.start()
         logger.info(f"Started watching directory: {self.input_dir}")
 
     def stop(self) -> None:
+        """Stop watching the directory and clean up resources."""
         logger.info("Stopping FileWatcher...")
 
         self._observer.stop()
@@ -56,7 +74,14 @@ class FileWatcher(FileSystemEventHandler):
 
         logger.info("FileWatcher stopped")
 
+    @override
     def on_any_event(self, event: FileSystemEvent) -> None:
+        """Handle filesystem events by resetting the debounce timer.
+
+        Args:
+            event: Filesystem event that triggered this callback
+
+        """
         if event.is_directory:
             return
 
@@ -71,6 +96,13 @@ class FileWatcher(FileSystemEventHandler):
             self._timer.start()
 
     def _process_files(self) -> None:
+        """
+        Process all files in the watched directory after the quiet period.
+
+        This method is called by the debounce timer when no filesystem events
+        have occurred for the stable_delay period. It scans the entire directory
+        recursively and calls the callback function for each file found.
+        """
         logger.debug(f"Quiet period reached, scanning directory: {self.input_dir}")
 
         for file_path in self.input_dir.rglob("*"):
