@@ -4,7 +4,7 @@
 # Stage 1 : Builder
 # ===========================
 # https://docs.astral.sh/uv/guides/integration/docker/#available-images
-FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim AS builder
+FROM ghcr.io/astral-sh/uv:python3.14-trixie-slim AS builder
 
 ARG VERSION=dev
 LABEL version="$VERSION"
@@ -45,7 +45,7 @@ RUN mkdir -p /app \
 
 # Copy virtual environment from builder
 COPY --from=builder /app/.venv /app/.venv
-# (OpenShift) Allow users in the root group to access files in /app
+# (OpenShift) Change permissions to group 0 (root) and allow users in the root group to access files in /app
 RUN chgrp -R 0 /app && chmod -R g=u /app
 
 # Entrypoint: run the transcriber module (maybe can call transcriber directly?)
