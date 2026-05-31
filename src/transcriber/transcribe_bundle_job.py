@@ -306,7 +306,7 @@ class RunCommandsJob(TranscribeBundleJob):
                 logger.info(f"Executing {matched_type} command, original text: {cmd.text}")
                 handler = COMMAND_REGISTRY[matched_type].handler
                 if handler:
-                    handler(self.bundle, config)
+                    handler(self.bundle, config, cmd.text)
 
                 self.bundle.set_command_executed(cmd.text)
 

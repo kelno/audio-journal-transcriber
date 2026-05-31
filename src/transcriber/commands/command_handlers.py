@@ -22,7 +22,7 @@ class CommandHandler(Protocol):
 
     """
 
-    def __call__(self, bundle: TranscribeBundle, config: TranscribeConfig) -> None:
+    def __call__(self, bundle: TranscribeBundle, config: TranscribeConfig, cmd_text: str) -> None:
         """Execute the command.
 
         Args:
@@ -36,7 +36,7 @@ class CommandHandler(Protocol):
         ...
 
 
-def handle_merge(bundle: TranscribeBundle, config: TranscribeConfig) -> None:
+def handle_merge(bundle: TranscribeBundle, config: TranscribeConfig, cmd_text: str) -> None:
     """Merge the current recording with the previous one.
 
     Args:
@@ -51,7 +51,7 @@ def handle_merge(bundle: TranscribeBundle, config: TranscribeConfig) -> None:
     logger.warning("Merge command handler not yet implemented")
 
 
-def handle_delete(bundle: TranscribeBundle, config: TranscribeConfig) -> None:
+def handle_delete(bundle: TranscribeBundle, config: TranscribeConfig, cmd_text: str) -> None:
     """Delete the current recording.
 
     Args:
@@ -66,7 +66,7 @@ def handle_delete(bundle: TranscribeBundle, config: TranscribeConfig) -> None:
     logger.warning("Delete command handler not yet implemented")
 
 
-def handle_unknown(bundle: TranscribeBundle, config: TranscribeConfig) -> None:
+def handle_unknown(bundle: TranscribeBundle, config: TranscribeConfig, cmd_text: str) -> None:
     """Handle unknown command type.
 
     Args:
@@ -79,3 +79,14 @@ def handle_unknown(bundle: TranscribeBundle, config: TranscribeConfig) -> None:
     """
     msg = "Unknown command type cannot be executed"
     raise ValueError(msg)
+
+
+def handle_ignore(bundle: TranscribeBundle, config: TranscribeConfig, cmd_text: str) -> None:
+    """Handle ignore command type.
+
+    Args:
+        bundle: The transcribe bundle to operate on.
+        config: The transcribe configuration.
+
+    """
+    logger.debug(f"Command {cmd_text} is ignored.")

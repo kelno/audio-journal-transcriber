@@ -14,3 +14,4 @@ class CommandType(Enum):
     MERGE = "merge"
     DELETE = "delete"
     UNKNOWN = "unknown"
+    IGNORE = "ignore"
