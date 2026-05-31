@@ -5,88 +5,73 @@ Contains the implementation logic for each command type.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Protocol
+from collections.abc import Callable
 
+from transcriber.config import TranscribeConfig
 from transcriber.logger import logger
+from transcriber.transcribe_bundle import TranscribeBundle
 
-if TYPE_CHECKING:
-    from transcriber.config import TranscribeConfig
-    from transcriber.transcribe_bundle import TranscribeBundle
-
-
-class CommandHandler(Protocol):
-    """Interface for command handler functions.
-
-    All command handlers must implement this signature to be compatible
-    with the command registry.
-
-    """
-
-    def __call__(self, bundle: TranscribeBundle, config: TranscribeConfig, cmd_text: str) -> None:
-        """Execute the command.
-
-        Args:
-            bundle: The transcribe bundle to operate on.
-            config: The transcribe configuration.
-
-        Raises:
-            Exception: Any error that occurs during command execution.
-
-        """
-        ...
+CommandHandler = Callable[[TranscribeBundle, TranscribeConfig, str], None]
 
 
-def handle_merge(bundle: TranscribeBundle, config: TranscribeConfig, cmd_text: str) -> None:
+def command_handler(func: Callable[[TranscribeBundle, TranscribeConfig, str], None]) -> CommandHandler:
+    """Decorator to enforce CommandHandler interface compliance."""
+    return func
+
+
+@command_handler
+def handle_merge(_bundle: TranscribeBundle, _config: TranscribeConfig, cmd_text: str) -> None:
     """Merge the current recording with the previous one.
 
     Args:
         bundle: The transcribe bundle to operate on.
         config: The transcribe configuration.
-
-    Raises:
-        NotImplementedError: This handler is not yet implemented.
+        cmd_text: The original command text.
 
     """
     # TODO: Implement merge logic
-    logger.warning("Merge command handler not yet implemented")
+    logger.warning(f"Merge command handler not yet implemented (command text: {cmd_text})")
 
 
-def handle_delete(bundle: TranscribeBundle, config: TranscribeConfig, cmd_text: str) -> None:
+@command_handler
+def handle_delete(_bundle: TranscribeBundle, _config: TranscribeConfig, cmd_text: str) -> None:
     """Delete the current recording.
 
     Args:
         bundle: The transcribe bundle to operate on.
         config: The transcribe configuration.
-
-    Raises:
-        NotImplementedError: This handler is not yet implemented.
+        cmd_text: The original command text.
 
     """
     # TODO: Implement delete logic
-    logger.warning("Delete command handler not yet implemented")
+    logger.warning(f"Delete command handler not yet implemented (command text: {cmd_text})")
 
 
-def handle_unknown(bundle: TranscribeBundle, config: TranscribeConfig, cmd_text: str) -> None:
+@command_handler
+def handle_unknown(_bundle: TranscribeBundle, _config: TranscribeConfig, cmd_text: str) -> None:
     """Handle unknown command type.
 
     Args:
         bundle: The transcribe bundle to operate on.
         config: The transcribe configuration.
+        cmd_text: The original command text.
 
     Raises:
         ValueError: Always raised as the command type is unknown.
 
     """
-    msg = "Unknown command type cannot be executed"
+    msg = f"Unknown command type cannot be executed (command text: {cmd_text})"
     raise ValueError(msg)
 
 
-def handle_ignore(bundle: TranscribeBundle, config: TranscribeConfig, cmd_text: str) -> None:
+@command_handler
+def handle_ignore(_bundle: TranscribeBundle, _config: TranscribeConfig, cmd_text: str) -> None:
     """Handle ignore command type.
 
     Args:
         bundle: The transcribe bundle to operate on.
         config: The transcribe configuration.
+        cmd_text: The original command text.
 
     """
     logger.debug(f"Command {cmd_text} is ignored.")
