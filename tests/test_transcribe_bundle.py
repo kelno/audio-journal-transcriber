@@ -2,6 +2,7 @@
 
 from pathlib import Path
 
+import pydantic
 import pytest
 
 from transcriber.commands.command_type import CommandType
@@ -143,22 +144,53 @@ class TestTranscribeBundleFromExistingDirectory:
         assert bundle.transcript is not None
         assert isinstance(bundle.transcript, TranscriptFile)
 
+    @pytest.mark.usefixtures("generic_bundle")
     def test_from_existing_directory_raises_on_missing_metadata(
         self,
         fake_config: TranscribeConfig,
         fake_fs: FakeFileSystemService,
+        generic_bundle_dir: Path,
     ) -> None:
         """Test that loading raises if metadata file is missing."""
-        bundle_dir = Path("/store/2025-01-15_meeting")
-        fake_fs.create_directory(bundle_dir)
-        fake_fs.write_file(bundle_dir / "meeting.mp3", "fake audio")
+        fake_fs.delete_file(generic_bundle_dir / METADATA_FILENAME)
 
         with pytest.raises(
             ValueError,
             match=r"Bundle directory is invalid.*no meta file",
         ):
             TranscribeBundle.from_existing_directory(
-                existing_dir=bundle_dir,
+                existing_dir=generic_bundle_dir,
+                config=fake_config,
+                fs_service=fake_fs,
+            )
+
+    @pytest.mark.usefixtures("generic_bundle")
+    def test_from_existing_directory_raises_on_wrong_metadata(
+        self,
+        fake_config: TranscribeConfig,
+        fake_fs: FakeFileSystemService,
+        generic_bundle_dir: Path,
+    ) -> None:
+        """Test that loading raises if metadata file is missing."""
+        # overwrite metadata file with wrong data
+        metadata_yaml = (
+            "---\n"
+            "original_audio_filenames: None\n"  # this is the wrong line
+            "audio_length: 3600.0\n"
+            "transcript_model_used: null\n"
+            "summary_model_used: null\n"
+            "bundle_name_generated: false\n"
+            "keep_forever: false\n"
+            "---\n"
+        )
+        fake_fs.write_file(generic_bundle_dir / METADATA_FILENAME, metadata_yaml)
+
+        with pytest.raises(
+            pydantic.ValidationError,
+            match=r"original_audio_filenames",
+        ):
+            TranscribeBundle.from_existing_directory(
+                existing_dir=generic_bundle_dir,
                 config=fake_config,
                 fs_service=fake_fs,
             )
