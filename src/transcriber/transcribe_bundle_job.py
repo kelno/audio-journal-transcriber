@@ -164,7 +164,7 @@ class SummaryJob(TranscribeBundleJob):
             ValueError: If transcript is not available for summarization.
 
         """
-        logger.info(f"Summarizing {self.bundle.bundle_name}")
+        logger.info(f"Summarizing {self.bundle}")
 
         if self.dry_run:
             return
@@ -189,7 +189,7 @@ class BundleNameJob(TranscribeBundleJob):
         config: TranscribeConfig,
     ) -> None:
         """Main function."""
-        logger.info(f"Generating bundle name for {self.bundle.bundle_name}")
+        logger.info(f"Generating bundle name for {self.bundle}")
         if self.dry_run:
             return
 
@@ -244,7 +244,7 @@ class GatherCommandsJob(TranscribeBundleJob):
         config: TranscribeConfig,
     ) -> None:
         """Main function."""
-        logger.info(f"Gathering commands for {self.bundle.bundle_name}")
+        logger.info(f"Gathering commands for {self.bundle}")
         if self.dry_run:
             return
 
@@ -283,10 +283,10 @@ class RunCommandsJob(TranscribeBundleJob):
         if not self.bundle.commands.commands:
             return  # no commands to run, that's valid
         if not any(not cmd.executed for cmd in self.bundle.commands.commands):
-            logger.debug(f"All commands already executed for {self.bundle.bundle_name}")
+            logger.debug(f"All commands already executed for {self.bundle}")
             return
 
-        logger.info(f"Running commands for {self.bundle.bundle_name}")
+        logger.info(f"Running commands for {self.bundle}")
         if self.dry_run:
             return
 

@@ -183,7 +183,7 @@ class AudioTranscriber:
         """Gather transcription jobs from this bundle. Jobs needs to be run in order."""
         jobs: list[TranscribeBundleJob] = []
 
-        logger.debug(f"Gathering jobs for bundle: [{bundle.bundle_name}]")
+        logger.debug(f"Gathering jobs for bundle: [{bundle}]")
 
         if bundle.source_audios:
             is_new_audio = not file_is_in_directory_tree(
