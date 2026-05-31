@@ -1,8 +1,8 @@
 [project]
 name = "audio-journal-transcriber"
-version = "0.3.1"
+version = "0.3.2"
 description = "Automated pipeline for transcribing and summarizing personal recordings."
-authors = [{ name = "Kelno", email = "kelnowm@gmail.com" }]
+authors = [{ name = "Kelno", email = "kelnow@proton.me" }]
 requires-python = ">=3.13"
 
 dependencies = [

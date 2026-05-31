@@ -28,7 +28,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 # ===========================
 # Stage 2 : Runtime
 # ===========================
-FROM python:3.12-slim-bookworm
+FROM python:3.14-slim-trixie
 
 ENV PATH="/app/.venv/bin:$PATH"
 
