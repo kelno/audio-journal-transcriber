@@ -1,0 +1,24 @@
+#!/bin/sh
+
+# This hook will apply a new tag if pyproject.toml project version changed. Expects format X.X.X
+
+# Get the current commit hash
+COMMIT_HASH=$(git rev-parse HEAD)
+
+# Get the previous commit hash
+PREV_COMMIT_HASH=$(git rev-parse HEAD~1)
+
+# Extract the version from pyproject.toml
+CURRENT_VERSION=$(grep -oP 'version = "\K[^"]+' pyproject.toml)
+
+# Extract the version from the previous commit's pyproject.toml
+PREV_VERSION=$(git show $PREV_COMMIT_HASH:pyproject.toml | grep -oP 'version = "\K[^"]+' 2>/dev/null)
+
+# Check if the version has changed
+if [ "$CURRENT_VERSION" != "$PREV_VERSION" ]; then
+    echo "Version changed from $PREV_VERSION to $CURRENT_VERSION. Tagging commit..."
+    git tag "$CURRENT_VERSION" $COMMIT_HASH
+    echo "Tagged commit $COMMIT_HASH with $CURRENT_VERSION"
+else
+    echo "Version has not changed. No tag created."
+fi
