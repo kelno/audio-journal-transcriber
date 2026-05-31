@@ -34,7 +34,7 @@ def handle_merge(_bundle: TranscribeBundle, _config: TranscribeConfig, cmd_text:
 
 
 @command_handler
-def handle_delete(_bundle: TranscribeBundle, _config: TranscribeConfig, cmd_text: str) -> None:
+def handle_delete(bundle: TranscribeBundle, _config: TranscribeConfig, cmd_text: str) -> None:
     """Delete the current recording.
 
     Args:
@@ -43,8 +43,8 @@ def handle_delete(_bundle: TranscribeBundle, _config: TranscribeConfig, cmd_text
         cmd_text: The original command text.
 
     """
-    # TODO: Implement delete logic
-    logger.warning(f"Delete command handler not yet implemented (command text: {cmd_text})")
+    logger.info(f"Running delete command for {bundle} (command text: {cmd_text})")
+    bundle.fs_service.delete_directory(bundle.get_bundle_dir())
 
 
 @command_handler
