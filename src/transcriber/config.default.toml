@@ -12,7 +12,7 @@ delete_source_audio_after_days = 0
 # IANA time zone, to use to interpret filenames dates
 timezone = "Europe/Brussels"
 # Move deleted files to <store_dir>/_deleted instead of deleting them from filesystem
-backup_deletion = true
+safe_delete = true
 
 [text]
 # Whether to generate summaries from transcripts

@@ -17,13 +17,13 @@ class TestFileSystemBackupDeletion:
         """Helper to modify fake_config to enable backup deletion and set paths."""
         fake_config.general.input_dir = temp_path
         fake_config.general.store_dir = store_dir
-        fake_config.general.backup_deletion = True
+        fake_config.general.safe_delete = True
 
     def _create_config_with_backup_disabled(self, fake_config: TranscribeConfig, temp_path: Path, store_dir: Path) -> None:
         """Helper to modify fake_config to disable backup deletion and set paths."""
         fake_config.general.input_dir = temp_path
         fake_config.general.store_dir = store_dir
-        fake_config.general.backup_deletion = False
+        fake_config.general.safe_delete = False
 
     def test_delete_file_with_backup_enabled_moves_to_deleted_dir(self, fake_config: TranscribeConfig) -> None:
         """Test that deleting a file with backup enabled moves it to _deleted directory."""

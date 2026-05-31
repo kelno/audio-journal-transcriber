@@ -20,7 +20,7 @@ class GeneralConfig(BaseModel):
     min_length_seconds: float  # 0 means disabled
     remove_short_files: bool
     timezone: ZoneInfo
-    backup_deletion: bool
+    safe_delete: bool
 
     @override
     def __str__(self) -> str:

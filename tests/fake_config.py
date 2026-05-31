@@ -17,7 +17,7 @@ def fake_config() -> TranscribeConfig:
             min_length_seconds=0.0,
             remove_short_files=False,
             timezone=ZoneInfo("UTC"),
-            backup_deletion=True,
+            safe_delete=True,
         ),
         text=TextConfig(
             summary_enabled=True,

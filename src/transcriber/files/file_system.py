@@ -200,7 +200,7 @@ class RealFileSystemService(FileSystemService):
             msg = f"File not found: {path}"
             raise FileNotFoundError(msg)
 
-        if self.config.general.backup_deletion:
+        if self.config.general.safe_delete:
             backup_path = self._get_backup_path(path)
 
             # Ensure the backup directory exists
@@ -219,7 +219,7 @@ class RealFileSystemService(FileSystemService):
             FileNotFoundError: If the directory does not exist.
 
         """
-        if self.config.general.backup_deletion:
+        if self.config.general.safe_delete:
             backup_path = self._get_backup_path(path)
 
             # Ensure the backup directory exists
