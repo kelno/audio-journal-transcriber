@@ -14,13 +14,14 @@ from pydantic_settings import (
 class GeneralConfig(BaseModel):
     """Configuration for general settings."""
 
+    # keep those default values in sync with config.default.toml
     input_dir: Path
     store_dir: Path
-    delete_source_audio_after_days: int  # 0 means disabled
-    min_length_seconds: float  # 0 means disabled
-    remove_short_files: bool
-    timezone: ZoneInfo
-    safe_delete: bool
+    min_length_seconds: float = 10.0  # 0 means disabled
+    remove_short_files: bool = True
+    delete_source_audio_after_days: int = 0  # 0 means disabled
+    timezone: ZoneInfo = ZoneInfo("Europe/Brussels")
+    safe_delete: bool = True
 
     @override
     def __str__(self) -> str:
