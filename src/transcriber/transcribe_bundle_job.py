@@ -313,5 +313,5 @@ class RunCommandsJob(TranscribeBundleJob):
 
             except Exception:
                 # On error, stop processing remaining commands to avoid partial state.
-                logger.error(f"Failed to process command '{cmd.text}'")
+                logger.error(f"Failed to process bundle {self.bundle} command '{cmd.text}'")
                 raise

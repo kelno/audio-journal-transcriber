@@ -378,6 +378,8 @@ class TranscribeBundle:
                     logger.error(
                         f"Skipping invalid transcribe bundle {dir_path}, exception {e}",
                     )
+                except Exception as e
+                    logger.error(f"Unexpected exception met while gathering bundle {dir_path}: {e}")
 
         logger.debug(f"Found {len(bundles)} existing bundles")
         return bundles
