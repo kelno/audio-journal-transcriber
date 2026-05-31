@@ -297,17 +297,19 @@ class RunCommandsJob(TranscribeBundleJob):
             try:
                 if cmd.matched_type is not None:
                     matched_type = cmd.matched_type
-                    logger.debug(f"Using existing match for '{cmd.text}': {matched_type.value}")
+                    logger.debug(f"Using existing match for '{cmd.text}': {matched_type} ({self.bundle})")
                 else:
                     matched_type = interpret_command(cmd.text, ai_manager)
-                    logger.debug(f"Matched command '{cmd.text}' to type: {matched_type.value}")
+                    logger.debug(f"Matched command '{cmd.text}' to type {matched_type} for bundle {self.bundle}")
                     self.bundle.set_command_type(cmd.text, matched_type)
 
-                logger.info(f"Executing {matched_type} command, original text: {cmd.text}")
+                logger.info(f"Executing {matched_type} command for bundle {self.bundle}")
                 handler = COMMAND_REGISTRY[matched_type].handler
-                handler(self.bundle, config, cmd.text)
-
-                self.bundle.set_command_executed(cmd.text)
+                success = handler(self.bundle, config, cmd.text)
+                if success:
+                    self.bundle.set_command_executed(cmd.text)
+                else:
+                    logger.error(f"Command {matched_type} reported failure for bundle {self.bundle}")
 
             except Exception:
                 # On error, stop processing remaining commands to avoid partial state.

@@ -49,6 +49,7 @@ class TextConfig(BaseModel):
             self.api_base_url += "/"
         return self
 
+    @override
     def __str__(self) -> str:
         """Return a string representation of the TextConfig."""
         return (
@@ -73,6 +74,7 @@ class AudioConfig(BaseModel):
             self.api_base_url += "/"
         return self
 
+    @override
     def __str__(self) -> str:
         """Return a string representation of the AudioConfig."""
         return (

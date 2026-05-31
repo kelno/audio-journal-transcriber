@@ -145,6 +145,7 @@ class RealFileSystemService(FileSystemService):
 
         Returns:
             Path: The backup path where the item should be moved.
+
         """
         # Always use store_dir as the root for backup structure
         root_dir = self.config.general.store_dir
