@@ -67,3 +67,34 @@ You are a command matcher in an automated pipeline. Your task is to match user c
     msg = f"LLM returned unexpected response: {response}"
     logger.error(msg)
     raise ValueError(msg)
+
+
+def extract_commands(text: str, bundle_name: str, ai_manager: AIManager) -> list[str]:
+    """Extract commands from text.
+
+    Delegates to the injected text_client instead of doing HTTP directly.
+    """
+    logger.debug(f"AIManager Extracting commands for {bundle_name}")
+    commands: list[str] = []
+    prompt = f"""
+    You are part of an automated pipeline that transcribes personal audio recordings and summarizes them.
+    Your task: You act as a function to extract vocal commands given by the user in the following transcripts.
+    Return format:
+        - One command per line, separated by unix newlines
+        - If no commands are found, return the exact 4 characters string "none"
+        - Do not include any other text or delimiters or special formatting in the response
+    Vocal commands are defined as follows:
+        - The user says "start command" or "début commande"
+        - The user says "stop command" or "fin commande"
+        - The command is whatever the user says between those two, without extra processing
+
+    Transcript: {text}
+    """
+    response = ai_manager.query_chat_completion(prompt)
+    lines = response.splitlines()
+    if len(lines) == 1 and lines[0] == "none":
+        return []
+
+    commands = [line.strip() for line in lines if line.strip() != ""]
+
+    return commands

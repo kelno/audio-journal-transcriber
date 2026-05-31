@@ -4,6 +4,7 @@ from zoneinfo import ZoneInfo
 import pytest
 
 from transcriber.ai_manager import AIManager
+from transcriber.commands.command_interpreter import extract_commands
 from transcriber.config import AudioConfig, GeneralConfig, TextConfig, TranscribeConfig
 
 from .fake_clients import (
@@ -296,9 +297,10 @@ class TestAIManagerBundleName:
             config=fake_config,
         )
 
-        commands = ai_manager.extract_commands(
+        commands = extract_commands(
             "Whatever text without command",
             "TestBundle",
+            ai_manager,
         )
         assert commands == []
 
@@ -323,10 +325,11 @@ class TestAIManagerBundleName:
             config=fake_config,
         )
 
-        commands = ai_manager.extract_commands(
+        commands = extract_commands(
             f"""Hello, start command {command1} end command.
             Then the next day I did enjoy the sun. start command {command2} end commend.
             That's it for today!""",
             "TestBundle",
+            ai_manager,
         )
         assert commands == [command1, command2]
