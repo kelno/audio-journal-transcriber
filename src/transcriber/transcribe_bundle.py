@@ -1,3 +1,4 @@
+import traceback
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -378,8 +379,8 @@ class TranscribeBundle:
                     logger.error(
                         f"Skipping invalid transcribe bundle {dir_path}, exception {e}",
                     )
-                except Exception as e:
-                    logger.error(f"Unexpected exception met while gathering bundle {dir_path}: {e}")
+                except Exception:
+                    logger.error(f"Unexpected exception met while gathering bundle {dir_path}: {traceback.format_exc()}")
 
         logger.debug(f"Found {len(bundles)} existing bundles")
         return bundles

@@ -1,3 +1,4 @@
+import traceback
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -88,9 +89,9 @@ class AudioTranscriber:
                         logger.info(f"Removing too short audio file: {e.source_audio}")
                         e.source_audio.unlink()
                     break  # skip remaining jobs in this bundle
-                except Exception as e:  # pylint: disable=broad-exception-caught
+                except Exception:  # pylint: disable=broad-exception-caught
                     logger.error(
-                        f"Error processing [{job}] (skipping any remaining jobs for this bundle). {e}",
+                        f"Error processing [{job}] (skipping any remaining jobs for this bundle). {traceback.format_exc()}",
                     )
                     if len(remaining_jobs_in_bundle) > 0:
                         unprocessed_bundles.append(remaining_jobs_in_bundle)

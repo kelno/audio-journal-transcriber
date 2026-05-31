@@ -1,4 +1,5 @@
 import shutil
+import traceback
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
@@ -198,8 +199,8 @@ class BundleNameJob(TranscribeBundleJob):
 
         try:
             bundle_name = ai_manager.get_bundle_name_summary(self.bundle.summary.text)
-        except Exception as e:
-            logger.error(f"{self}: Failed to generate bundle name: {e}")
+        except Exception:
+            logger.error(f"{self}: Failed to generate bundle name: {traceback.format_exc()}")
             raise
 
         logger.info(f"Generated bundle name: {bundle_name}")
@@ -254,8 +255,8 @@ class GatherCommandsJob(TranscribeBundleJob):
         commands: list[str] = []
         try:
             commands = extract_commands(self.bundle.transcript.text, self.bundle.bundle_name, ai_manager)
-        except Exception as e:
-            logger.error(f"{self}: Failed to extract commands: {e}")
+        except Exception:
+            logger.error(f"{self}: Failed to extract commands: {traceback.format_exc()}")
             raise
 
         # remove duplicate commands
@@ -313,5 +314,5 @@ class RunCommandsJob(TranscribeBundleJob):
 
             except Exception:
                 # On error, stop processing remaining commands to avoid partial state.
-                logger.error(f"Failed to process bundle {self.bundle} command '{cmd.text}'")
+                logger.error(f"Failed to process bundle {self.bundle} command '{cmd.text}' with exception {traceback.format_exc()}")
                 raise

@@ -1,6 +1,7 @@
 # pyright: reportAny=false, reportArgumentType=false
 
 import json
+import traceback
 from pathlib import Path
 from typing import final, override
 from urllib.parse import urljoin
@@ -88,7 +89,7 @@ class OpenAIAudioClient(AudioTranscriptionClient):
                             logger.debug(f"Transcript streaming start: {text} [...]")
                             print_done = True
                 except Exception as e:
-                    logger.error(f"Error decoding line:\n{line}\n{e}")
+                    logger.error(f"Error decoding line:\n{line}\n{traceback.format_exc()}")
                     raise
 
         complete_transcript = " ".join(text_chunks)
