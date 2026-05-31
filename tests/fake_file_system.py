@@ -4,6 +4,8 @@ from pathlib import Path
 from typing import override
 
 import pytest
+
+from transcriber.config import TranscribeConfig
 from transcriber.files.file_system import FileSystemService
 
 
@@ -13,8 +15,9 @@ class FakeFileSystemService(FileSystemService):
     Tracks all operations for verification in tests.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, config: TranscribeConfig) -> None:
         """Initialize the fake file system."""
+        super().__init__(config)
         self.files: dict[Path, str] = {}
         self.directories: set[Path] = set()
         self.operations: list[tuple[str, Path]] = []
@@ -103,6 +106,7 @@ class FakeFileSystemService(FileSystemService):
         parent = path.parent
         if parent != path:  # Avoid infinite recursion
             self.create_directory(parent)
+
         self.operations.append(("mkdir", path))
 
     @override

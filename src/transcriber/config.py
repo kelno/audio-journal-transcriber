@@ -1,4 +1,5 @@
 from pathlib import Path
+from typing import final, override
 from zoneinfo import ZoneInfo
 
 from pydantic import BaseModel, model_validator
@@ -19,7 +20,9 @@ class GeneralConfig(BaseModel):
     min_length_seconds: float  # 0 means disabled
     remove_short_files: bool
     timezone: ZoneInfo
+    backup_deletion: bool
 
+    @override
     def __str__(self) -> str:
         """Return a string representation of the GeneralConfig."""
         return (
@@ -112,6 +115,7 @@ class TranscribeConfig(BaseSettings):
     audio: AudioConfig
 
     @classmethod
+    @override
     def settings_customise_sources(
         cls,
         settings_cls: type[BaseSettings],
@@ -139,8 +143,4 @@ class TranscribeConfig(BaseSettings):
             float | None: The minimal audio length in seconds, or None if disabled.
 
         """
-        return (
-            self.general.min_length_seconds
-            if self.general.min_length_seconds > 0.0
-            else None
-        )
+        return self.general.min_length_seconds if self.general.min_length_seconds > 0.0 else None

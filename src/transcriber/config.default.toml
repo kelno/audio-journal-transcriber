@@ -11,6 +11,8 @@ remove_short_files = true
 delete_source_audio_after_days = 0
 # IANA time zone, to use to interpret filenames dates
 timezone = "Europe/Brussels"
+# Move deleted files to a temporary trash folder in the store instead of deleting them from filesystem
+backup_deletion = true
 
 [text]
 # Whether to generate summaries from transcripts

@@ -48,7 +48,7 @@ class AudioTranscriber:
         self.dry_run = dry_run
         self.ai_manager = ai_manager
         self.config = config
-        self.fs_service = fs_service or RealFileSystemService()
+        self.fs_service = fs_service or RealFileSystemService(config)
 
     def __post_init__(self) -> None:
         """Initialize the audio transcriber."""

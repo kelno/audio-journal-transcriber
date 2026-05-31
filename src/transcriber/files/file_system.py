@@ -5,9 +5,17 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import override
 
+from transcriber.config import TranscribeConfig
+from transcriber.constants import DELETED_DIR_NAME
+
 
 class FileSystemService(ABC):
     """Abstract interface for file system operations."""
+
+    config: TranscribeConfig
+
+    def __init__(self, config: TranscribeConfig):
+        self.config = config
 
     @abstractmethod
     def file_exists(self, path: Path) -> bool:
@@ -129,6 +137,36 @@ class FileSystemService(ABC):
 class RealFileSystemService(FileSystemService):
     """Real file system operations."""
 
+    def _get_backup_path(self, path: Path) -> Path:
+        """Get the backup path for a file or directory.
+
+        Args:
+            path: Path to the file or directory to backup.
+
+        Returns:
+            Path: The backup path where the item should be moved.
+        """
+        # Always use store_dir as the root for backup structure
+        root_dir = self.config.general.store_dir
+        deleted_dir = root_dir / DELETED_DIR_NAME
+
+        try:
+            # Try to preserve relative structure from store_dir
+            relative_path = path.relative_to(root_dir)
+            backup_path = deleted_dir / relative_path
+        except ValueError:
+            # If path is not relative to store_dir, create a flat structure
+            # using a unique identifier to avoid collisions
+            backup_path = deleted_dir / path.name
+
+            # If the name already exists, append a counter
+            counter = 1
+            while backup_path.exists():
+                backup_path = deleted_dir / f"{path.name}_{counter}"
+                counter += 1
+
+        return backup_path
+
     @override
     def file_exists(self, path: Path) -> bool:
         """Check if a file exists."""
@@ -161,7 +199,16 @@ class RealFileSystemService(FileSystemService):
             msg = f"File not found: {path}"
             raise FileNotFoundError(msg)
 
-        path.unlink()
+        if self.config.general.backup_deletion:
+            backup_path = self._get_backup_path(path)
+
+            # Ensure the backup directory exists
+            backup_path.parent.mkdir(parents=True, exist_ok=True)
+
+            # Move file to backup location
+            path.rename(backup_path)
+        else:
+            path.unlink()
 
     @override
     def delete_directory(self, path: Path) -> None:
@@ -171,7 +218,16 @@ class RealFileSystemService(FileSystemService):
             FileNotFoundError: If the directory does not exist.
 
         """
-        shutil.rmtree(path)
+        if self.config.general.backup_deletion:
+            backup_path = self._get_backup_path(path)
+
+            # Ensure the backup directory exists
+            backup_path.parent.mkdir(parents=True, exist_ok=True)
+
+            # Move directory to backup location
+            path.rename(backup_path)
+        else:
+            shutil.rmtree(path)
 
     @override
     def create_directory(self, path: Path) -> None:

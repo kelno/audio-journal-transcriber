@@ -170,7 +170,7 @@ class TranscribeBundle:
             )
 
         if fs_service is None:
-            fs_service = RealFileSystemService()
+            fs_service = RealFileSystemService(config)
 
         return cls(
             bundle_name=bundle_name,
