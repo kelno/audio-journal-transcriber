@@ -23,6 +23,7 @@ from transcriber.globals import is_handled_audio_file
 from transcriber.logger import logger
 from transcriber.utils import (
     extract_date_from_recording_filename,
+    file_is_in_directory_tree,
     get_days_since_time,
     get_file_modified_date,
 )
@@ -320,11 +321,17 @@ class TranscribeBundle:
 
     def audio_source_needs_removal(
         self,
+        store_dir: Path,
     ) -> bool:
-        """Check if any bundle audio file is older than given days.
+        """Check if the bundle audio file can be removed.
 
-        The date is either the file modification date or the bundle date, whichever is latest.
+        Won't remove files if the transcript does not exists.
+        The date is either the latest audio file modification date or the bundle date, whichever is latest.
         """
+        # We never want to remove the audio file if the transcript is not yet created
+        if not self.transcript:
+            return False
+
         tz = self.config.general.timezone
         if not self.source_audios or self.metadata.keep_forever or self.config.general.delete_source_audio_after_days <= 0:
             return False
@@ -333,11 +340,15 @@ class TranscribeBundle:
         bundle_days_since = get_days_since_time(bundle_date)
         file_days_since = 0
 
-        # Check all files, use the oldest one (max days_since)
+        # Check all files, use the most recent one (max days_since)
         for audio_path in self.source_audios:
+            # if any audio file is NOT in the store, we're in an unexpected state, don't remove anything
+            if not file_is_in_directory_tree(audio_path, store_dir):
+                return False
+
             file_date = get_file_modified_date(audio_path, tz)
             file_days_since_current = get_days_since_time(file_date)
-            file_days_since = max(file_days_since, file_days_since_current)
+            file_days_since = min(file_days_since, file_days_since_current)
 
         days_since = min(bundle_days_since, file_days_since)
         return days_since > self.config.general.delete_source_audio_after_days

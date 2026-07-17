@@ -207,7 +207,7 @@ class AudioTranscriber:
         is_new_audio = not file_is_in_directory_tree(bundle.source_audios[0], store_dir)
         if is_new_audio:
             jobs.append(CreateBundleJob(bundle, dry_run))
-        elif bundle.audio_source_needs_removal():
+        elif bundle.audio_source_needs_removal(store_dir):
             # skip the rest
             return [DeleteAudioFileJob(bundle, dry_run)]
 
