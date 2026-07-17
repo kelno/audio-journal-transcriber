@@ -97,6 +97,20 @@ class FileSystemService(ABC):
         ...
 
     @abstractmethod
+    def move_file(self, source: Path, destination: Path) -> None:
+        """Move or rename a file from source to destination.
+
+        Args:
+            source: Path to the existing file.
+            destination: Path to the new location.
+
+        Raises:
+            FileNotFoundError: If the source file does not exist.
+
+        """
+        ...
+
+    @abstractmethod
     def create_directory(self, path: Path) -> None:
         """Create a directory.
 
@@ -229,6 +243,12 @@ class RealFileSystemService(FileSystemService):
             path.rename(backup_path)
         else:
             shutil.rmtree(path)
+
+    @override
+    def move_file(self, source: Path, destination: Path) -> None:
+        """Move or rename a file from source to destination."""
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        source.rename(destination)
 
     @override
     def create_directory(self, path: Path) -> None:

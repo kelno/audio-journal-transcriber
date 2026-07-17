@@ -72,6 +72,18 @@ class FakeFileSystemService(FileSystemService):
         self.operations.append(("delete", path))
 
     @override
+    def move_file(self, source: Path, destination: Path) -> None:
+        """Move or rename a file from source to destination."""
+        if source not in self.files:
+            msg = f"File not found: {source}"
+            raise FileNotFoundError(msg)
+
+        content = self.files[source]
+        del self.files[source]
+        self.files[destination] = content
+        self.operations.append(("move", source))
+
+    @override
     def delete_directory(self, path: Path) -> None:
         """Delete a directory.
 

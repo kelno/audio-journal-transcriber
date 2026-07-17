@@ -92,7 +92,7 @@ class CreateBundleJob(TranscribeBundleJob):
                 # Move all files
                 ensure_directory_exists(final_audio_paths[0].parent)
                 for source_path, final_path in files_to_move:
-                    shutil.move(source_path, final_path)
+                    self.bundle.fs_service.move_file(source_path, final_path)
 
                 self.bundle.update_audio_paths([Path(p) for _, p in files_to_move])
                 self.bundle.init_metadata(
