@@ -8,6 +8,7 @@ from __future__ import annotations
 from collections.abc import Callable
 
 from transcriber.config import TranscribeConfig
+from transcriber.exception import AbortRemainingBundleJobsException
 from transcriber.logger import logger
 from transcriber.transcribe_bundle import TranscribeBundle
 
@@ -57,6 +58,8 @@ def handle_merge(_bundle: TranscribeBundle, _config: TranscribeConfig, cmd_text:
     msg = "Merge command handler not yet implemented"
     raise NotImplementedError(msg)
 
+    # raise AbortRemainingJobsException("Skip remaining jobs after merge command")
+
 
 @command_handler
 def handle_delete(bundle: TranscribeBundle, _config: TranscribeConfig, cmd_text: str) -> None:
@@ -70,7 +73,9 @@ def handle_delete(bundle: TranscribeBundle, _config: TranscribeConfig, cmd_text:
     """
     logger.info(f"Running delete command for {bundle} (command text: {cmd_text})")
     bundle.fs_service.delete_directory(bundle.get_bundle_dir())
-    # TODO: remove remaining tasks for this bundle
+
+    msg = "Skip remaining jobs after delete command"
+    raise AbortRemainingBundleJobsException(msg)
 
 
 @command_handler

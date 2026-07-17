@@ -5,7 +5,7 @@ from pathlib import Path
 from transcriber.ai_manager import AIManager
 from transcriber.audio_manipulation import AudioManipulation
 from transcriber.config import TranscribeConfig
-from transcriber.exception import AudioTranscriberException, TooShortException
+from transcriber.exception import AbortRemainingBundleJobsException, AudioTranscriberException, TooShortException
 from transcriber.files.file_system import FileSystemService, RealFileSystemService
 from transcriber.globals import is_handled_audio_file
 from transcriber.transcribe_bundle import TranscribeBundle
@@ -89,10 +89,13 @@ class AudioTranscriber:
                         logger.info(f"Removing too short audio file: {e.source_audio}")
                         e.source_audio.unlink()
                     break  # skip remaining jobs in this bundle
-                except Exception:  # pylint: disable=broad-exception-caught
-                    logger.error(
-                        f"Error processing [{job}] (skipping any remaining jobs for this bundle). {traceback.format_exc()}",
+                except AbortRemainingBundleJobsException as e:
+                    logger.warning(
+                        f"Skipping remaining jobs for current bundle, requested by job {job}: {e}",
                     )
+                    break # skip remaining jobs in this bundle
+                except Exception:  # pylint: disable=broad-exception-caught
+                    logger.exception(f"Error processing [{job}] (skipping any remaining jobs for this bundle).")
                     if len(remaining_jobs_in_bundle) > 0:
                         unprocessed_bundles.append(remaining_jobs_in_bundle)
                     break  # skip remaining jobs in this bundle

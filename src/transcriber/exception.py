@@ -19,3 +19,7 @@ class TooShortException(AudioTranscriberException):
 @final
 class EmptyTranscriptException(AudioTranscriberException):
     """Transcript is empty after transcription."""
+
+@final
+class AbortRemainingBundleJobsException(AudioTranscriberException):
+    """Abort remaining jobs in the queue for current bundle."""
