@@ -29,6 +29,7 @@ class OpenAIAudioClient(AudioTranscriptionClient):
             config: AudioConfig with api_base_url, model, api_key, stream settings.
 
         """
+        super().__init__()
         self.config = config
 
     @override

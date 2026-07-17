@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import override
+from typing import ClassVar, override
 from zoneinfo import ZoneInfo
 
 from pydantic import BaseModel, model_validator
@@ -88,7 +88,6 @@ if not default_toml_file.exists():
     error_msg = f"Default configuration file not found: {default_toml_file}"
     raise FileNotFoundError(error_msg)
 
-
 class TranscribeConfig(BaseSettings):
     """All settings for the transcriber.
 
@@ -102,7 +101,7 @@ class TranscribeConfig(BaseSettings):
     3. Default values in model
     """
 
-    model_config = SettingsConfigDict(
+    model_config : ClassVar[SettingsConfigDict] = SettingsConfigDict(
         env_prefix="TRANSCRIBER_",
         env_nested_delimiter="__",
         extra="forbid",

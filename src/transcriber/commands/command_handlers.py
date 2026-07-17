@@ -6,7 +6,6 @@ Contains the implementation logic for each command type.
 from __future__ import annotations
 
 from collections.abc import Callable
-from types import NotImplementedType
 
 from transcriber.config import TranscribeConfig
 from transcriber.logger import logger
