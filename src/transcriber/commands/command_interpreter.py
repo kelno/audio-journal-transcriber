@@ -92,7 +92,7 @@ def extract_raw_commands(text: str, bundle_name: str, ai_manager: AIManager) -> 
         - It ends with "stop command" or "validate command"
         - A user can also say "cancel command", in this case just ignore the command
         - Words can be translated + or be out of order. "fin commande" is valid, as well as "command stop"
-        - The command is whatever the user says between those two, without extra processing
+        - The command is whatever the user says between those two (so not including those boundaries), without any extra processing
         - If the command is more than one sentence, something is wrong in the transcript and the command should be skipped.
 
 
