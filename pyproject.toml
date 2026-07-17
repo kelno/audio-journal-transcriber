@@ -13,10 +13,10 @@ dependencies = [
   "coloredlogs",
   "openai",
   "pydub",
-  "uv>=0.10.2",
+  "uv>=0.11.29",
   "watchdog>=6.0.0",
-  "tzdata>=2026.2",
-  "pytest>=9.0.3",
+  "tzdata>=2026.3",
+  "pytest>=9.1.1",
   "audioop-lts>=0.2.2",
 ]
 
