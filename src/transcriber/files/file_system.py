@@ -225,6 +225,20 @@ class RealFileSystemService(FileSystemService):
         else:
             path.unlink()
 
+    def _get_unique_backup_path(self, path: Path) -> Path:
+        """Return a backup path that does not already exist."""
+        backup_path = self._get_backup_path(path)
+
+        if not backup_path.exists():
+            return backup_path
+
+        counter = 1
+        while True:
+            candidate = backup_path.with_name(f"{backup_path.name}.{counter}")
+            if not candidate.exists():
+                return candidate
+            counter += 1
+
     @override
     def delete_directory(self, path: Path) -> None:
         """Delete a directory.
@@ -234,13 +248,13 @@ class RealFileSystemService(FileSystemService):
 
         """
         if self.config.general.safe_delete:
-            backup_path = self._get_backup_path(path)
+            backup_path = self._get_unique_backup_path(path)
 
             # Ensure the backup directory exists
             backup_path.parent.mkdir(parents=True, exist_ok=True)
 
             # Move directory to backup location
-            path.rename(backup_path)
+            shutil.move(str(path), str(backup_path))
         else:
             shutil.rmtree(path)
 
