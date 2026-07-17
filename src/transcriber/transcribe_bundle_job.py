@@ -279,7 +279,12 @@ class RunCommandsJob(TranscribeBundleJob):
         ai_manager: AIManager,
         config: TranscribeConfig,
     ) -> None:
+
         if not self.bundle.commands:
+            if self.dry_run:
+                logger.info("(dry-run) Skipping running commands as they are not gathered")
+                return # expected in dry run as commands might not have been gathered
+
             msg = f"{self}: Cannot run commands without commands file"
             raise ValueError(msg)
 
