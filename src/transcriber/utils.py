@@ -27,8 +27,8 @@ def remove_empty_subdirs(directory: Path) -> None:
                 logger.debug(f"Removing empty directory: {root}")
                 root_path.rmdir()
 
-    except OSError as e:
-        logger.warning(f"Error while removing empty directory {directory}: {e}")
+    except OSError:
+        logger.exception(f"Error while removing empty directory {directory}")
 
 
 # regex pattern to match obisidian recording filenames like "Recording YYYYMMDDHHMMSS"

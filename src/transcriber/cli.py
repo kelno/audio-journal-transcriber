@@ -64,6 +64,6 @@ def main() -> None:
         unprocessed = transcriber.run()
         if daemon:
             run_daemon_mode(transcriber, unprocessed, config)
-    except AudioTranscriberException as e:
-        logger.error(f"AudioTranscriber failed with exception: {e}")
+    except AudioTranscriberException:
+        logger.exception("AudioTranscriber failed with exception")
         sys.exit(1)

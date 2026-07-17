@@ -1,4 +1,3 @@
-import traceback
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -377,12 +376,12 @@ class TranscribeBundle:
                     if cleanup_bundle:
                         bundle.cleanup_inconsistencies(dry_run)
                     bundles.append(bundle)
-                except ValueError as e:
-                    logger.error(
-                        f"Skipping invalid transcribe bundle {dir_path}, exception {e}",
+                except ValueError:
+                    logger.exception(
+                        f"Skipping invalid transcribe bundle {dir_path}",
                     )
                 except Exception:
-                    logger.error(f"Unexpected exception met while gathering bundle {dir_path}: {traceback.format_exc()}")
+                    logger.exception(f"Unexpected exception met while gathering bundle {dir_path}")
 
         logger.debug(f"Found {len(bundles)} existing bundles")
         return bundles
