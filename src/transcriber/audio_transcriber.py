@@ -203,17 +203,18 @@ class AudioTranscriber:
         if not bundle.source_audios:
             return []
 
+        jobs : list[TranscribeBundleJob] = []
         is_new_audio = not file_is_in_directory_tree(bundle.source_audios[0], store_dir)
         if is_new_audio:
-            return [CreateBundleJob(bundle, dry_run)]
-
-        if bundle.audio_source_needs_removal():
+            jobs.append(CreateBundleJob(bundle, dry_run))
+        elif bundle.audio_source_needs_removal():
+            # skip the rest
             return [DeleteAudioFileJob(bundle, dry_run)]
 
         if not bundle.transcript:
-            return [TranscriptionJob(bundle, dry_run)]
+            jobs.append(TranscriptionJob(bundle, dry_run))
 
-        return []
+        return jobs
 
     def _gather_command_jobs(
         self,
