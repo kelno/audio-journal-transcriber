@@ -31,7 +31,7 @@ def _build_registry() -> dict[CommandType, CommandMetadata]:
             handler=handle_unknown,
         ),
         CommandType.IGNORE: CommandMetadata(
-            command_type=CommandType.UNKNOWN,
+            command_type=CommandType.IGNORE,
             description="User asks for the command to be ignored.",
             handler=handle_ignore,
         ),
