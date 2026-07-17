@@ -2,7 +2,7 @@ from pathlib import Path
 from typing import final
 
 
-class AudioTranscriberException(Exception):
+class AudioTranscriberException(BaseException):
     """Base exception for audio transcriber errors."""
 
 
@@ -22,4 +22,4 @@ class EmptyTranscriptException(AudioTranscriberException):
 
 @final
 class AbortRemainingBundleJobsException(AudioTranscriberException):
-    """Abort remaining jobs in the queue for current bundle."""
+    """Abort remaining jobs in the queue for current bundle. This is not an error case."""

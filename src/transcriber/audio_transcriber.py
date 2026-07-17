@@ -89,7 +89,7 @@ class AudioTranscriber:
                         e.source_audio.unlink()
                     break  # skip remaining jobs in this bundle
                 except AbortRemainingBundleJobsException as e:
-                    logger.warning(
+                    logger.debug(
                         f"Skipping remaining jobs for current bundle, requested by job {job}: {e}",
                     )
                     break # skip remaining jobs in this bundle

@@ -10,7 +10,7 @@ from transcriber.commands.command_registry import COMMAND_REGISTRY
 
 from .ai_manager import AIManager
 from .config import TranscribeConfig
-from .exception import EmptyTranscriptException, TooShortException
+from .exception import AbortRemainingBundleJobsException, EmptyTranscriptException, TooShortException
 from .logger import logger
 from .transcribe_bundle import TranscribeBundle
 from .utils import ensure_directory_exists
@@ -325,6 +325,9 @@ class RunCommandsJob(TranscribeBundleJob):
                 handler(self.bundle, config, cmd.text)
                 self.bundle.set_command_executed(cmd.text)
 
+            except AbortRemainingBundleJobsException:
+                logger.debug(f"{cmd} requested aborting remaining jobs for bundle {self.bundle}")
+                raise # raise it further to the job execution loop
             except Exception:
                 # On error, stop processing remaining commands to avoid partial state.
                 logger.error(f"Failed to process bundle {self.bundle} command '{cmd.text}' with exception {traceback.format_exc()}")
