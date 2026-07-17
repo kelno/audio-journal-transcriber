@@ -31,9 +31,29 @@ def handle_merge(_bundle: TranscribeBundle, _config: TranscribeConfig, cmd_text:
 
     """
     # TODO: Implement merge logic https://github.com/kelno/audio-journal-transcriber/issues/3
-    # Add a configurable maximum merge time? Like 12h by default
+    # So basically the use case looks like this:
+    # User wants to merge the current recording with the previous one, and have it considered as one by the transcription system here
+    # For example user gets interrupted or resumes later for any reason
     #
-    # throw not yet implemented exception
+    # There might be more than 2 records
+    # On the tech side I'm sure about the whole process but here are bits of what I imagine:
+    # Our transcription system needs to support more than one record per bundle (partly (or fully?) implemented)
+    # To know there is a merge, the record already needs to be processed into a bundle once to have the commands listed
+    # Only then when processing commands here we actually merge this bundle
+
+    # I imagine the process is basically :
+        # - Find the previous bundle (by date). With a configurable maximum merge time? Like 12h by default
+        # - Add the audio to previous record (move file and add to metadata of previous bundle)
+        # - Merge commands with previous file
+        # - Append transcript to the one of previous file
+        # - Clear the summary of previous bundle, as it will need to be regenerated with the new audio.
+        # - Also mark as name not generated to trigger a new name generation.
+        # - Nuke current bundle
+        # - Try to make that all atomic as much as possible, avoiding to have a partially merged record. We need to think how to leave things in a workable state if that happens.
+        # - We'll also need to make sure to remove remaining jobs for this bundle somehow, might need some refactoring too. Maybe using exception.
+        #    - If there are more unprocessed command... Well let's just say they won't be processed in this loop. Same thing for regenerating the summary & name generation.
+    # If more than one record is to be merged into the same bundle (example 3 records following each other), I think we're fine as long as we process bundles in chronological order. Maybe add a comment on the process loop explaining this is a hard requirement for merge to work.
+
     msg = "Merge command handler not yet implemented"
     raise NotImplementedError(msg)
 
@@ -50,6 +70,7 @@ def handle_delete(bundle: TranscribeBundle, _config: TranscribeConfig, cmd_text:
     """
     logger.info(f"Running delete command for {bundle} (command text: {cmd_text})")
     bundle.fs_service.delete_directory(bundle.get_bundle_dir())
+    # TODO: remove remaining tasks for this bundle
 
 
 @command_handler

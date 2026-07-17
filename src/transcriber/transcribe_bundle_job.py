@@ -259,7 +259,10 @@ class GatherCommandsJob(TranscribeBundleJob):
             logger.error(f"{self}: Failed to extract commands: {traceback.format_exc()}")
             raise
 
-        # remove duplicate commands
+        # Remove duplicate raw commands
+        # This doesn't remove potential duplicates after command matching,
+        # but just the ones with the exact same prompt,
+        # which is still important because the command text is used as identifier
         commands = list(dict.fromkeys(commands))
 
         logger.debug(f"{self}: Successfully extracted commands (len {len(commands)})")
@@ -287,13 +290,21 @@ class RunCommandsJob(TranscribeBundleJob):
             return
 
         logger.info(f"Running commands for {self.bundle}")
-        if self.dry_run:
-            return
+
+        # TODO: Disallow having more than one command of the same type
+        # if that happens, they still co exists in the command file but only the first one is executed
+        # then the next ones are just marked as executed as well without running the command logic
+
+        # We should also have some command priority system, have the "delete" run first, then merge, then the rest.
+        # So here we'll want a first pass of matching commands to types, then sort them by priority, then execute them in order.
 
         for cmd in self.bundle.commands.commands:
             if cmd.executed:
                 logger.debug(f"Skipping already executed command: {cmd.text}")
                 continue
+
+            if self.dry_run:
+                return
 
             try:
                 if cmd.matched_type is not None:
@@ -312,4 +323,5 @@ class RunCommandsJob(TranscribeBundleJob):
             except Exception:
                 # On error, stop processing remaining commands to avoid partial state.
                 logger.error(f"Failed to process bundle {self.bundle} command '{cmd.text}' with exception {traceback.format_exc()}")
+                # TODO: log error in command file: self.bundle.set_... (need to create that logic)
                 raise

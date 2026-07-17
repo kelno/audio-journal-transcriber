@@ -14,10 +14,12 @@ import transcriber.commands.command_type as command_type  # noqa: PLR0402
 class Command:
     """Represents a single command with execution state."""
 
-    text: str
+    text: str # The natural language prompt. Should be unique for a bundle as it's used as identifier.
     executed: bool = False
     executed_at: datetime | None = None
     matched_type: command_type.CommandType | None = None
+    # (NYI) last_error: str | None = None # Debug error string to help debugging
+    # TODO: add a retry system, up to a configured amount of times. And stop trying if reached.
 
     def to_dict(self) -> dict[str, Any]:
         """Convert command to dictionary for YAML serialization."""
