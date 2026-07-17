@@ -7,6 +7,7 @@ from typing import override
 from transcriber.audio_manipulation import AudioManipulation
 from transcriber.commands.command_interpreter import extract_raw_commands, interpret_command
 from transcriber.commands.command_registry import COMMAND_REGISTRY
+from transcriber.constants import MULTIPLE_TRANSCRIPTS_SEPARATOR
 
 from .ai_manager import AIManager
 from .config import TranscribeConfig
@@ -14,8 +15,6 @@ from .exception import AbortRemainingBundleJobsException, EmptyTranscriptExcepti
 from .logger import logger
 from .transcribe_bundle import TranscribeBundle
 from .utils import ensure_directory_exists
-
-MULTIPLE_TRANSCRIPTS_SEPARATOR = "\n\n[next transcripted audio]\n\n"
 
 @dataclass
 class TranscribeBundleJob(ABC):
