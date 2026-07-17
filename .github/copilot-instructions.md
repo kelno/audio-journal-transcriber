@@ -15,8 +15,10 @@
 ## Iteration & Collaboration
 
 - **Explain before showing.** When iterating on changes together, the agent should first show what changed and *why*. This way the user understands the reasoning before reviewing the code.
+- **Preserve existing comments.** When refactoring, try to keep existing comments about context. If they were written, it's likely they provide valuable context.
+- **Check diagnostics.** When making changes, check for diagnostic errors and warnings to comply with linter demands and maintain code quality.
 - **No change-tracking comments.** Don't add comments in code that highlight what was changed (e.g., `# CHANGED: updated logic here`). Comments should describe the current logic and intent, not compare to previous versions.
 
 ## Technical Preferences
 
-- **Latest versions.** Use the latest versions of Python and libraries unless the user specifies otherwise or the project constraints require an older version.
+- **Latest versions.** Use the latest versions of Python (3.14+) and libraries.
