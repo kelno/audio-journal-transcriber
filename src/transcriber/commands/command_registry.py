@@ -16,7 +16,7 @@ def _build_registry() -> dict[CommandType, CommandMetadata]:
         CommandType.MERGE: CommandMetadata(
             command_type=CommandType.MERGE,
             description="Combine the current recording with the previous one.",
-            aliases=["merge", "join", "concatenate", "add"],
+            aliases=["merge", "join", "concatenate", "add", "fusionner"],
             handler=handle_merge,
         ),
         CommandType.DELETE: CommandMetadata(
