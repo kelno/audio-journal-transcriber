@@ -108,7 +108,7 @@ class TranscribeBundle:
         )
 
         # Sort audio files chronologically
-        source_audios = cls._sort_audio_files_chronologically(source_audios, config)
+        source_audios = cls.sort_audio_files_chronologically(source_audios, config)
 
         bundle = TranscribeBundle(
             bundle_name=bundle_name,
@@ -215,7 +215,7 @@ class TranscribeBundle:
             self.refresh(dry_run)
 
     @staticmethod
-    def _sort_audio_files_chronologically(
+    def sort_audio_files_chronologically(
         audio_files: list[Path],
         config: TranscribeConfig,
     ) -> list[Path]:
