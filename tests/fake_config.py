@@ -21,6 +21,7 @@ def fake_config() -> TranscribeConfig:
             remove_short_files=False,
             timezone=ZoneInfo("UTC"),
             safe_delete=True,
+            merge_max_hours=12.0,
         ),
         text=TextConfig(
             summary_enabled=True,

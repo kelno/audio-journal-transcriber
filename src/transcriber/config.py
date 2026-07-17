@@ -21,6 +21,7 @@ class GeneralConfig(BaseModel):
     remove_short_files: bool
     timezone: ZoneInfo
     safe_delete: bool
+    merge_max_hours: float # The max time difference in hours between two recordings to be merged into the same bundle. 0 means disabled.
 
     @override
     def __str__(self) -> str:
@@ -29,7 +30,8 @@ class GeneralConfig(BaseModel):
             f"GeneralConfig(input_dir={self.input_dir}, store_dir={self.store_dir}, "
             f"delete_source_audio_after_days={self.delete_source_audio_after_days or 'disabled'}, "
             f"min_length_seconds={self.min_length_seconds or 'disabled'}, "
-            f"remove_short_files={self.remove_short_files})"
+            f"remove_short_files={self.remove_short_files}, "
+            f"merge_max_hours={self.merge_max_hours})"
         )
 
 
