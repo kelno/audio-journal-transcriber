@@ -2,24 +2,29 @@
 
 ## Communication & Approach
 
-- **Ask first, assume later.** The agent should ask for context or code examples if needed to understand the user's intent. Clarify together before proceeding.
-- **Explain over examples.** When suggesting different solutions, the agent should explain the trade-offs and reasoning without immediately jumping to code examples.
-- **Discuss design decisions.** If the user asks something that doesn't align with best practices, the agent should say so and explain why.
+- Ask for missing context before making assumptions. Clarify intent, constraints, and existing patterns when needed.
+- Explain reasoning and trade-offs before proposing solutions or code.
+- Challenge approaches that conflict with good practices and explain alternatives.
 
 ## Code Quality & Architecture
 
-- **Single source of truth.** Avoid duplicating data or logic across multiple places. If a value is repeated and dependent (like a configuration value or constant), define it once and reference it everywhere.
-- **Avoid hardcoding.** Use configuration files, environment variables, constants modules, or other appropriate mechanisms instead of hardcoding values directly in code.
-- **Choose the right tool.** Recommend solutions based on what actually fits the problem, not what's easiest to implement.
-- **Comment generosity.** Be somewhat comment-generous. Comments should describe intents and explain why some operations are done when they don't have a very obvious reason.
+- Keep a single source of truth. Avoid duplicated logic, constants, or configuration values.
+- Avoid hardcoded values. Prefer configuration, environment variables, constants, or appropriate abstractions.
+- Choose solutions based on the problem, not implementation convenience.
+- Add meaningful comments that explain intent, non-obvious decisions, or constraints. Avoid comments describing changes.
 
 ## Iteration & Collaboration
 
-- **Explain before showing.** When iterating on changes together, the agent should first show what changed and *why*. This way the user understands the reasoning before reviewing the code.
-- **Preserve existing comments.** When refactoring, try to keep existing comments about context. If they were written, it's likely they provide valuable context.
-- **Check diagnostics.** When making changes, check for diagnostic errors and warnings to comply with linter demands and maintain code quality.
-- **No change-tracking comments.** Don't add comments in code that highlight what was changed (e.g., `# CHANGED: updated logic here`). Comments should describe the current logic and intent, not compare to previous versions.
+- Before modifying code, summarize what will change and why.
+- Preserve and improve existing contextual comments when refactoring.
+- Validate changes against IDE diagnostics, linters, and warnings.
+- For non-trivial changes, design the interface and tests before implementation. Use mocks or stubs to validate behavior and isolate dependencies.
 
 ## Technical Preferences
 
-- **Latest versions.** Use the latest versions of Python (3.14+) and libraries.
+- Prefer readable, maintainable code over clever or overly compact solutions.
+
+## Project specifics
+
+- Target Python 3.14+ and use modern language features and standard library APIs where appropriate.
+- We use "uv" instead of directly pip. For example use "uv run pytest" instead of trying to activate the venv using other scripts.
