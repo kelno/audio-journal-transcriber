@@ -1,6 +1,16 @@
 #!/bin/sh
 
 # This hook will apply a new tag if pyproject.toml project version changed. Expects format X.X.X
+# Only runs on the main branch
+
+# Get the current branch name
+CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
+
+# Only proceed if we're on the main branch
+if [ "$CURRENT_BRANCH" != "main" ]; then
+    echo "Not on main branch. Skipping version tagging."
+    exit 0
+fi
 
 # Get the current commit hash
 COMMIT_HASH=$(git rev-parse HEAD)
