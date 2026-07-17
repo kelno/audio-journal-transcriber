@@ -355,14 +355,15 @@ class TranscribeBundle:
 
     @staticmethod
     def gather_existing_bundles(
-        output_dir: Path,
+        store_dir: Path,
         dry_run: bool,
+        cleanup_bundle: bool, # run bundle.cleanup_inconsistencies on found bundles
         config: TranscribeConfig,
         fs_service: FileSystemService,
     ) -> list["TranscribeBundle"]:
         """Find and load all bundles from output_dir."""
         bundles: list[TranscribeBundle] = []
-        for dir_path in fs_service.list_directory(output_dir):
+        for dir_path in fs_service.list_directory(store_dir):
             # Exclude if the directory starts with an underscore or is an hidden file
             if dir_path.name.startswith("_") or dir_path.name.startswith("."):
                 continue
@@ -373,7 +374,8 @@ class TranscribeBundle:
                         config,
                         fs_service,
                     )
-                    bundle.cleanup_inconsistencies(dry_run)
+                    if cleanup_bundle:
+                        bundle.cleanup_inconsistencies(dry_run)
                     bundles.append(bundle)
                 except ValueError as e:
                     logger.error(

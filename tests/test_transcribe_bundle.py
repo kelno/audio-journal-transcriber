@@ -514,8 +514,9 @@ class TestGatherExistingBundles:
         fake_fs.write_file(bundle2_dir / "meeting.mp3", "audio2")
 
         bundles = TranscribeBundle.gather_existing_bundles(
-            output_dir=store_dir,
+            store_dir=store_dir,
             dry_run=False,
+            cleanup_bundle=True,
             config=fake_config,
             fs_service=fake_fs,
         )
@@ -541,8 +542,9 @@ class TestGatherExistingBundles:
         fake_fs.write_file(invalid_bundle_dir / "meeting.mp3", "audio")
 
         bundles = TranscribeBundle.gather_existing_bundles(
-            output_dir=store_dir,
+            store_dir=store_dir,
             dry_run=False,
+            cleanup_bundle=True,
             config=fake_config,
             fs_service=fake_fs,
         )

@@ -152,8 +152,9 @@ class AudioTranscriber:
         logger.info(f"Gathering bundles from managed store directory:  {store_dir}")
         bundles.extend(
             TranscribeBundle.gather_existing_bundles(
-                store_dir,
-                self.dry_run,
+                store_dir=store_dir,
+                dry_run=self.dry_run,
+                cleanup_bundle=True,
                 config=self.config,
                 fs_service=self.fs_service,  # type: ignore[arg-type]
             ),
