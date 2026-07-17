@@ -71,7 +71,8 @@ def handle_delete(bundle: TranscribeBundle, _config: TranscribeConfig, cmd_text:
         cmd_text: The original command text.
 
     """
-    logger.info(f"Running delete command for {bundle} (command text: {cmd_text})")
+    logger.debug(f"Running delete command for {bundle} (command text: {cmd_text})")
+    bundle.set_command_executed(cmd_text)
     bundle.fs_service.delete_directory(bundle.get_bundle_dir())
 
     msg = "Skip remaining jobs after delete command"
