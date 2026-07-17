@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import override
 
 from transcriber.audio_manipulation import AudioManipulation
+from transcriber.commands.command import Command
 from transcriber.commands.command_interpreter import extract_raw_commands, interpret_command
 from transcriber.commands.command_registry import COMMAND_REGISTRY
 from transcriber.commands.command_type import CommandType
@@ -268,7 +269,6 @@ class GatherCommandsJob(TranscribeBundleJob):
         logger.debug(f"{self}: Successfully extracted commands (len {len(commands)})")
         self.bundle.set_and_write_commands(commands)
 
-
 @dataclass
 class RunCommandsJob(TranscribeBundleJob):
     """Try to run non-executed commands for a bundle."""
@@ -279,7 +279,6 @@ class RunCommandsJob(TranscribeBundleJob):
         ai_manager: AIManager,
         config: TranscribeConfig,
     ) -> None:
-
         if not self.bundle.commands:
             if self.dry_run:
                 logger.info("(dry-run) Skipping running commands as they are not gathered")
@@ -289,7 +288,8 @@ class RunCommandsJob(TranscribeBundleJob):
             raise ValueError(msg)
 
         if not self.bundle.commands.commands:
-            return  # no commands to run, that's valid
+            return # no commands to run, that's valid
+
         if not any(not cmd.executed for cmd in self.bundle.commands.commands):
             logger.debug(f"All commands already executed for {self.bundle}")
             return
@@ -299,47 +299,100 @@ class RunCommandsJob(TranscribeBundleJob):
         if self.dry_run:
             return
 
-        # TODO: We should also have some command priority system, have the "delete" run first, then merge, then the rest.
+        commands = self.bundle.commands.commands
+        pending_commands = self._prepare_commands(ai_manager, commands)
 
-        seen_command_types: set[CommandType] = set()
+        # Commands with side effects that invalidate the rest of the bundle should run first.
+        # Keep this local until a more complex command ordering system is actually needed.
+        pending_commands.sort(key=lambda cmd: self._command_priority(cmd.matched_type))
 
-        # First pass, fill all commands types
-        for cmd in self.bundle.commands.commands:
-            matched_type = cmd.matched_type
-            if matched_type is None:
-                # should not happen under normal circumstances, recover from inconsistent state
+        self._execute_commands(pending_commands, config)
+
+    def _prepare_commands(
+        self,
+        ai_manager: AIManager,
+        commands : list[Command],
+    ) -> list[Command]:
+        """Ensure commands have a matched type and return pending commands."""
+        pending_commands = []
+
+        for cmd in commands:
+            if cmd.executed:
+                continue
+
+            if cmd.matched_type is None:
+                # Should not happen under normal circumstances, but recover from
+                # inconsistent state if a command was marked executed without its type.
                 matched_type = interpret_command(cmd.text, ai_manager)
                 self.bundle.set_command_type(cmd.text, matched_type)
                 cmd.matched_type = matched_type
 
-            seen_command_types.add(matched_type)
-            continue
+            pending_commands.append(cmd)
 
-        # Second pass, execute commands in order
-        # Only one command of each type should be executed, the rest should be skipped
-        for cmd in self.bundle.commands.commands:
-            if cmd.executed:
-                continue
+        return pending_commands
 
+    def _execute_commands(
+        self,
+        pending_commands: list[Command],
+        config: TranscribeConfig,
+    ) -> None:
+        """Execute commands while avoiding duplicate command types.
+
+        A bundle only ever has one effective command execution per command type, even across multiple job runs.
+        """
+        assert(self.bundle.commands)
+        seen_executed_types: set[CommandType] = {
+            cmd.matched_type
+            for cmd in self.bundle.commands.commands
+            if cmd.executed and cmd.matched_type is not None
+        }
+
+        for cmd in pending_commands:
             try:
                 matched_type = cmd.matched_type
-                assert(matched_type is not None)
-                if matched_type in seen_command_types:
-                    logger.info(f"Skipping duplicate {matched_type.value} command: {cmd.text}")
-                    # Mark as executed to avoid picking it up when gathering bundle with pending commands
+                assert matched_type is not None
+
+                if matched_type in seen_executed_types:
+                    logger.info(
+                        f"Skipping duplicate {matched_type.value} command: {cmd.text}",
+                    )
+
+                    # Mark as executed to avoid picking it up when gathering bundle with pending commands.
                     self.bundle.set_command_executed(cmd.text)
                     continue
 
-                logger.info(f"Executing {matched_type} command for bundle {self.bundle}")
+                logger.info(
+                    f"Executing {matched_type.value} command for bundle {self.bundle}",
+                )
+
                 handler = COMMAND_REGISTRY[matched_type].handler
                 handler(self.bundle, config, cmd.text)
+
                 self.bundle.set_command_executed(cmd.text)
+                seen_executed_types.add(matched_type)
 
             except AbortRemainingBundleJobsException:
-                logger.debug(f"{cmd} requested aborting remaining jobs for bundle {self.bundle}")
-                raise # raise it further to the job execution loop
+                logger.debug(
+                    f"{cmd} requested aborting remaining jobs for bundle {self.bundle}"
+                )
+                raise  # raise it further to the job execution loop
+
             except Exception:
                 # On error, stop processing remaining commands to avoid partial state.
-                logger.error(f"Failed to process bundle {self.bundle} command '{cmd.text}' with exception {traceback.format_exc()}")
-                # TODO: log error in command file: self.bundle.set_last_error... (need to create that logic)
+                logger.exception(
+                    f"Failed to process bundle {self.bundle} command '{cmd.text}'",
+                )
+                # TODO: log error in command file: self.bundle.set_last_error...
+                # (need to create that logic)
                 raise
+
+    @staticmethod
+    def _command_priority(command_type: CommandType | None) -> int:
+        """Return execution priority. Lower values execute first."""
+        match command_type:
+            case CommandType.DELETE:
+                return 0
+            case CommandType.MERGE:
+                return 1
+            case _:
+                return 2
