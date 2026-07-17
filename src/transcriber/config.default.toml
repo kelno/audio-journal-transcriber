@@ -26,7 +26,7 @@ summary_enabled = true
 #api_key = "your_api_key_here"
 # Example: mistral-medium-latest
 #model = "mistral-medium-latest"
-# (Optional) Extra context to provide to the AI when summarizing audio content, beside the basic instruction.
+# (Optional) Extra context to provide to the AI when summarizing audio content, beside the built-in instructions.
 #extra_context = null
 
 [audio]

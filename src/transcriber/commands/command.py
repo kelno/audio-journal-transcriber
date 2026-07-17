@@ -1,5 +1,5 @@
-# pyright:  reportExplicitAny=false,  reportImportCycles=false
-#
+# pyright:  reportExplicitAny=false, reportImportCycles=false
+
 from __future__ import annotations
 
 from contextlib import suppress
@@ -58,4 +58,6 @@ class Command:
             executed=executed,
             executed_at=executed_at,
             matched_type=matched_type,
+            # last_error
+            # retries
         )

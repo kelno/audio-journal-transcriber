@@ -74,15 +74,12 @@ $version = git describe --tags --abbrev=0
 docker build --build-arg VERSION=$version -t audio-journal-transcriber:$version .
 ```
 
-## Configuration
+## Container configuration
 
-See "Configuration" above.  
-The image working directory is `/app` if using the config file, mount it at `/app/config.custom.toml` 
+You can either use env variables or mount a config file at `/app/config.custom.toml`.  
+See "Configuration" section above for details.   
 
 ## Examples
-
-CHANGE ME: Configure input and store in config
-LATER CHANGE ME: Make this app a file watch thingy that will update periodically?
 
 ```bash
 # Using env variables 
@@ -108,11 +105,4 @@ docker run -v /path/to/input:/data/input \
            audio-journal-transcriber:latest
 
 # (Or combine both as needed)
-```
-
-## Obsidian PowerShell command example
-
-```powershell
-cd _/transcribe
-Start-Process powershell -ArgumentList "-Command `"uv run transcriber; Read-Host 'Press Enter to exit'`" "
 ```
