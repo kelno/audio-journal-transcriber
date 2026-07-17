@@ -30,7 +30,7 @@ def handle_merge(_bundle: TranscribeBundle, _config: TranscribeConfig, cmd_text:
         cmd_text: The original command text.
 
     """
-    # TODO: Implement merge logic
+    # TODO: Implement merge logic https://github.com/kelno/audio-journal-transcriber/issues/3
     # Add a configurable maximum merge time? Like 12h by default
     #
     # throw not yet implemented exception

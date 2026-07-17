@@ -181,49 +181,89 @@ class AudioTranscriber:
         config: TranscribeConfig,
     ) -> BundleJobs:
         """Gather transcription jobs from this bundle. Jobs needs to be run in order."""
-        jobs: list[TranscribeBundleJob] = []
-
         logger.debug(f"Gathering jobs for bundle: [{bundle}]")
 
-        if bundle.source_audios:
-            is_new_audio = not file_is_in_directory_tree(
-                bundle.source_audios[0],
-                store_dir,
-            )
-            if is_new_audio:
-                job = CreateBundleJob(bundle, dry_run)
-                jobs.append(job)
-
-            if not is_new_audio and bundle.audio_source_needs_removal():
-                job = DeleteAudioFileJob(bundle, dry_run)
-                jobs.append(job)
-            elif not bundle.transcript:
-                job = TranscriptionJob(bundle, dry_run)
-                jobs.append(job)
-            if not bundle.commands:
-                jobs.extend(
-                    [
-                        GatherCommandsJob(bundle, dry_run),
-                        RunCommandsJob(bundle, dry_run),
-                    ],
-                )
-            elif bundle.commands.has_non_executed_commands():
-                jobs.append(RunCommandsJob(bundle, dry_run))
-
-        if config.text.summary_enabled:
-            if not bundle.summary:
-                # First check if transcript exists or TranscriptionJob is scheduled
-                transcript_exists_or_scheduled = bundle.transcript is not None or any(isinstance(j, TranscriptionJob) for j in jobs)
-                if transcript_exists_or_scheduled:
-                    job = SummaryJob(bundle, dry_run)
-                    jobs.append(job)
-
-            # always needs to be done after summary as this relies on summary content
-            if bundle.needs_naming():
-                job = BundleNameJob(bundle, dry_run)
-                jobs.append(job)
+        jobs: list[TranscribeBundleJob] = []
+        jobs.extend(self._gather_lifecycle_jobs(bundle, store_dir, dry_run))
+        jobs.extend(self._gather_command_jobs(bundle, dry_run))
+        jobs.extend(self._gather_post_processing_jobs(bundle, jobs, dry_run, config))
 
         return jobs
+
+    def _gather_lifecycle_jobs(
+        self,
+        bundle: TranscribeBundle,
+        store_dir: Path,
+        dry_run: bool,
+    ) -> list[TranscribeBundleJob]:
+        """Gather bundle creation, deletion, and transcription jobs."""
+        if not bundle.source_audios:
+            return []
+
+        is_new_audio = not file_is_in_directory_tree(bundle.source_audios[0], store_dir)
+        if is_new_audio:
+            return [CreateBundleJob(bundle, dry_run)]
+
+        if bundle.audio_source_needs_removal():
+            return [DeleteAudioFileJob(bundle, dry_run)]
+
+        if not bundle.transcript:
+            return [TranscriptionJob(bundle, dry_run)]
+
+        return []
+
+    def _gather_command_jobs(
+        self,
+        bundle: TranscribeBundle,
+        dry_run: bool,
+    ) -> list[TranscribeBundleJob]:
+        """Gather command extraction and execution jobs."""
+        if not bundle.source_audios and not bundle.commands:
+            return []
+
+        if not bundle.commands:
+            return [
+                GatherCommandsJob(bundle, dry_run),
+                RunCommandsJob(bundle, dry_run),
+            ]
+
+        if bundle.commands.has_non_executed_commands():
+            return [RunCommandsJob(bundle, dry_run)]
+
+        return []
+
+    def _gather_post_processing_jobs(
+        self,
+        bundle: TranscribeBundle,
+        existing_jobs: list[TranscribeBundleJob],
+        dry_run: bool,
+        config: TranscribeConfig,
+    ) -> list[TranscribeBundleJob]:
+        """Gather summary and naming jobs for the bundle."""
+        jobs: list[TranscribeBundleJob] = []
+
+        if not config.text.summary_enabled:
+            return jobs
+
+        if not bundle.summary and self._should_generate_summary(bundle, existing_jobs):
+            jobs.append(SummaryJob(bundle, dry_run))
+
+        # always needs to be done after summary as this relies on summary content
+        if bundle.needs_naming():
+            jobs.append(BundleNameJob(bundle, dry_run))
+
+        return jobs
+
+    def _should_generate_summary(
+        self,
+        bundle: TranscribeBundle,
+        existing_jobs: list[TranscribeBundleJob],
+    ) -> bool:
+        """Return whether a summary job can be scheduled."""
+        return (
+            bundle.transcript is not None
+            or any(isinstance(job, TranscriptionJob) for job in existing_jobs)
+        )
 
     def run(self) -> list[BundleJobs]:
         """Process all files.
