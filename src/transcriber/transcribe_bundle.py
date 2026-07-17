@@ -332,8 +332,12 @@ class TranscribeBundle:
         if not self.transcript:
             return False
 
-        tz = self.config.general.timezone
-        if not self.source_audios or self.metadata.keep_forever or self.config.general.delete_source_audio_after_days <= 0:
+        # Bundle is explicitely marked as "keep audio forever"
+        if self.metadata.keep_forever:
+            return False
+
+        # No audios to delete or removal is disabled in configuration
+        if not self.source_audios or self.config.general.delete_source_audio_after_days <= 0:
             return False
 
         bundle_date = self.get_date_from_bundle_name()
@@ -341,9 +345,11 @@ class TranscribeBundle:
         file_days_since = 0
 
         # Check all files, use the most recent one (max days_since)
+        tz = self.config.general.timezone
         for audio_path in self.source_audios:
             # if any audio file is NOT in the store, we're in an unexpected state, don't remove anything
             if not file_is_in_directory_tree(audio_path, store_dir):
+                logger.error(f"bundle: {self}: audio_source_needs_removal has unexpectedly found an audio file outside of store: {audio_path}")
                 return False
 
             file_date = get_file_modified_date(audio_path, tz)
