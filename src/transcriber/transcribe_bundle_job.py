@@ -7,6 +7,7 @@ from typing import override
 from transcriber.audio_manipulation import AudioManipulation
 from transcriber.commands.command_interpreter import extract_raw_commands, interpret_command
 from transcriber.commands.command_registry import COMMAND_REGISTRY
+from transcriber.commands.command_type import CommandType
 from transcriber.constants import MULTIPLE_TRANSCRIPTS_SEPARATOR
 
 from .ai_manager import AIManager
@@ -295,29 +296,39 @@ class RunCommandsJob(TranscribeBundleJob):
 
         logger.info(f"Running commands for {self.bundle}")
 
-        # TODO: Disallow having more than one command of the same type
-        # if that happens, they still co exists in the command file but only the first one is executed
-        # then the next ones are just marked as executed as well without running the command logic
+        if self.dry_run:
+            return
 
         # TODO: We should also have some command priority system, have the "delete" run first, then merge, then the rest.
-        # So here we'll want a first pass of matching commands to types, then sort them by priority, then execute them in order.
 
+        seen_command_types: set[CommandType] = set()
+
+        # First pass, fill all commands types
+        for cmd in self.bundle.commands.commands:
+            matched_type = cmd.matched_type
+            if matched_type is None:
+                # should not happen under normal circumstances, recover from inconsistent state
+                matched_type = interpret_command(cmd.text, ai_manager)
+                self.bundle.set_command_type(cmd.text, matched_type)
+                cmd.matched_type = matched_type
+
+            seen_command_types.add(matched_type)
+            continue
+
+        # Second pass, execute commands in order
+        # Only one command of each type should be executed, the rest should be skipped
         for cmd in self.bundle.commands.commands:
             if cmd.executed:
-                logger.debug(f"Skipping already executed command: {cmd.text}")
                 continue
 
-            if self.dry_run:
-                return
-
             try:
-                if cmd.matched_type is not None:
-                    matched_type = cmd.matched_type
-                    logger.debug(f"Using existing match for '{cmd.text}': {matched_type} ({self.bundle})")
-                else:
-                    matched_type = interpret_command(cmd.text, ai_manager)
-                    logger.debug(f"Matched command '{cmd.text}' to type {matched_type} for bundle {self.bundle}")
-                    self.bundle.set_command_type(cmd.text, matched_type)
+                matched_type = cmd.matched_type
+                assert(matched_type is not None)
+                if matched_type in seen_command_types:
+                    logger.info(f"Skipping duplicate {matched_type.value} command: {cmd.text}")
+                    # Mark as executed to avoid picking it up when gathering bundle with pending commands
+                    self.bundle.set_command_executed(cmd.text)
+                    continue
 
                 logger.info(f"Executing {matched_type} command for bundle {self.bundle}")
                 handler = COMMAND_REGISTRY[matched_type].handler
