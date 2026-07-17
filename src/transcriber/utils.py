@@ -33,7 +33,7 @@ def remove_empty_subdirs(directory: Path) -> None:
 
 # regex pattern to match obisidian recording filenames like "Recording YYYYMMDDHHMMSS"
 DATE_RE_PATTERN_OBSIDIAN_RECORDING = re.compile(
-    r"^Recording (\d{4})(\d{2})(\d{2})\d{6}",
+    r"^Recording (\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})",
 )
 # regex pattern to match filenames starting with "YYYY-MM-DD_", regular pattern of mine
 DATE_RE_PATTERN_SPLIT = re.compile(r"^(\d{4})-(\d{2})-(\d{2})[_ ]")
@@ -55,7 +55,10 @@ def extract_date_from_recording_filename(
         year = int(m.group(1))
         month = int(m.group(2))
         day = int(m.group(3))
-        return datetime(year, month, day, tzinfo=tz)
+        hour = int(m.group(4)) if m.lastindex >= 4 else 0
+        minute = int(m.group(5)) if m.lastindex >= 5 else 0
+        second = int(m.group(6)) if m.lastindex >= 6 else 0
+        return datetime(year, month, day, hour, minute, second, tzinfo=tz)
     except ValueError:
         logger.warning(f"Filename {filename} contains an invalid date: {m.groups()}")
         return None
