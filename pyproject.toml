@@ -29,5 +29,6 @@ package = true
 
 [dependency-groups]
 dev = [
+    "basedpyright>=1.39.9",
     "pylint>=4.0.6",
 ]
