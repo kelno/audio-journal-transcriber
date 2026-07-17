@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import cast, override
 
@@ -351,6 +351,61 @@ class TranscribeBundle:
         return datetime.strptime(date_str, "%Y-%m-%d").replace(
             tzinfo=self.config.general.timezone,
         )
+
+    def get_bundle_date(
+        self,
+    ) -> datetime:
+        """Get the most precise date available for the bundle.
+
+        Prefers the first audio file's extracted timestamp if available,
+        otherwise falls back to the bundle name date.
+        """
+        if self.source_audios and self.metadata.original_audio_filenames:
+            try:
+                return TranscribeBundle.get_date_for_filename(
+                    self.source_audios[0],
+                    self.metadata.original_audio_filenames[0],
+                    self.config,
+                )
+            except ValueError:
+                pass
+        return self.get_date_from_bundle_name()
+
+    @classmethod
+    def find_previous_bundle(
+        cls,
+        current_bundle: "TranscribeBundle",
+        bundles: list["TranscribeBundle"],
+        max_hours: float | None = None,
+    ) -> "TranscribeBundle | None":
+        """Find the most recent bundle before the current bundle within a time window.
+
+        IO heavy if many bundles exist, as it will check all bundle dates.
+        """
+        if max_hours is None:
+            max_hours = current_bundle.config.general.merge_max_hours
+
+        current_bundle_date = current_bundle.get_bundle_date()
+        previous_candidates = [
+            bundle
+            for bundle in bundles
+            if bundle.bundle_name != current_bundle.bundle_name
+            and bundle.get_bundle_date() < current_bundle_date
+        ]
+
+        if not previous_candidates:
+            return None
+
+        previous_candidates.sort(
+            key=lambda bundle: bundle.get_bundle_date(),
+            reverse=True,
+        )
+
+        previous_bundle = previous_candidates[0]
+        if current_bundle_date - previous_bundle.get_bundle_date() <= timedelta(hours=max_hours):
+            return previous_bundle
+
+        return None
 
     @staticmethod
     def gather_existing_bundles(

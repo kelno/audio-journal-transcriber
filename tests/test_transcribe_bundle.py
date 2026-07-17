@@ -516,6 +516,61 @@ class TestGatherExistingBundles:
         assert len(bundles) == 1
         assert bundles[0].bundle_name == generic_bundle.bundle_name
 
+    def test_find_previous_bundle_returns_most_recent_prior_bundle(
+        self,
+        transcribe_bundle_factory: TranscribeBundleFactory,
+    ) -> None:
+        """Test that the previous bundle is selected correctly."""
+        older_bundle = transcribe_bundle_factory(
+            bundle_name="2025-01-14_status",
+            audio_filename="Recording 20250114180000.mp3",
+        )
+        previous_bundle = transcribe_bundle_factory(
+            bundle_name="2025-01-15_review",
+            audio_filename="Recording 20250115020000.mp3",
+        )
+        current_bundle = transcribe_bundle_factory(
+            bundle_name="2025-01-15_meeting",
+            audio_filename="Recording 20250115090000.mp3",
+        )
+
+        result = TranscribeBundle.find_previous_bundle(
+            current_bundle=current_bundle,
+            bundles=[older_bundle, previous_bundle, current_bundle],
+        )
+
+        assert result is previous_bundle
+
+    def test_find_previous_bundle_respects_merge_window(
+        self,
+        fake_config: TranscribeConfig,
+        fake_fs: FakeFileSystemService,
+    ) -> None:
+        """Test that the merge window filters out bundles that are too old."""
+        fake_config.general.merge_max_hours = 12.0
+
+        distant_bundle = TranscribeBundle(
+            bundle_name="2025-01-14_review",
+            metadata=MetadataFile(original_audio_filenames=["Recording 20250114120000.mp3"]),
+            source_audios=[Path("/fake/store/2025-01-14_review/Recording 20250114120000.mp3")],
+            fs_service=fake_fs,
+            config=fake_config,
+        )
+        current_bundle = TranscribeBundle(
+            bundle_name="2025-01-15_meeting",
+            metadata=MetadataFile(original_audio_filenames=["Recording 20250115090000.mp3"]),
+            source_audios=[Path("/fake/store/2025-01-15_meeting/Recording 20250115090000.mp3")],
+            fs_service=fake_fs,
+            config=fake_config,
+        )
+
+        result = TranscribeBundle.find_previous_bundle(
+            current_bundle=current_bundle,
+            bundles=[distant_bundle, current_bundle],
+        )
+
+        assert result is None
+
 
 class TestTranscribeBundleIntegration:
     """Integration tests for complete workflows."""
