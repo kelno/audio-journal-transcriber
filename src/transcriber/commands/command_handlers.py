@@ -6,9 +6,14 @@ Contains the implementation logic for each command type.
 from __future__ import annotations
 
 from collections.abc import Callable
+from pathlib import Path
 
+from transcriber.audio_manipulation import AudioManipulation
 from transcriber.config import TranscribeConfig
+from transcriber.constants import MULTIPLE_TRANSCRIPTS_SEPARATOR, SUMMARY_FILENAME
 from transcriber.exception import AbortRemainingBundleJobsException
+from transcriber.files.commands_file import CommandsFile
+from transcriber.files.text_file import TranscriptFile
 from transcriber.logger import logger
 from transcriber.transcribe_bundle import TranscribeBundle
 
@@ -22,43 +27,99 @@ def command_handler(func: CommandHandler) -> CommandHandler:
 
 
 @command_handler
-def handle_merge(_bundle: TranscribeBundle, _config: TranscribeConfig, cmd_text: str) -> None:
+def handle_merge(bundle: TranscribeBundle, _config: TranscribeConfig, merge_cmd_text: str) -> None:
     """Merge the current recording with the previous one.
 
     Args:
         bundle: The transcribe bundle to operate on.
         config: The transcribe configuration.
-        cmd_text: The original command text.
+        merge_cmd_text: The original command text.
 
     """
-    # TODO: Implement merge logic https://github.com/kelno/audio-journal-transcriber/issues/3
-    # So basically the use case looks like this:
-    # User wants to merge the current recording with the previous one, and have it considered as one by the transcription system here
-    # For example user gets interrupted or resumes later for any reason
-    #
-    # There might be more than 2 records
-    # On the tech side I'm sure about the whole process but here are bits of what I imagine:
-    # Our transcription system needs to support more than one record per bundle (partly (or fully?) implemented)
-    # To know there is a merge, the record already needs to be processed into a bundle once to have the commands listed
-    # Only then when processing commands here we actually merge this bundle
+    # TODO: need refactor to simplify
+    logger.info(f"Running merge command for {bundle} (command text: {merge_cmd_text})")
 
-    # I imagine the process is basically :
-        # - Find the previous bundle (by date). With a configurable maximum merge time? Like 12h by default
-        # - Add the audio to previous record (move file and add to metadata of previous bundle)
-        # - Merge commands with previous file
-        # - Append transcript to the one of previous file
-        # - Clear the summary of previous bundle, as it will need to be regenerated with the new audio.
-        # - Also mark as name not generated to trigger a new name generation.
-        # - Nuke current bundle
-        # - Try to make that all atomic as much as possible, avoiding to have a partially merged record. We need to think how to leave things in a workable state if that happens.
-        # - We'll also need to make sure to remove remaining jobs for this bundle somehow, might need some refactoring too. Maybe using exception.
-        #    - If there are more unprocessed command... Well let's just say they won't be processed in this loop. Same thing for regenerating the summary & name generation.
-    # If more than one record is to be merged into the same bundle (example 3 records following each other), I think we're fine as long as we process bundles in chronological order. Maybe add a comment on the process loop explaining this is a hard requirement for merge to work.
+    store_dir = bundle.config.general.store_dir
+    bundles = TranscribeBundle.gather_existing_bundles(
+        store_dir=store_dir,
+        dry_run=False,
+        cleanup_bundle=False,
+        config=bundle.config,
+        fs_service=bundle.fs_service,
+    )
 
-    msg = "Merge command handler not yet implemented"
-    raise NotImplementedError(msg)
+    previous_bundle = TranscribeBundle.find_previous_bundle(bundle, bundles)
+    if previous_bundle is None:
+        msg = "No previous bundle found to merge with"
+        raise ValueError(msg)
 
-    # raise AbortRemainingJobsException("Skip remaining jobs after merge command")
+    previous_bundle_dir = previous_bundle.get_bundle_dir()
+    current_bundle_dir = bundle.get_bundle_dir()
+
+    moved_audio_paths: list[Path] = []
+    for source_audio in bundle.source_audios:
+        if not bundle.fs_service.file_exists(source_audio):
+            msg = f"Audio file not found for merge: {source_audio}"
+            raise FileNotFoundError(msg)
+
+        target_audio = previous_bundle_dir / source_audio.name
+        counter = 1
+        while bundle.fs_service.file_exists(target_audio):
+            target_audio = previous_bundle_dir / f"{source_audio.stem}_{counter}{source_audio.suffix}"
+            counter += 1
+
+        bundle.fs_service.move_file(source_audio, target_audio)
+        moved_audio_paths.append(target_audio)
+
+    previous_bundle.source_audios.extend(moved_audio_paths)
+    previous_bundle.source_audios = TranscribeBundle.sort_audio_files_chronologically(
+        previous_bundle.source_audios,
+        bundle.config,
+    )
+    previous_bundle.metadata.original_audio_filenames = [audio.name for audio in previous_bundle.source_audios]
+
+    audio_lengths = [
+        AudioManipulation.get_audio_duration(audio)
+        for audio in previous_bundle.source_audios
+    ]
+    previous_bundle.metadata.audio_length = sum(audio_lengths)
+
+    if bundle.commands:
+        # Mark merge command as executed before merging
+        bundle.set_command_executed(merge_cmd_text)
+        if previous_bundle.commands:
+            merged_commands = previous_bundle.commands.commands + bundle.commands.commands
+            previous_bundle.commands = CommandsFile(text="", commands=merged_commands)
+        else:
+            previous_bundle.commands = bundle.commands
+
+        previous_bundle.commands.write(previous_bundle_dir, bundle.fs_service)
+
+    if previous_bundle.transcript and bundle.transcript:
+        merged_text = (
+            previous_bundle.transcript.text
+            + MULTIPLE_TRANSCRIPTS_SEPARATOR
+            + bundle.transcript.text
+        )
+        previous_bundle.transcript = TranscriptFile(merged_text)
+        previous_bundle.transcript.write(previous_bundle_dir, bundle.fs_service)
+
+    if previous_bundle.summary:
+        previous_bundle.summary = None
+        summary_path = previous_bundle_dir / SUMMARY_FILENAME
+        if bundle.fs_service.file_exists(summary_path):
+            bundle.fs_service.delete_file(summary_path)
+
+    previous_bundle.metadata.summary_model_used = None
+    previous_bundle.metadata.bundle_name_generated = False
+    previous_bundle.metadata.write(previous_bundle_dir, bundle.fs_service)
+
+    bundle.fs_service.delete_directory(current_bundle_dir)
+
+    msg = f"Merged bundle {bundle.bundle_name} into {previous_bundle.bundle_name}"
+    logger.info(msg)
+
+    raise AbortRemainingBundleJobsException(msg)
 
 
 @command_handler
