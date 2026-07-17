@@ -46,7 +46,9 @@ You are a command matcher in an automated pipeline. Your task is to match user c
 2. Consider both the exact wording and semantic meaning.
 3. The commands can be given in any language, not only english.
 4. If the command is ambiguous or doesn't clearly match any known command, respond with exactly: "UNKNOWN"
-5. Your response must be ONLY the command type in uppercase (e.g., "MERGE", "DELETE", or "UNKNOWN") with no other text.
+5. Your response first line must be ONLY the command type in uppercase (e.g., "MERGE", "DELETE", ...) with no other text.
+6. Your response second line should be empty. The third line should contain a short explanation of your choice.
+7. Lines are seperated by the regular \n
 
 **User Command:**
 {command_string}
@@ -54,10 +56,10 @@ You are a command matcher in an automated pipeline. Your task is to match user c
 **Your Response:**"""
 
     response = ai_manager.query_chat_completion(prompt).strip().upper()
-
+    logger.debug(f"interpret_command answered {response}")
     # Try to match the response to a CommandType
     for cmd_type in CommandType:
-        if response == cmd_type.value.upper():
+        if response.split("\n")[0] == cmd_type.value.upper():
             return cmd_type
 
     # If no match and response is "UNKNOWN", return UNKNOWN
