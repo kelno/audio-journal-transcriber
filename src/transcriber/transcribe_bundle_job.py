@@ -16,6 +16,7 @@ from .logger import logger
 from .transcribe_bundle import TranscribeBundle
 from .utils import ensure_directory_exists
 
+MULTIPLE_TRANSCRIPTS_SEPARATOR = "\n\n[next transcripted audio]\n\n"
 
 @dataclass
 class TranscribeBundleJob(ABC):
@@ -134,7 +135,7 @@ class TranscriptionJob(TranscribeBundleJob):
                 transcripts.append(transcript_content)
 
             # Concatenate all transcripts
-            concatenated = "\n\n".join(transcripts)
+            concatenated = MULTIPLE_TRANSCRIPTS_SEPARATOR.join(transcripts)
 
             # Update original_audio_filenames to reflect current state
             # This ensures that if new files were added, metadata is synced
