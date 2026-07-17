@@ -3,7 +3,7 @@ from pathlib import Path
 import pytest
 
 from transcriber.ai_manager import AIManager
-from transcriber.commands.command_interpreter import extract_commands
+from transcriber.commands.command_interpreter import extract_raw_commands
 from transcriber.config import TranscribeConfig
 
 from .fake_clients import (
@@ -268,7 +268,7 @@ class TestAIManagerBundleName:
             config=fake_config,
         )
 
-        commands = extract_commands(
+        commands = extract_raw_commands(
             "Whatever text without command",
             "TestBundle",
             ai_manager,
@@ -296,7 +296,7 @@ class TestAIManagerBundleName:
             config=fake_config,
         )
 
-        commands = extract_commands(
+        commands = extract_raw_commands(
             f"""Hello, start command {command1} end command.
             Then the next day I did enjoy the sun. start command {command2} end commend.
             That's it for today!""",

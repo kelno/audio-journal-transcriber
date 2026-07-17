@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import override
 
 from transcriber.audio_manipulation import AudioManipulation
-from transcriber.commands.command_interpreter import extract_commands, interpret_command
+from transcriber.commands.command_interpreter import extract_raw_commands, interpret_command
 from transcriber.commands.command_registry import COMMAND_REGISTRY
 
 from .ai_manager import AIManager
@@ -254,7 +254,7 @@ class GatherCommandsJob(TranscribeBundleJob):
 
         commands: list[str] = []
         try:
-            commands = extract_commands(self.bundle.transcript.text, self.bundle.bundle_name, ai_manager)
+            commands = extract_raw_commands(self.bundle.transcript.text, self.bundle.bundle_name, ai_manager)
         except Exception:
             logger.error(f"{self}: Failed to extract commands: {traceback.format_exc()}")
             raise

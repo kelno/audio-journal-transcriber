@@ -70,9 +70,10 @@ You are a command matcher in an automated pipeline. Your task is to match user c
     raise ValueError(msg)
 
 
-def extract_commands(text: str, bundle_name: str, ai_manager: AIManager) -> list[str]:
-    """Extract commands from text.
+def extract_raw_commands(text: str, bundle_name: str, ai_manager: AIManager) -> list[str]:
+    """Extract raw commands from text.
 
+    'Raw' means fully natural language and no command matching yet.
     Delegates to the injected text_client instead of doing HTTP directly.
     """
     logger.debug(f"AIManager Extracting commands for {bundle_name}")
