@@ -299,7 +299,7 @@ class RunCommandsJob(TranscribeBundleJob):
         # if that happens, they still co exists in the command file but only the first one is executed
         # then the next ones are just marked as executed as well without running the command logic
 
-        # We should also have some command priority system, have the "delete" run first, then merge, then the rest.
+        # TODO: We should also have some command priority system, have the "delete" run first, then merge, then the rest.
         # So here we'll want a first pass of matching commands to types, then sort them by priority, then execute them in order.
 
         for cmd in self.bundle.commands.commands:
@@ -330,5 +330,5 @@ class RunCommandsJob(TranscribeBundleJob):
             except Exception:
                 # On error, stop processing remaining commands to avoid partial state.
                 logger.error(f"Failed to process bundle {self.bundle} command '{cmd.text}' with exception {traceback.format_exc()}")
-                # TODO: log error in command file: self.bundle.set_... (need to create that logic)
+                # TODO: log error in command file: self.bundle.set_last_error... (need to create that logic)
                 raise

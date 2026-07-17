@@ -27,7 +27,7 @@ summary_enabled = true
 # Example: mistral-medium-latest
 #model = "mistral-medium-latest"
 # (Optional) Extra context to provide to the AI when summarizing audio content, beside the built-in instructions.
-#extra_context = null
+#extra_context = ""
 
 [audio]
 # Example for speaches: http://localhost:8000/v1
