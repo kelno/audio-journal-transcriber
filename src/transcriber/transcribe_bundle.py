@@ -512,7 +512,8 @@ class TranscribeBundle:
         cmd.executed = True
         cmd.executed_at = datetime.now(self.config.general.timezone)
 
-        cast(CommandsFile, self.commands).write(self.get_bundle_dir(), self.fs_service)
+        assert(self.commands is not None)
+        self.commands.write(self.get_bundle_dir(), self.fs_service)
 
     def init_metadata(
         self,
