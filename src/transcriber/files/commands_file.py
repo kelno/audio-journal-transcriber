@@ -69,6 +69,7 @@ class CommandsFile(TextFile):
             default_flow_style=False,
             sort_keys=False,
             explicit_start=True,
+            allow_unicode=True,
         )
 
     @classmethod
