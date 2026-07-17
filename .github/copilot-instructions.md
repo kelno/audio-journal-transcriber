@@ -11,6 +11,7 @@
 - **Single source of truth.** Avoid duplicating data or logic across multiple places. If a value is repeated and dependent (like a configuration value or constant), define it once and reference it everywhere.
 - **Avoid hardcoding.** Use configuration files, environment variables, constants modules, or other appropriate mechanisms instead of hardcoding values directly in code.
 - **Choose the right tool.** Recommend solutions based on what actually fits the problem, not what's easiest to implement.
+- **Comment generosity.** Be somewhat comment-generous. Comments should describe intents and explain why some operations are done when they don't have a very obvious reason.
 
 ## Iteration & Collaboration
 

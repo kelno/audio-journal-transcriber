@@ -49,6 +49,18 @@ uv run transcriber --help
 transcriber --help
 ```
 
+## Running tests
+
+Run the test suite with `uv` from the repository root:
+```bash
+uv run pytest
+```
+
+To run a single test file:
+```bash
+uv run pytest tests/test_transcribe_bundle.py -q
+```
+
 
 # Docker / Podman
 
