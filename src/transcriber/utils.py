@@ -52,10 +52,13 @@ def extract_date_from_recording_filename(
             return None
 
     try:
-        year, month, day, hour, minute, second = (
-            int(value) if value is not None else 0
-            for value in m.group(1, 2, 3, 4, 5, 6)  # (comment for format)
-        )
+        values = [
+            int(m.group(i)) if i <= (m.lastindex or 0) else 0
+            for i in range(1, 7)  # (comment for format)
+        ]
+
+        year, month, day, hour, minute, second = values
+
         return datetime(year, month, day, hour, minute, second, tzinfo=tz)
     except ValueError:
         logger.warning(f"Filename {filename} contains an invalid date: {m.groups()}")
