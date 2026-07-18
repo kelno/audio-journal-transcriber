@@ -75,7 +75,7 @@ def _move_audio_to_bundle(source: TranscribeBundle, target: TranscribeBundle) ->
     if target.metadata.transcript_model_used is not None:
         if source.metadata.transcript_model_used is not None:
             if source.metadata.transcript_model_used not in target.metadata.transcript_model_used:
-                target.metadata.transcript_model_used = target.metadata.transcript_model_used + f", {source.metadata.transcript_model_used}"
+                target.metadata.transcript_model_used = target.metadata.transcript_model_used + f",{source.metadata.transcript_model_used}"
                 target.metadata.write(target.get_bundle_dir(), target.fs_service)
     elif source.metadata.transcript_model_used is not None:
         target.metadata.transcript_model_used = source.metadata.transcript_model_used
