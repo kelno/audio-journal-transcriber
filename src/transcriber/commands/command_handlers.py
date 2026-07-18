@@ -72,13 +72,13 @@ def _move_audio_to_bundle(source: TranscribeBundle, target: TranscribeBundle) ->
     ]
     target.metadata.audio_length = sum(audio_lengths)
 
-    if target.metadata.transcript_model_used is not None:
-        if source.metadata.transcript_model_used is not None:
-            if source.metadata.transcript_model_used not in target.metadata.transcript_model_used:
-                target.metadata.transcript_model_used = target.metadata.transcript_model_used + f",{source.metadata.transcript_model_used}"
-                target.metadata.write(target.get_bundle_dir(), target.fs_service)
-    elif source.metadata.transcript_model_used is not None:
-        target.metadata.transcript_model_used = source.metadata.transcript_model_used
+    # Merge transcript model usage as an ordered set (no duplicates, exact match).
+    if source.metadata.transcript_model_used:
+        merged_models = list(target.metadata.transcript_model_used)
+        for model in source.metadata.transcript_model_used:
+            if model not in merged_models:
+                merged_models.append(model)
+        target.metadata.transcript_model_used = merged_models
         target.metadata.write(target.get_bundle_dir(), target.fs_service)
 
 

@@ -162,7 +162,7 @@ class TestHandleMerge:
         )
 
         # Model carried over from current since previous had none
-        assert merged_bundle.metadata.transcript_model_used == "model-a"
+        assert merged_bundle.metadata.transcript_model_used == ["model-a"]
         # keep_forever promoted to True because current bundle set it
         assert merged_bundle.metadata.keep_forever is True
 
@@ -191,8 +191,8 @@ class TestHandleMerge:
             audio_service=fake_audio_service,
         )
 
-        # Duplicate model is not appended again (substring check prevents duplication)
-        assert twice_merged.metadata.transcript_model_used == third_model
+        # Duplicate model is not appended again (set union prevents duplication)
+        assert twice_merged.metadata.transcript_model_used == [third_model]
         # keep_forever stays True from the earlier merge
         assert twice_merged.metadata.keep_forever is True
         assert not fake_fs.directory_exists(third_bundle_dir)
@@ -408,6 +408,90 @@ class TestHandleMerge:
         # The merge command is marked executed; the other command is not.
         assert commands[0].executed is True
         assert commands[1].executed is False
+
+    def test_handle_merge_merges_transcript_models_as_ordered_set(
+        self,
+        fake_config: TranscribeConfig,
+        fake_fs: FakeFileSystemService,
+        fake_audio_service: FakeAudioService,
+        transcribe_bundle_factory: TranscribeBundleFactory,
+    ) -> None:
+        """Verify models merge as an exact-match ordered set, not a substring join."""
+        # These names are intentionally chosen so a substring check would wrongly dedup.
+        previous_bundle = transcribe_bundle_factory(
+            bundle_name="2025-01-15_previous",
+            audio_filename="Recording 20250115010000.mp3",
+            transcript_text="previous transcript",
+            audio_length=30.0,
+            transcript_model_used=["whisper", "whisper-large"],
+            keep_forever=False,
+            commands=["merge"],
+        )
+        current_bundle = transcribe_bundle_factory(
+            bundle_name="2025-01-15_meeting",
+            audio_filename="Recording 20250115090000.mp3",
+            transcript_text="current transcript",
+            audio_length=20.0,
+            transcript_model_used=["whisper-large", "gpt-4o-transcribe"],
+            keep_forever=False,
+            commands=["merge"],
+        )
+
+        previous_bundle_dir = previous_bundle.get_bundle_dir()
+
+        with pytest.raises(AbortRemainingBundleJobsException):
+            handle_merge(current_bundle, fake_config, "merge")
+
+        merged_bundle = TranscribeBundle.from_existing_directory(
+            existing_dir=previous_bundle_dir,
+            config=fake_config,
+            fs_service=fake_fs,
+            audio_service=fake_audio_service,
+        )
+
+        # Exact-match union: whisper-large appears once (in source order after previous),
+        # and gpt-4o-transcribe is appended. No substring-based false dedup.
+        assert merged_bundle.metadata.transcript_model_used == [
+            "whisper",
+            "whisper-large",
+            "gpt-4o-transcribe",
+        ]
+
+    def test_metadata_reads_legacy_string_transcript_model_used(
+        self,
+        fake_config: TranscribeConfig,
+        fake_fs: FakeFileSystemService,
+        fake_audio_service: FakeAudioService,
+        transcribe_bundle_factory: TranscribeBundleFactory,
+    ) -> None:
+        """Verify a legacy single-string transcript_model_used is read as a one-element list."""
+        bundle = transcribe_bundle_factory(
+            bundle_name="2025-01-15_legacy",
+            audio_filename="Recording 20250115090000.mp3",
+            audio_length=20.0,
+        )
+        bundle_dir = bundle.get_bundle_dir()
+        # Overwrite metadata with the old string format to simulate an existing bundle.
+        fake_fs.write_file(
+            bundle_dir / "_metadata.md",
+            "---\n"
+            "original_audio_filenames:\n"
+            "- Recording 20250115090000.mp3\n"
+            "audio_length: 20.0\n"
+            "transcript_model_used: legacy-model\n"
+            "summary_model_used: null\n"
+            "bundle_name_generated: false\n"
+            "keep_forever: false\n"
+            "---\n",
+        )
+
+        reloaded = TranscribeBundle.from_existing_directory(
+            existing_dir=bundle_dir,
+            config=fake_config,
+            fs_service=fake_fs,
+            audio_service=fake_audio_service,
+        )
+        assert reloaded.metadata.transcript_model_used == ["legacy-model"]
 
     def test_handle_merge_fails_when_previous_bundle_is_too_old(
         self,

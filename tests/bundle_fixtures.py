@@ -24,7 +24,7 @@ class TranscribeBundleFactory(Protocol):
         commands: list[str] | None = None,
         audio_length: float = 20.0,
         commands_executed: bool = False,
-        transcript_model_used: str | None = None,
+        transcript_model_used: list[str] | str | None = None,
         keep_forever: bool = False,
         config: TranscribeConfig | None = None,
     ) -> TranscribeBundle:
@@ -48,7 +48,7 @@ def transcribe_bundle_factory(
         commands: list[str] | None = None,
         audio_length: float = 20.0,
         commands_executed: bool = False,
-        transcript_model_used: str | None = None,
+        transcript_model_used: list[str] | str | None = None,
         keep_forever: bool = False,
         config: TranscribeConfig | None = None,
     ) -> TranscribeBundle:
@@ -72,7 +72,9 @@ def transcribe_bundle_factory(
         bundle.init_metadata([audio_filename], [audio_length])
 
         if transcript_model_used is not None:
-            bundle.metadata.transcript_model_used = transcript_model_used
+            bundle.metadata.transcript_model_used = (
+                [transcript_model_used] if isinstance(transcript_model_used, str) else transcript_model_used
+            )
         if keep_forever:
             bundle.metadata.keep_forever = keep_forever
         bundle.metadata.write(bundle_dir, fake_fs)

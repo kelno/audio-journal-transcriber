@@ -488,7 +488,7 @@ class TranscribeBundle:
         transcript: str,
     ) -> None:
         """Set and write the transcript to memory and disk."""
-        self.metadata.transcript_model_used = self.config.audio.model
+        self.metadata.transcript_model_used = [self.config.audio.model]
         self.metadata.write(self.get_bundle_dir(), self.fs_service)
         self.transcript = TranscriptFile(transcript)
         self.transcript.write(self.get_bundle_dir(), self.fs_service)

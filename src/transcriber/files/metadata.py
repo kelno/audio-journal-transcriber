@@ -1,7 +1,7 @@
 from pathlib import Path
 
 import yaml
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from transcriber.constants import METADATA_FILENAME
 from transcriber.files.file_system import FileSystemService
@@ -15,10 +15,36 @@ class Metadata(BaseModel):
 
     original_audio_filenames: list[str] = Field(min_length=0)
     audio_length: float | None = None
-    transcript_model_used: str | None = None
+    # Ordered set of transcript models used for this bundle. Stored as a list (not a
+    # set) so YAML serialization is stable and human-readable. Accepts a bare string
+    # for backward compatibility with bundles written before this was a list.
+    transcript_model_used: list[str] = Field(default_factory=list)
     summary_model_used: str | None = None
     bundle_name_generated: bool = False
     keep_forever: bool = False
+
+    @field_validator("transcript_model_used", mode="before")
+    @classmethod
+    def _coerce_transcript_model_used(cls, value: object) -> object:
+        """Accept a single string (legacy format) as a one-element list.
+
+        Older bundles stored this field as a plain string; newer ones store a list.
+        ``None`` becomes an empty list. Duplicate entries are removed while keeping
+        the first occurrence order.
+        """
+        if value is None:
+            return []
+        if isinstance(value, str):
+            return [value]
+        if isinstance(value, list):
+            seen: set[str] = set()
+            deduped: list[str] = []
+            for item in value:
+                if isinstance(item, str) and item not in seen:
+                    seen.add(item)
+                    deduped.append(item)
+            return deduped
+        return value
 
 
 class MetadataFile(Metadata):
