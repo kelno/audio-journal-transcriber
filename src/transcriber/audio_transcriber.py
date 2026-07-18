@@ -239,7 +239,7 @@ class AudioTranscriber:
                 RunCommandsJob(bundle, dry_run),
             ]
 
-        if bundle.commands.has_non_executed_commands():
+        if bundle.commands.has_commands_needing_processing():
             return [RunCommandsJob(bundle, dry_run)]
 
         return []

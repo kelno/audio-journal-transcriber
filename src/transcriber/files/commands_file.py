@@ -131,11 +131,22 @@ class CommandsFile(TextFile):
         output_file = bundle_dir / self.get_filename()
         fs_service.write_file(output_file, self.to_yaml())
 
-    def has_non_executed_commands(self) -> bool:
-        """Check if there are any commands that have not been executed.
+    def has_commands_needing_processing(self) -> bool:
+        """Check if any command still needs to be executed.
+
+        A command needs processing when it is not executed and has not yet
+        exhausted its retry budget (``attempt_count >= max_attempts``). Commands
+        that failed too many times are considered given up and are not reported
+        as needing processing, so bundles are not endlessly re-enqueued for them.
 
         Returns:
-            bool: True if there are non-executed commands, False otherwise.
+            bool: True if at least one command still needs processing.
 
         """
-        return any(not command.executed for command in self.commands)
+        from transcriber.commands.command_registry import COMMAND_REGISTRY  # noqa: PLC0415 # break circular dep
+
+        return any(
+            not command.executed
+            and (command.matched_type is None or command.attempt_count < COMMAND_REGISTRY[command.matched_type].max_attempts)
+            for command in self.commands
+        )

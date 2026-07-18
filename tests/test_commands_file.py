@@ -10,6 +10,7 @@ from pydantic import ValidationError
 from tests.bundle_fixtures import TranscribeBundleFactory
 from tests.fake_file_system import FakeFileSystemService
 from transcriber.commands.command import Command
+from transcriber.commands.command_type import CommandType
 from transcriber.constants import COMMANDS_FILENAME
 from transcriber.files.commands_file import CommandsFile
 
@@ -237,6 +238,53 @@ class TestCommandsFileWriteRead:
         # Should raise
         with pytest.raises(yaml.YAMLError):
             CommandsFile.from_file(bundle_dir / "_commands.md", fake_fs)
+
+
+class TestCommandsFileNeedsProcessing:
+    """Test has_commands_needing_processing (executed + retry-budget aware)."""
+
+    def test_empty_file_needs_no_processing(self) -> None:
+        """An empty commands file needs no processing."""
+        cmd_file = CommandsFile(text="")
+        assert cmd_file.has_commands_needing_processing() is False
+
+    def test_unexecuted_command_needs_processing(self) -> None:
+        """A fresh, unexecuted command needs processing."""
+        cmd_file = CommandsFile.from_command_list(["play music"])
+        assert cmd_file.has_commands_needing_processing() is True
+
+    def test_executed_command_needs_no_processing(self) -> None:
+        """An executed command no longer needs processing."""
+        cmd_file = CommandsFile.from_command_list(["play music"])
+        cmd_file.mark_executed(0, UTC)
+        assert cmd_file.has_commands_needing_processing() is False
+
+    def test_exhausted_command_needs_no_processing(self) -> None:
+        """A command that failed max_attempts times is given up, not re-enqueued."""
+        cmd = Command(text="delete", executed=False, matched_type=CommandType.DELETE, attempt_count=2)
+        cmd_file = CommandsFile(text="", commands=[cmd])
+        assert cmd_file.has_commands_needing_processing() is False
+
+    def test_uninterpreted_command_needs_processing(self) -> None:
+        """A command without a matched type has not been attempted, so it needs processing."""
+        cmd = Command(text="delete", executed=False, matched_type=None, attempt_count=2)
+        cmd_file = CommandsFile(text="", commands=[cmd])
+        assert cmd_file.has_commands_needing_processing() is True
+
+    def test_mixed_commands(self) -> None:
+        """Only non-executed, non-exhausted commands count as needing processing."""
+        exhausted = Command(text="a", executed=False, matched_type=CommandType.DELETE, attempt_count=2)
+        pending = Command(text="b", executed=False, matched_type=CommandType.DELETE, attempt_count=0)
+        done = Command(text="c", executed=True, matched_type=CommandType.DELETE, attempt_count=1)
+        cmd_file = CommandsFile(text="", commands=[exhausted, pending, done])
+        assert cmd_file.has_commands_needing_processing() is True
+
+    def test_all_exhausted_or_done_needs_no_processing(self) -> None:
+        """A bundle with only exhausted or done commands needs no processing."""
+        exhausted = Command(text="a", executed=False, matched_type=CommandType.DELETE, attempt_count=2)
+        done = Command(text="c", executed=True, matched_type=CommandType.DELETE, attempt_count=1)
+        cmd_file = CommandsFile(text="", commands=[exhausted, done])
+        assert cmd_file.has_commands_needing_processing() is False
 
 
 class TestCommandsFileMarkExecuted:
