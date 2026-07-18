@@ -13,7 +13,7 @@ if TYPE_CHECKING:
 
 from transcriber.config import TranscribeConfig
 from transcriber.constants import MULTIPLE_TRANSCRIPTS_SEPARATOR, SUMMARY_FILENAME
-from transcriber.exception import AbortRemainingBundleJobsException, UnknownCommandException
+from transcriber.exception import AbortRemainingBundleJobsException, NoPreviousBundleException, UnknownCommandException
 from transcriber.files.commands_file import CommandsFile
 from transcriber.files.text_file import TranscriptFile
 from transcriber.logger import logger
@@ -100,6 +100,7 @@ def _merge_commands(source: TranscribeBundle, target: TranscribeBundle, merge_cm
         return
 
     # Mark merge command as executed before merging
+    # If we don't it could trigger another merge for the target bundle
     source.set_command_executed(merge_cmd_text)
     if target.commands:
         merged_commands = target.commands.commands + source.commands.commands
@@ -135,7 +136,7 @@ def handle_merge(current_bundle: TranscribeBundle, _config: TranscribeConfig, me
     previous_bundle = TranscribeBundle.find_previous_bundle(current_bundle, bundles)
     if previous_bundle is None:
         msg = "No previous bundle found to merge with"
-        raise ValueError(msg)
+        raise NoPreviousBundleException(msg)
 
     previous_bundle_dir = previous_bundle.get_bundle_dir()
     current_bundle_dir = current_bundle.get_bundle_dir()

@@ -128,7 +128,7 @@ class TestHandleMerge:
             audio_length=20.0,
         )
 
-        with pytest.raises(ValueError, match="No previous bundle found to merge with"):
+        with pytest.raises(NoPreviousBundleException):
             handle_merge(current_bundle, fake_config, "merge")
 
     def test_handle_merge_fails_without_previous_bundle(
@@ -143,5 +143,5 @@ class TestHandleMerge:
             audio_length=20.0,
         )
 
-        with pytest.raises(ValueError, match="No previous bundle found to merge with"):
+        with pytest.raises(NoPreviousBundleException):
             handle_merge(current_bundle, fake_config, "merge")

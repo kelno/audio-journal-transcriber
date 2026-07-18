@@ -32,5 +32,10 @@ class InvalidBundleException(AudioTranscriberException):
 
 
 @final
+class NoPreviousBundleException(AudioTranscriberException):
+    """Failed to find a previous bundle for merge command."""
+
+
+@final
 class UnknownCommandException(AudioTranscriberException):
     """Command text couldn't be matched to a know command type."""
