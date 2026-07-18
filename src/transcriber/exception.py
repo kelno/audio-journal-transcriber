@@ -2,7 +2,7 @@ from pathlib import Path
 from typing import final
 
 
-class AudioTranscriberException(BaseException):
+class AudioTranscriberException(Exception):
     """Base exception for audio transcriber errors."""
 
 
