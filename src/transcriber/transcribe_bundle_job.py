@@ -4,7 +4,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import override
 
-from transcriber.audio_service import AudioService
 from transcriber.commands.command import Command
 from transcriber.commands.command_interpreter import extract_raw_commands, interpret_command
 from transcriber.commands.command_registry import COMMAND_REGISTRY
@@ -281,6 +280,16 @@ class RunCommandsJob(TranscribeBundleJob):
         ai_manager: AIManager,
         config: TranscribeConfig,
     ) -> None:
+        """Execute pending commands for the bundle.
+
+        Processes commands in priority order, ensuring each command type is executed
+        only once per bundle. Handles command execution, error recovery, and retry logic.
+
+        Raises:
+            AbortRemainingBundleJobsException: If a command requests aborting remaining jobs.
+            Exception: If command execution fails after max attempts.
+
+        """
         if not self.bundle.commands:
             if self.dry_run:
                 logger.info(f"{self.bundle}: (dry-run) Skipping running commands as they are not gathered")

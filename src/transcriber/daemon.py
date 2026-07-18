@@ -23,6 +23,16 @@ def run_daemon_mode(
     retry_manager = RetryManager(initial_delay=1.0, max_delay=3600.0)
 
     def process_watched_file(_file_path: Path) -> None:
+        """Callback function to process files when filesystem changes are detected.
+
+        Args:
+            _file_path: Path to the file that triggered the watch event (unused).
+
+        Side Effects:
+            - Resets the retry delay timer
+            - Processes unprocessed bundles by running the transcriber
+
+        """
         nonlocal unprocessed
         with lock:
             # Reset retry delay on file changes

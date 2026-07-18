@@ -9,7 +9,13 @@ def get_logger() -> logging.Logger:
 
 
 def configure_logger(debug: bool = False, log_file: str | None = None) -> None:
-    """Initialize the logger with console and file handlers."""
+    """Initialize the logger with console and file handlers.
+
+    Args:
+        debug: Whether to enable debug logging level.
+        log_file: Optional path to a file for logging output.
+
+    """
     new_logger = get_logger()
     coloredlogs.install(
         level="DEBUG" if debug else "INFO",

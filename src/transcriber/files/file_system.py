@@ -15,6 +15,12 @@ class FileSystemService(ABC):
     config: TranscribeConfig
 
     def __init__(self, config: TranscribeConfig):
+        """Initialize the file system service with configuration.
+
+        Args:
+            config: The transcribe configuration to use for file operations.
+
+        """
         self.config = config
 
     @abstractmethod
@@ -184,27 +190,60 @@ class RealFileSystemService(FileSystemService):
 
     @override
     def file_exists(self, path: Path) -> bool:
-        """Check if a file exists."""
+        """Check if a file exists.
+
+        Args:
+            path: Path to the file to check.
+
+        Returns:
+            bool: True if the file exists, False otherwise.
+
+        """
         return path.is_file()
 
     @override
     def directory_exists(self, path: Path) -> bool:
-        """Check if a directory exists."""
+        """Check if a directory exists.
+
+        Args:
+            path: Path to the directory to check.
+
+        Returns:
+            bool: True if the directory exists, False otherwise.
+
+        """
         return path.is_dir()
 
     @override
     def read_file(self, path: Path) -> str:
-        """Read file contents."""
+        """Read file contents.
+
+        Args:
+            path: Path to the file to read.
+
+        Returns:
+            str: The file contents as a UTF-8 string.
+
+        """
         return path.read_text(encoding="utf-8")
 
     @override
     def write_file(self, path: Path, content: str) -> None:
-        """Write file contents."""
+        """Write file contents.
+
+        Args:
+            path: Path to the file to write.
+            content: Content to write to the file.
+
+        """
         path.write_text(content, encoding="utf-8")
 
     @override
     def delete_file(self, path: Path) -> None:
         """Delete a file.
+
+        Args:
+            path: Path to the file to delete.
 
         Raises:
             FileNotFoundError: If the file does not exist.
@@ -243,6 +282,9 @@ class RealFileSystemService(FileSystemService):
     def delete_directory(self, path: Path) -> None:
         """Delete a directory.
 
+        Args:
+            path: Path to the directory to delete.
+
         Raises:
             FileNotFoundError: If the directory does not exist.
 
@@ -260,21 +302,46 @@ class RealFileSystemService(FileSystemService):
 
     @override
     def move_file(self, source: Path, destination: Path) -> None:
-        """Move or rename a file from source to destination."""
+        """Move or rename a file from source to destination.
+
+        Args:
+            source: Path to the existing file.
+            destination: Path to the new location.
+
+        """
         destination.parent.mkdir(parents=True, exist_ok=True)
         source.rename(destination)
 
     @override
     def create_directory(self, path: Path) -> None:
-        """Create a directory."""
+        """Create a directory.
+
+        Args:
+            path: Path to the directory to create.
+
+        """
         path.mkdir(parents=True, exist_ok=True)
 
     @override
     def rename_directory(self, from_path: Path, to_path: Path) -> None:
-        """Rename/move a directory."""
+        """Rename/move a directory.
+
+        Args:
+            from_path: Source directory path.
+            to_path: Destination directory path.
+
+        """
         from_path.rename(to_path)
 
     @override
     def list_directory(self, path: Path) -> list[Path]:
-        """List all items (files and directories) in a directory."""
+        """List all items (files and directories) in a directory.
+
+        Args:
+            path: Path to the directory to list.
+
+        Returns:
+            list[Path]: List of paths in the directory.
+
+        """
         return list(path.glob("*"))

@@ -29,7 +29,19 @@ def command_handler(func: CommandHandler) -> CommandHandler:
 
 
 def _move_audio_to_bundle(source: TranscribeBundle, target: TranscribeBundle) -> None:
-    """Helper function."""
+    """Move audio files from source bundle to target bundle.
+
+    Args:
+        source: The source bundle containing audio files to move.
+        target: The target bundle to receive the audio files.
+
+    Side Effects:
+        - Moves audio files from source to target bundle directory
+        - Updates target bundle's source_audios list
+        - Updates target bundle's metadata with audio information
+        - Updates transcript model usage information in metadata
+
+    """
     target_bundle_dir = target.get_bundle_dir()
 
     moved_audio_paths: list[Path] = []
@@ -71,6 +83,19 @@ def _move_audio_to_bundle(source: TranscribeBundle, target: TranscribeBundle) ->
 
 
 def _merge_commands(source: TranscribeBundle, target: TranscribeBundle, merge_cmd_text: str) -> None:
+    """Merge commands from source bundle into target bundle.
+
+    Args:
+        source: The source bundle containing commands to merge.
+        target: The target bundle to receive the merged commands.
+        merge_cmd_text: The original merge command text to mark as executed.
+
+    Side Effects:
+        - Marks the merge command as executed in the source bundle
+        - Combines commands from both bundles into the target bundle
+        - Writes the merged commands file to the target bundle directory
+
+    """
     if not source.commands:
         return
 

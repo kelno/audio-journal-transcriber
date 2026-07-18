@@ -1,7 +1,7 @@
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import cast, override
+from typing import override
 
 from transcriber.audio_service import AudioService
 from transcriber.commands.command import Command
@@ -15,7 +15,7 @@ from transcriber.constants import (
 )
 from transcriber.exception import InvalidBundleException
 from transcriber.files.commands_file import CommandsFile
-from transcriber.files.file_system import FileSystemService, RealFileSystemService
+from transcriber.files.file_system import FileSystemService
 from transcriber.files.metadata import MetadataFile
 from transcriber.files.text_file import (
     SummaryFile,
