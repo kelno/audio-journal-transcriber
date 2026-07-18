@@ -373,13 +373,12 @@ class RunCommandsJob(TranscribeBundleJob):
                 logger.debug(f"{cmd} requested aborting remaining jobs for bundle {self.bundle}")
                 raise  # raise it further to the job execution loop
 
-            except Exception:
+            except Exception as e:
                 # On error, stop processing remaining commands to avoid partial state.
                 logger.exception(
                     f"Failed to process bundle {self.bundle} command '{cmd.text}'",
                 )
-                # TODO: log error in command file: self.bundle.set_last_error... https://github.com/kelno/audio-journal-transcriber/issues/5
-                # (need to create that logic)
+                self.bundle.set_last_error(cmd_text=cmd.text, error=str(e))
                 raise
 
     @staticmethod

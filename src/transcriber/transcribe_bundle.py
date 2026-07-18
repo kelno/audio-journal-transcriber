@@ -532,6 +532,30 @@ class TranscribeBundle:
         assert self.commands is not None
         self.commands.write(self.get_bundle_dir(), self.fs_service)
 
+    def set_last_error(self, cmd_text: str, error: object) -> None:
+        """Set a debug error string for a command and write the commands file.
+
+        Coerces `error` to `str`, normalizes newlines, and truncates very long
+        messages to keep the commands YAML file compact. YAML serialization
+        (`yaml.dump`) will safely encode multiline strings, so no escaping is
+        required beyond ensuring we have a textual value.
+        """
+        cmd = self.assert_command(cmd_text)
+
+        # Sanitize: Coerce to string and normalize newlines
+        error_str = str(error) if error is not None else ""
+        error_str = error_str.replace("\r\n", "\n").strip()
+
+        # Sanitize: Truncate overly long messages to avoid huge YAML blobs
+        max_len = 2000
+        if len(error_str) > max_len:
+            error_str = error_str[: max_len - 14] + "... (truncated)"
+
+        cmd.last_error = error_str
+
+        assert self.commands is not None
+        self.commands.write(self.get_bundle_dir(), self.fs_service)
+
     def init_metadata(
         self,
         filenames: list[str],

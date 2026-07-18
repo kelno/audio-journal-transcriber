@@ -6,8 +6,10 @@ from pathlib import Path
 import pytest
 import yaml
 
+from tests.bundle_fixtures import TranscribeBundleFactory
 from tests.fake_file_system import FakeFileSystemService
 from transcriber.commands.command import Command
+from transcriber.constants import COMMANDS_FILENAME
 from transcriber.files.commands_file import CommandsFile
 
 
@@ -279,3 +281,30 @@ class TestCommandsFileMarkExecuted:
         after = datetime.now(UTC)
         assert cmd_file.commands[0].executed_at is not None
         assert before <= cmd_file.commands[0].executed_at <= after
+
+    def test_set_last_error_writes_to_commands_file(
+        self,
+        transcribe_bundle_factory: TranscribeBundleFactory,
+        fake_fs: FakeFileSystemService,
+    ) -> None:
+        """Verify that `set_last_error` records error text in the commands file."""
+        bundle_name = "2025-01-15_set_last_error"
+        cmd_text = "do something"
+
+        # Create bundle with a single command and write initial files
+        bundle = transcribe_bundle_factory(
+            bundle_name=bundle_name,
+            audio_filename="audio.mp3",
+            commands=[cmd_text],
+        )
+
+        # Set a debug error for the command
+        error_msg = "something failed during execution"
+        bundle.set_last_error(cmd_text, error_msg)
+
+        # Read commands file and assert the last_error was recorded
+        commands_file_path = bundle.get_bundle_dir() / COMMANDS_FILENAME
+        commands_file = CommandsFile.from_file(commands_file_path, fake_fs)
+
+        assert commands_file.commands, "Commands file should contain at least one command"
+        assert commands_file.commands[0].last_error == error_msg
