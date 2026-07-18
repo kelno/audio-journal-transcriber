@@ -9,7 +9,7 @@ from tests.fake_audio_service import FakeAudioService
 from tests.fake_file_system import FakeFileSystemService
 from transcriber.config import TranscribeConfig
 from transcriber.files.commands_file import CommandsFile
-from transcriber.files.metadata import MetadataFile
+from transcriber.files.metadata import AudioFileMeta, MetadataFile
 from transcriber.files.text_file import SummaryFile, TranscriptFile
 from transcriber.transcribe_bundle import TranscribeBundle
 
@@ -58,7 +58,7 @@ def transcribe_bundle_factory(
 
         bundle = TranscribeBundle(
             bundle_name=bundle_dir.name,
-            metadata=MetadataFile(original_audio_filenames=[audio_filename]),
+            metadata=MetadataFile(audio_files=[AudioFileMeta(filename=audio_filename)]),
             source_audios=[bundle_dir / audio_filename],
             transcript=TranscriptFile(transcript_text) if transcript_text else None,
             summary=SummaryFile(summary_text) if summary_text else None,
@@ -70,9 +70,9 @@ def transcribe_bundle_factory(
         bundle.init_metadata([audio_filename])
 
         if transcript_model_used is not None:
-            bundle.metadata.transcript_model_used = (
-                [transcript_model_used] if isinstance(transcript_model_used, str) else transcript_model_used
-            )
+            models = [transcript_model_used] if isinstance(transcript_model_used, str) else transcript_model_used
+            if bundle.metadata.audio_files:
+                bundle.metadata.audio_files[0].transcript_model_used = models
         if keep_forever:
             bundle.metadata.keep_forever = keep_forever
         bundle.metadata.write(bundle_dir, fake_fs)

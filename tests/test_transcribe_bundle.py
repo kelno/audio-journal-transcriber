@@ -16,7 +16,7 @@ from transcriber.constants import (
     TRANSCRIPT_FILENAME,
 )
 from transcriber.exception import InvalidBundleException
-from transcriber.files.metadata import MetadataFile
+from transcriber.files.metadata import AudioFileMeta, MetadataFile
 from transcriber.files.text_file import TranscriptFile
 from transcriber.transcribe_bundle import TranscribeBundle
 
@@ -45,7 +45,7 @@ class TestTranscribeBundleFromAudioFile:
         # generate_generic_bundle_name should match this
         assert bundle.bundle_name.endswith("_meeting")
         assert bundle.source_audios == [audio_path]
-        assert bundle.metadata.original_audio_filenames == ["meeting.mp3"]
+        assert bundle.metadata.audio_files == [AudioFileMeta(filename="meeting.mp3")]
         assert bundle.transcript is None
         assert bundle.summary is None
 
@@ -91,7 +91,10 @@ class TestTranscribeBundleFromAudioFiles:
         )
 
         assert bundle.source_audios == audio_files
-        assert bundle.metadata.original_audio_filenames == ["part1.mp3", "part2.mp3"]
+        assert bundle.metadata.audio_files == [
+            AudioFileMeta(filename="part1.mp3"),
+            AudioFileMeta(filename="part2.mp3"),
+        ]
 
     def test_from_audio_files_without_fs_service_creates_real_service(
         self,
@@ -193,7 +196,8 @@ class TestTranscribeBundleFromExistingDirectory:
         # overwrite metadata file with wrong data
         metadata_yaml = (
             "---\n"
-            "original_audio_filenames: None\n"  # this is the wrong line
+            "audio_files:\n"
+            "- transcript_model_used: []\n"  # missing required 'filename'
             "transcript_model_used: null\n"
             "summary_model_used: null\n"
             "bundle_name_generated: false\n"
@@ -204,7 +208,7 @@ class TestTranscribeBundleFromExistingDirectory:
 
         with pytest.raises(
             pydantic.ValidationError,
-            match=r"original_audio_filenames",
+            match=r"audio_files",
         ):
             TranscribeBundle.from_existing_directory(
                 existing_dir=generic_bundle_dir,
@@ -309,7 +313,7 @@ class TestTranscribeBundleWriteOperations:
         """Test initializing metadata with file information."""
         bundle = TranscribeBundle(
             bundle_name=generic_bundle_dir.name,
-            metadata=MetadataFile(original_audio_filenames=[]),
+            metadata=MetadataFile(audio_files=[]),
             source_audios=[],
             transcript=None,
             summary=None,
@@ -323,7 +327,7 @@ class TestTranscribeBundleWriteOperations:
 
         bundle.init_metadata(filenames)
 
-        assert bundle.metadata.original_audio_filenames == filenames
+        assert [f.filename for f in bundle.metadata.audio_files] == filenames
         assert fake_fs.file_exists(generic_bundle_dir / METADATA_FILENAME)
 
 
@@ -462,7 +466,7 @@ class TestTranscribeBundleRenaming:
         """Test that renaming raises if directory doesn't exist."""
         bundle = TranscribeBundle(
             bundle_name="2025-01-15_meeting",
-            metadata=MetadataFile(original_audio_filenames=["meeting.mp3"]),
+            metadata=MetadataFile(audio_files=[AudioFileMeta(filename="meeting.mp3")]),
             source_audios=[Path("/store/2025-01-15_meeting/meeting.mp3")],
             fs_service=fake_fs,
             audio_service=fake_audio_service,
@@ -659,7 +663,9 @@ class TestTranscribeBundleIntegration:
         # Create initial metadata with one file
         metadata_yaml = (
             "---\n"
-            "original_audio_filenames: [part1.mp3]\n"
+            "audio_files:\n"
+            "- filename: part1.mp3\n"
+            "  transcript_model_used: []\n"
             "transcript_model_used: []\n"
             "summary_model_used: null\n"
             "bundle_name_generated: false\n"

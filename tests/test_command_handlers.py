@@ -109,11 +109,10 @@ class TestHandleMerge:
         assert commands[3].executed is True  # current bundle second command
         assert commands[4].executed is False  # current bundle third command, never executed, should still be false
 
-        # Verify transcript model usage was merged (both models present)
-        merged_model = merged_bundle.metadata.transcript_model_used
-        assert merged_model is not None
-        assert "model-a" in merged_model
-        assert "model-b" in merged_model
+        # Verify transcript model usage was merged (both models present across files)
+        merged_models = [model for audio_meta in merged_bundle.metadata.audio_files for model in audio_meta.transcript_model_used]
+        assert "model-a" in merged_models
+        assert "model-b" in merged_models
 
         # Verify keep_forever is promoted to True when either source bundle is kept forever
         assert merged_bundle.metadata.keep_forever is True
@@ -157,7 +156,9 @@ class TestHandleMerge:
         )
 
         # Model carried over from current since previous had none
-        assert merged_bundle.metadata.transcript_model_used == ["model-a"]
+        # (previous bundle's file has no model, current bundle's file has ['model-a'])
+        assert merged_bundle.metadata.audio_files[0].transcript_model_used == []
+        assert merged_bundle.metadata.audio_files[1].transcript_model_used == ["model-a"]
         # keep_forever promoted to True because current bundle set it
         assert merged_bundle.metadata.keep_forever is True
 
@@ -185,8 +186,11 @@ class TestHandleMerge:
             audio_service=fake_audio_service,
         )
 
-        # Duplicate model is not appended again (set union prevents duplication)
-        assert twice_merged.metadata.transcript_model_used == [third_model]
+        # Duplicate model is not appended again (per-file models travel with their files)
+        # After two merges we have 3 files: first has [], second has ['model-a'], third has ['model-a']
+        assert twice_merged.metadata.audio_files[0].transcript_model_used == []
+        assert twice_merged.metadata.audio_files[1].transcript_model_used == ["model-a"]
+        assert twice_merged.metadata.audio_files[2].transcript_model_used == ["model-a"]
         # keep_forever stays True from the earlier merge
         assert twice_merged.metadata.keep_forever is True
         assert not fake_fs.directory_exists(third_bundle_dir)
@@ -230,10 +234,9 @@ class TestHandleMerge:
         )
 
         # Both models should be present in the merged metadata, regardless of exact syntax.
-        merged_model = merged_bundle.metadata.transcript_model_used
-        assert merged_model is not None
-        assert previous_model in merged_model
-        assert current_model in merged_model
+        merged_models = [model for audio_meta in merged_bundle.metadata.audio_files for model in audio_meta.transcript_model_used]
+        assert previous_model in merged_models
+        assert current_model in merged_models
 
     def test_handle_merge_keeps_previous_transcript_when_current_has_none(
         self,
@@ -431,10 +434,13 @@ class TestHandleMerge:
             audio_service=fake_audio_service,
         )
 
-        # Exact-match union: whisper-large appears once (in source order after previous),
-        # and gpt-4o-transcribe is appended. No substring-based false dedup.
-        assert merged_bundle.metadata.transcript_model_used == [
+        # Per-file models: each file keeps its own model list (no cross-file dedup).
+        # Previous file: ['whisper', 'whisper-large'], Current file: ['whisper-large', 'gpt-4o-transcribe']
+        assert merged_bundle.metadata.audio_files[0].transcript_model_used == [
             "whisper",
+            "whisper-large",
+        ]
+        assert merged_bundle.metadata.audio_files[1].transcript_model_used == [
             "whisper-large",
             "gpt-4o-transcribe",
         ]

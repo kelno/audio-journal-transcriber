@@ -13,6 +13,7 @@ from transcriber.constants import MULTIPLE_TRANSCRIPTS_SEPARATOR
 from .ai_manager import AIManager
 from .config import TranscribeConfig
 from .exception import AbortRemainingBundleJobsException, EmptyTranscriptException, TooShortException, UnknownCommandException
+from .files.metadata import AudioFileMeta
 from .logger import logger
 from .transcribe_bundle import TranscribeBundle
 from .utils import ensure_directory_exists
@@ -134,9 +135,16 @@ class TranscriptionJob(TranscribeBundleJob):
             # Concatenate all transcripts
             concatenated = MULTIPLE_TRANSCRIPTS_SEPARATOR.join(transcripts)
 
-            # Update original_audio_filenames to reflect current state
-            # This ensures that if new files were added, metadata is synced
-            self.bundle.metadata.original_audio_filenames = [audio.name for audio in self.bundle.source_audios]
+            # Sync audio_files metadata to reflect current state (e.g. if new
+            # files were added). Preserve any existing per-file transcript models.
+            existing_models = {f.filename: f.transcript_model_used for f in self.bundle.metadata.audio_files}
+            self.bundle.metadata.audio_files = [
+                AudioFileMeta(
+                    filename=audio.name,
+                    transcript_model_used=existing_models.get(audio.name, []),
+                )
+                for audio in self.bundle.source_audios
+            ]
             self.bundle.metadata.write(
                 self.bundle.get_bundle_dir(),
                 self.bundle.fs_service,

@@ -17,7 +17,7 @@
 
 - Before modifying code, summarize what will change and why.
 - Preserve and improve existing contextual comments when refactoring.
-- Validate changes against IDE diagnostics, linters, and warnings.
+- Validate changes against IDE diagnostics, linters, and warnings. Use the diagnostic tool if available provided by the IDE as it alreadys runs the linter for you.
 - For non-trivial changes, design the interface and tests before implementation. Use mocks or stubs to validate behavior and isolate dependencies.
 
 ## Technical Preferences

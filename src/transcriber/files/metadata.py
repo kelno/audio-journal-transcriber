@@ -1,10 +1,22 @@
 from pathlib import Path
 
 import yaml
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field
 
 from transcriber.constants import METADATA_FILENAME
 from transcriber.files.file_system import FileSystemService
+
+
+class AudioFileMeta(BaseModel):
+    """Metadata for a single source audio file within a bundle.
+
+    Stores the filename and the transcript model(s) used for that specific file.
+    Keeping this per-file (rather than a single bundle-level value) is more correct:
+    different files in a merged bundle may have been transcribed by different models.
+    """
+
+    filename: str
+    transcript_model_used: list[str] = Field(default_factory=list)
 
 
 class Metadata(BaseModel):
@@ -13,11 +25,7 @@ class Metadata(BaseModel):
     We use pydantic BaseModel to ensure validity as data loaded from the file could be bad.
     """
 
-    original_audio_filenames: list[str] = Field(min_length=0)
-    # Ordered set of transcript models used for this bundle. Stored as a list (not a
-    # set) so YAML serialization is stable and human-readable. Accepts a bare string
-    # for backward compatibility with bundles written before this was a list.
-    transcript_model_used: list[str] = Field(default_factory=list)
+    audio_files: list[AudioFileMeta] = Field(default_factory=list)
     summary_model_used: str | None = None
     bundle_name_generated: bool = False
     keep_forever: bool = False
@@ -68,11 +76,30 @@ class MetadataFile(Metadata):
             error_msg = f"Invalid metadata file {meta_file}, failed to find frontmatter"
             raise ValueError(error_msg)
 
-        # If data has "original_audio_filename" key, that's the old format,
-        # so we need to convert it to the new format
+        # --- Backward compatibility with older metadata formats ---
+        # Old singular key.
         if "original_audio_filename" in data:
             data["original_audio_filenames"] = [data["original_audio_filename"]]
             del data["original_audio_filename"]
+
+        # Old format stored a flat list of filenames plus a single bundle-level
+        # transcript_model_used. Convert into the per-file audio_files format,
+        # distributing the old global model to every file (lossless for "which
+        # model transcribed this bundle").
+        if "audio_files" not in data and "original_audio_filenames" in data:
+            old_models = data.get("transcript_model_used")
+            if old_models is None:
+                model_list: list[str] = []
+            elif isinstance(old_models, str):
+                model_list = [old_models]
+            else:
+                model_list = list(old_models)
+            data["audio_files"] = [
+                {"filename": name, "transcript_model_used": list(model_list)} for name in data["original_audio_filenames"]
+            ]
+        # Drop the now-obsolete flat fields if present.
+        data.pop("original_audio_filenames", None)
+        data.pop("transcript_model_used", None)
 
         return MetadataFile.model_validate(data)
 

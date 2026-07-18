@@ -6,15 +6,13 @@ Contains the implementation logic for each command type.
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from pathlib import Path
+from pathlib import Path
 
 from transcriber.config import TranscribeConfig
 from transcriber.constants import MULTIPLE_TRANSCRIPTS_SEPARATOR, SUMMARY_FILENAME
 from transcriber.exception import AbortRemainingBundleJobsException, NoPreviousBundleException, UnknownCommandException
 from transcriber.files.commands_file import CommandsFile
+from transcriber.files.metadata import AudioFileMeta
 from transcriber.files.text_file import TranscriptFile
 from transcriber.logger import logger
 from transcriber.transcribe_bundle import TranscribeBundle
@@ -37,13 +35,14 @@ def _move_audio_to_bundle(source: TranscribeBundle, target: TranscribeBundle) ->
 
     Side Effects:
         - Moves audio files from source to target bundle directory
-        - Updates target bundle's in-memory source_audios and transcript_model_used metadata
+        - Appends the source's per-file audio metadata (filenames + transcript models)
+          to the target bundle's in-memory metadata
 
     Note:
-        This function only mutates in-memory state (audio list, length, merged
-        models). It does NOT write metadata to disk; the caller is responsible for
-        a single final metadata write once the whole merge is composed. This keeps
-        the target bundle from being persisted in a half-built state.
+        This function only mutates in-memory state (audio list + per-file metadata).
+        It does NOT write metadata to disk; the caller is responsible for a single
+        final metadata write once the whole merge is composed. This keeps the target
+        bundle from being persisted in a half-built state.
 
     """
     target_bundle_dir = target.get_bundle_dir()
@@ -68,16 +67,32 @@ def _move_audio_to_bundle(source: TranscribeBundle, target: TranscribeBundle) ->
         target.source_audios,
         source.config,
     )
-    target.metadata.original_audio_filenames = [audio.name for audio in target.source_audios]
 
-    # Merge transcript model usage as an ordered set (no duplicates, exact match).
-    # In-memory only; the caller writes metadata once at the end.
-    if source.metadata.transcript_model_used:
-        merged_models = list(target.metadata.transcript_model_used)
-        for model in source.metadata.transcript_model_used:
-            if model not in merged_models:
-                merged_models.append(model)
-        target.metadata.transcript_model_used = merged_models
+    # Build a mapping of final filenames to their metadata (with renamed targets).
+    # This ensures metadata stays in sync with the sorted source_audios order.
+    moved_names = {p.name for p in moved_audio_paths}
+    source_meta_by_final_name: dict[str, AudioFileMeta] = {}
+    for audio_meta in source.metadata.audio_files:
+        new_filename = audio_meta.filename
+        if audio_meta.filename in moved_names:
+            # Find the collision-renamed target name for this source file.
+            for moved in moved_audio_paths:
+                if moved.stem == Path(audio_meta.filename).stem:
+                    new_filename = moved.name
+                    break
+        source_meta_by_final_name[new_filename] = AudioFileMeta(
+            filename=new_filename,
+            transcript_model_used=list(audio_meta.transcript_model_used),
+        )
+
+    # Preserve existing target metadata for files that were already in target
+    target_meta_by_name = {m.filename: m for m in target.metadata.audio_files}
+
+    # Rebuild audio_files in the same order as the sorted source_audios.
+    target.metadata.audio_files = [
+        source_meta_by_final_name.get(path.name) or target_meta_by_name.get(path.name) or AudioFileMeta(filename=path.name)
+        for path in target.source_audios
+    ]
 
 
 def _merge_transcripts(source: TranscribeBundle, target: TranscribeBundle) -> None:
@@ -104,7 +119,6 @@ def _merge_commands(source: TranscribeBundle, target: TranscribeBundle) -> None:
         target: The target bundle to receive the merged commands.
 
     Side Effects:
-        - Marks the merge command as executed in the source bundle
         - Combines commands from both bundles into the target bundle
         - Writes the merged commands file to the target bundle directory
 
@@ -112,8 +126,9 @@ def _merge_commands(source: TranscribeBundle, target: TranscribeBundle) -> None:
     if target.commands and source.commands:  # merge case
         merged_commands = target.commands.commands + source.commands.commands
         target.commands = CommandsFile(text="", commands=merged_commands)
-    elif source.commands:  # only sources has command
-        target.commands = source.commands
+    elif source.commands:  # only source has commands
+        # Create a copy to avoid sharing the same object reference
+        target.commands = CommandsFile(text="", commands=list(source.commands.commands))
 
     if target.commands:
         target.commands.write(target.get_bundle_dir(), target.fs_service)
@@ -174,8 +189,8 @@ def handle_merge(current_bundle: TranscribeBundle, _config: TranscribeConfig, me
         previous_bundle.summary = None
         previous_bundle.metadata.summary_model_used = None
         summary_path = previous_bundle_dir / SUMMARY_FILENAME
-        if current_bundle.fs_service.file_exists(summary_path):
-            current_bundle.fs_service.delete_file(summary_path)
+        if previous_bundle.fs_service.file_exists(summary_path):
+            previous_bundle.fs_service.delete_file(summary_path)
 
     previous_bundle.metadata.bundle_name_generated = False
     if current_bundle.metadata.keep_forever > previous_bundle.metadata.keep_forever:
@@ -184,7 +199,7 @@ def handle_merge(current_bundle: TranscribeBundle, _config: TranscribeConfig, me
     # transcript models, summary reset, keep_forever, bundle_name_generated) is
     # persisted here at once. The source bundle is only deleted afterwards, so a
     # failure before this point leaves the target untouched and the source recoverable.
-    previous_bundle.metadata.write(previous_bundle_dir, current_bundle.fs_service)
+    previous_bundle.metadata.write(previous_bundle_dir, previous_bundle.fs_service)
 
     current_bundle.fs_service.delete_directory(current_bundle_dir)
 

@@ -16,7 +16,7 @@ from transcriber.constants import (
 from transcriber.exception import InvalidBundleException
 from transcriber.files.commands_file import CommandsFile
 from transcriber.files.file_system import FileSystemService
-from transcriber.files.metadata import MetadataFile
+from transcriber.files.metadata import AudioFileMeta, MetadataFile
 from transcriber.files.text_file import (
     SummaryFile,
     TranscriptFile,
@@ -138,7 +138,7 @@ class TranscribeBundle:
         audio_service: AudioService,
     ) -> "TranscribeBundle":
         """Create a new TranscribeBundle instance from an audio file."""
-        metadata = MetadataFile(original_audio_filenames=[source_audio.name])
+        metadata = MetadataFile(audio_files=[AudioFileMeta(filename=source_audio.name)])
         bundle_name = TranscribeBundle.generate_generic_bundle_name(
             source_audio,
             source_audio.name,
@@ -169,7 +169,9 @@ class TranscribeBundle:
             raise ValueError(msg)
 
         filenames = [f.name for f in source_audios]
-        metadata = MetadataFile(original_audio_filenames=filenames)
+        metadata = MetadataFile(
+            audio_files=[AudioFileMeta(filename=name) for name in filenames],
+        )
 
         # Use first file for date generation if no bundle_name provided
         if not bundle_name:
@@ -213,7 +215,7 @@ class TranscribeBundle:
                 self.fs_service.delete_file(self.get_bundle_dir() / COMMANDS_FILENAME)
 
         # Check if existing audio files match metadata
-        original_audio_filenames = set(self.metadata.original_audio_filenames)
+        original_audio_filenames = {f.filename for f in self.metadata.audio_files}
         current_audio_filenames = {f.name for f in self.source_audios}
         if current_audio_filenames and current_audio_filenames != original_audio_filenames:
             logger.info(
@@ -386,11 +388,11 @@ class TranscribeBundle:
         Prefers the first audio file's extracted timestamp if available,
         otherwise falls back to the bundle name date.
         """
-        if self.source_audios and self.metadata.original_audio_filenames:
+        if self.source_audios and self.metadata.audio_files:
             try:
                 return TranscribeBundle.get_date_for_filename(
                     self.source_audios[0],
-                    self.metadata.original_audio_filenames[0],
+                    self.metadata.audio_files[0].filename,
                     self.config,
                 )
             except ValueError:
@@ -488,7 +490,9 @@ class TranscribeBundle:
         transcript: str,
     ) -> None:
         """Set and write the transcript to memory and disk."""
-        self.metadata.transcript_model_used = [self.config.audio.model]
+        # Record the transcript model on the first audio file's metadata.
+        if self.metadata.audio_files:
+            self.metadata.audio_files[0].transcript_model_used = [self.config.audio.model]
         self.metadata.write(self.get_bundle_dir(), self.fs_service)
         self.transcript = TranscriptFile(transcript)
         self.transcript.write(self.get_bundle_dir(), self.fs_service)
@@ -578,7 +582,7 @@ class TranscribeBundle:
         filenames: list[str],
     ) -> None:
         """Initialize metadata with multiple files."""
-        self.metadata.original_audio_filenames = filenames
+        self.metadata.audio_files = [AudioFileMeta(filename=name) for name in filenames]
         self.metadata.write(self.get_bundle_dir(), self.fs_service)
 
     def set_and_write_bundle_name(
@@ -593,7 +597,7 @@ class TranscribeBundle:
 
         prefix = self.generate_bundle_name_date_prefix(
             self.source_audios[0] if self.source_audios else None,
-            self.metadata.original_audio_filenames[0] if self.metadata.original_audio_filenames else "",
+            self.metadata.audio_files[0].filename if self.metadata.audio_files else "",
             self.config,
         )
         new_bundle_name = f"{prefix} {bundle_name_summary}"
