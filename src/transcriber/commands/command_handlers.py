@@ -13,7 +13,7 @@ if TYPE_CHECKING:
 
 from transcriber.config import TranscribeConfig
 from transcriber.constants import MULTIPLE_TRANSCRIPTS_SEPARATOR, SUMMARY_FILENAME
-from transcriber.exception import AbortRemainingBundleJobsException
+from transcriber.exception import AbortRemainingBundleJobsException, UnknownCommandException
 from transcriber.files.commands_file import CommandsFile
 from transcriber.files.text_file import TranscriptFile
 from transcriber.logger import logger
@@ -153,7 +153,7 @@ def handle_unknown(_bundle: TranscribeBundle, _config: TranscribeConfig, cmd_tex
 
     """
     msg = f"Unknown command type cannot be executed (command text: {cmd_text})"
-    raise ValueError(msg)
+    raise UnknownCommandException(msg)
 
 
 @command_handler

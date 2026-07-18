@@ -17,23 +17,27 @@ def _build_registry() -> dict[CommandType, CommandDefinition]:
             command_type=CommandType.MERGE,
             description="Combine the current recording with the previous one.",
             aliases=["merge", "join", "concatenate", "add", "fusionner"],
+            max_attempts=2,
             handler=handle_merge,
         ),
         CommandType.DELETE: CommandDefinition(
             command_type=CommandType.DELETE,
             description="Remove or delete the current recording.",
             aliases=["remove", "discard", "trash"],
+            max_attempts=2,
             handler=handle_delete,
         ),
         CommandType.UNKNOWN: CommandDefinition(
             command_type=CommandType.UNKNOWN,
             description="Unknown or unmatched command.",
             handler=handle_unknown,
+            max_attempts=1,
         ),
         CommandType.IGNORE: CommandDefinition(
             command_type=CommandType.IGNORE,
             description="User asks for the command to be ignored.",
             handler=handle_ignore,
+            max_attempts=1,
         ),
     }
 

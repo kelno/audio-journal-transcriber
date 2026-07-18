@@ -14,3 +14,6 @@ indent-style = "space"
 
 # Like Black, automatically detect the appropriate line ending.
 line-ending = "auto"
+
+# The Ruff formatter provides an opt-in feature for automatically formatting Python code examples in docstrings.
+docstring-code-format = true

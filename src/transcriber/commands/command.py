@@ -24,7 +24,7 @@ class Command:
     executed_at: datetime | None = None
     matched_type: command_type.CommandType | None = None
     last_error: str | None = None  # Error string to help with debugging
-    # TODO: add a retry system, up to a configured amount of times. And stop trying if reached. https://github.com/kelno/audio-journal-transcriber/issues/6
+    attempt_count: int = 0  # we stop trying if reaching the max retries for that command type
 
     def to_dict(self) -> dict[str, Any]:
         """Convert command to dictionary for YAML serialization."""
@@ -34,6 +34,7 @@ class Command:
             "executed_at": self.executed_at.isoformat(timespec="seconds") if self.executed_at else None,
             "matched_type": self.matched_type.value if self.matched_type else None,
             "last_error": self.last_error,
+            "attempt_count": self.attempt_count,
         }
 
     @classmethod
@@ -50,9 +51,15 @@ class Command:
         text = data.get("text")
         executed = data.get("executed", False)
         last_error = data.get("last_error") if isinstance(data.get("last_error"), str) else None
+        attempt_count = data.get("attempt_count", 0)
 
+        # some validation (maybe we can use pydantic instead or something similar?)
         if not isinstance(text, str) or not isinstance(executed, bool):
-            msg = "Invalid command data: text must be str and executed must be bool"
+            msg = "Invalid command data: text must be str, executed must be bool"
+            raise TypeError(msg)
+
+        if not isinstance(attempt_count, int) or attempt_count < 0:
+            msg = "Invalid command data: attempt_count must be an integer and above 0"
             raise TypeError(msg)
 
         return cls(
@@ -61,5 +68,5 @@ class Command:
             executed_at=executed_at,
             matched_type=matched_type,
             last_error=last_error,
-            # retries
+            attempt_count=attempt_count,
         )

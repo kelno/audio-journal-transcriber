@@ -29,3 +29,8 @@ class AbortRemainingBundleJobsException(AudioTranscriberException):
 @final
 class InvalidBundleException(AudioTranscriberException):
     """Failed to load invalid bundle."""
+
+
+@final
+class UnknownCommandException(AudioTranscriberException):
+    """Command text couldn't be matched to a know command type."""

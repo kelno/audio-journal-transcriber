@@ -13,7 +13,7 @@ from transcriber.constants import MULTIPLE_TRANSCRIPTS_SEPARATOR
 
 from .ai_manager import AIManager
 from .config import TranscribeConfig
-from .exception import AbortRemainingBundleJobsException, EmptyTranscriptException, TooShortException
+from .exception import AbortRemainingBundleJobsException, EmptyTranscriptException, TooShortException, UnknownCommandException
 from .logger import logger
 from .transcribe_bundle import TranscribeBundle
 from .utils import ensure_directory_exists
@@ -361,6 +361,13 @@ class RunCommandsJob(TranscribeBundleJob):
                     self.bundle.set_command_executed(cmd.text)
                     continue
 
+                max_attemps = COMMAND_REGISTRY[matched_type].max_attempts
+                if cmd.attempt_count >= max_attemps:
+                    logger.debug(
+                        f"{self.bundle}: Skipping command {cmd.text} as max attempt count ({max_attemps}) has been reached",
+                    )
+                    continue
+
                 logger.info(f"Executing {matched_type.value} command for bundle {self.bundle}")
 
                 handler = COMMAND_REGISTRY[matched_type].handler
@@ -372,13 +379,13 @@ class RunCommandsJob(TranscribeBundleJob):
             except AbortRemainingBundleJobsException:
                 logger.debug(f"{cmd} requested aborting remaining jobs for bundle {self.bundle}")
                 raise  # raise it further to the job execution loop
-
-            except Exception as e:
+            except (UnknownCommandException, Exception) as e:
                 # On error, stop processing remaining commands to avoid partial state.
                 logger.exception(
-                    f"Failed to process bundle {self.bundle} command '{cmd.text}'",
+                    f"{self.bundle}: Failed to process bundle command '{cmd.text}'",
                 )
                 self.bundle.set_last_error(cmd_text=cmd.text, error=str(e))
+                self.bundle.add_command_attempt(cmd_text=cmd.text)
                 raise
 
     @staticmethod

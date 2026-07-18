@@ -529,7 +529,8 @@ class TranscribeBundle:
         cmd = self.assert_command(cmd_text)
         cmd.matched_type = matched_type
 
-        cast(CommandsFile, self.commands).write(self.get_bundle_dir(), self.fs_service)
+        assert self.commands is not None
+        self.commands.write(self.get_bundle_dir(), self.fs_service)
 
     def set_command_executed(self, cmd_text: str) -> None:
         """Mark a raw command as executed."""
@@ -560,6 +561,14 @@ class TranscribeBundle:
             error_str = error_str[: max_len - 14] + "... (truncated)"
 
         cmd.last_error = error_str
+
+        assert self.commands is not None
+        self.commands.write(self.get_bundle_dir(), self.fs_service)
+
+    def add_command_attempt(self, cmd_text: str) -> None:
+        """Increment retry count by 1."""
+        cmd = self.assert_command(cmd_text)
+        cmd.attempt_count = cmd.attempt_count + 1
 
         assert self.commands is not None
         self.commands.write(self.get_bundle_dir(), self.fs_service)
