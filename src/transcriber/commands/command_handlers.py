@@ -82,6 +82,22 @@ def _move_audio_to_bundle(source: TranscribeBundle, target: TranscribeBundle) ->
         target.metadata.write(target.get_bundle_dir(), target.fs_service)
 
 
+def _merge_transcripts(source: TranscribeBundle, target: TranscribeBundle) -> None:
+    target_t = target.transcript
+    source_t = source.transcript
+    if target_t and source_t:
+        merged = target_t.text + MULTIPLE_TRANSCRIPTS_SEPARATOR + source_t.text
+    elif source_t and not target_t:
+        merged = source_t.text  # promote current's transcript
+    elif target_t and not source_t:
+        merged = target_t.text  # keep previous's (no-op, but explicit)
+    else:
+        merged = None
+    target.transcript = TranscriptFile(merged) if merged else None
+    if target.transcript:
+        target.transcript.write(target.get_bundle_dir(), target.fs_service)
+
+
 def _merge_commands(source: TranscribeBundle, target: TranscribeBundle, merge_cmd_text: str) -> None:
     """Merge commands from source bundle into target bundle.
 
@@ -143,12 +159,7 @@ def handle_merge(current_bundle: TranscribeBundle, _config: TranscribeConfig, me
 
     _move_audio_to_bundle(source=current_bundle, target=previous_bundle)
     _merge_commands(source=current_bundle, target=previous_bundle, merge_cmd_text=merge_cmd_text)
-
-    # Merge transcripts
-    if previous_bundle.transcript and current_bundle.transcript:
-        merged_text = previous_bundle.transcript.text + MULTIPLE_TRANSCRIPTS_SEPARATOR + current_bundle.transcript.text
-        previous_bundle.transcript = TranscriptFile(merged_text)
-        previous_bundle.transcript.write(previous_bundle_dir, current_bundle.fs_service)
+    _merge_transcripts(source=current_bundle, target=previous_bundle)
 
     # Clear previous summary to let it regenerate
     if previous_bundle.summary:

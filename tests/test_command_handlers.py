@@ -240,6 +240,124 @@ class TestHandleMerge:
         assert previous_model in merged_model
         assert current_model in merged_model
 
+    def test_handle_merge_keeps_previous_transcript_when_current_has_none(
+        self,
+        fake_config: TranscribeConfig,
+        fake_fs: FakeFileSystemService,
+        fake_audio_service: FakeAudioService,
+        transcribe_bundle_factory: TranscribeBundleFactory,
+    ) -> None:
+        """Verify previous transcript is preserved when current bundle has no transcript."""
+        previous_transcript_text = "previous transcript"
+        previous_bundle = transcribe_bundle_factory(
+            bundle_name="2025-01-15_previous",
+            audio_filename="Recording 20250115010000.mp3",
+            transcript_text=previous_transcript_text,
+            audio_length=30.0,
+        )
+        current_bundle = transcribe_bundle_factory(
+            bundle_name="2025-01-15_meeting",
+            audio_filename="Recording 20250115090000.mp3",
+            audio_length=20.0,
+        )
+
+        previous_bundle_dir = previous_bundle.get_bundle_dir()
+        current_bundle_dir = current_bundle.get_bundle_dir()
+
+        with pytest.raises(AbortRemainingBundleJobsException):
+            handle_merge(current_bundle, fake_config, "merge")
+
+        assert not fake_fs.directory_exists(current_bundle_dir)
+
+        merged_bundle = TranscribeBundle.from_existing_directory(
+            existing_dir=previous_bundle_dir,
+            config=fake_config,
+            fs_service=fake_fs,
+            audio_service=fake_audio_service,
+        )
+
+        # Previous transcript is kept as-is, no separator injected, no data loss.
+        assert merged_bundle.transcript is not None
+        assert merged_bundle.transcript.text == previous_transcript_text
+        assert MULTIPLE_TRANSCRIPTS_SEPARATOR not in merged_bundle.transcript.text
+
+    def test_handle_merge_promotes_current_transcript_when_previous_has_none(
+        self,
+        fake_config: TranscribeConfig,
+        fake_fs: FakeFileSystemService,
+        fake_audio_service: FakeAudioService,
+        transcribe_bundle_factory: TranscribeBundleFactory,
+    ) -> None:
+        """Verify current transcript is promoted when previous bundle has no transcript."""
+        current_transcript_text = "current transcript"
+        previous_bundle = transcribe_bundle_factory(
+            bundle_name="2025-01-15_previous",
+            audio_filename="Recording 20250115010000.mp3",
+            audio_length=30.0,
+        )
+        current_bundle = transcribe_bundle_factory(
+            bundle_name="2025-01-15_meeting",
+            audio_filename="Recording 20250115090000.mp3",
+            transcript_text=current_transcript_text,
+            audio_length=20.0,
+        )
+
+        previous_bundle_dir = previous_bundle.get_bundle_dir()
+        current_bundle_dir = current_bundle.get_bundle_dir()
+
+        with pytest.raises(AbortRemainingBundleJobsException):
+            handle_merge(current_bundle, fake_config, "merge")
+
+        assert not fake_fs.directory_exists(current_bundle_dir)
+
+        merged_bundle = TranscribeBundle.from_existing_directory(
+            existing_dir=previous_bundle_dir,
+            config=fake_config,
+            fs_service=fake_fs,
+            audio_service=fake_audio_service,
+        )
+
+        # Current transcript is carried over (previously this would have been lost).
+        assert merged_bundle.transcript is not None
+        assert merged_bundle.transcript.text == current_transcript_text
+        assert MULTIPLE_TRANSCRIPTS_SEPARATOR not in merged_bundle.transcript.text
+
+    def test_handle_merge_has_no_transcript_when_neither_bundle_has_one(
+        self,
+        fake_config: TranscribeConfig,
+        fake_fs: FakeFileSystemService,
+        fake_audio_service: FakeAudioService,
+        transcribe_bundle_factory: TranscribeBundleFactory,
+    ) -> None:
+        """Verify merged bundle has no transcript when neither source has one."""
+        previous_bundle = transcribe_bundle_factory(
+            bundle_name="2025-01-15_previous",
+            audio_filename="Recording 20250115010000.mp3",
+            audio_length=30.0,
+        )
+        current_bundle = transcribe_bundle_factory(
+            bundle_name="2025-01-15_meeting",
+            audio_filename="Recording 20250115090000.mp3",
+            audio_length=20.0,
+        )
+
+        previous_bundle_dir = previous_bundle.get_bundle_dir()
+        current_bundle_dir = current_bundle.get_bundle_dir()
+
+        with pytest.raises(AbortRemainingBundleJobsException):
+            handle_merge(current_bundle, fake_config, "merge")
+
+        assert not fake_fs.directory_exists(current_bundle_dir)
+
+        merged_bundle = TranscribeBundle.from_existing_directory(
+            existing_dir=previous_bundle_dir,
+            config=fake_config,
+            fs_service=fake_fs,
+            audio_service=fake_audio_service,
+        )
+
+        assert merged_bundle.transcript is None
+
     def test_handle_merge_fails_when_previous_bundle_is_too_old(
         self,
         fake_config: TranscribeConfig,
