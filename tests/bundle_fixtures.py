@@ -24,6 +24,8 @@ class TranscribeBundleFactory(Protocol):
         commands: list[str] | None = None,
         audio_length: float = 20.0,
         commands_executed: bool = False,
+        transcript_model_used: str | None = None,
+        keep_forever: bool = False,
         config: TranscribeConfig | None = None,
     ) -> TranscribeBundle:
         """Factory callable returning a `TranscribeBundle` for tests."""
@@ -44,8 +46,10 @@ def transcribe_bundle_factory(
         transcript_text: str | None = None,
         summary_text: str | None = None,
         commands: list[str] | None = None,
-        audio_length: float = 20.0,  # Will get registered to fake_audio_service so get_audio_duration can be used later
+        audio_length: float = 20.0,
         commands_executed: bool = False,
+        transcript_model_used: str | None = None,
+        keep_forever: bool = False,
         config: TranscribeConfig | None = None,
     ) -> TranscribeBundle:
         config = config or fake_config
@@ -66,6 +70,12 @@ def transcribe_bundle_factory(
             config=config,
         )
         bundle.init_metadata([audio_filename], [audio_length])
+
+        if transcript_model_used is not None:
+            bundle.metadata.transcript_model_used = transcript_model_used
+        if keep_forever:
+            bundle.metadata.keep_forever = keep_forever
+        bundle.metadata.write(bundle_dir, fake_fs)
 
         if commands and bundle.commands:
             if commands_executed:

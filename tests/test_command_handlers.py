@@ -6,7 +6,7 @@ from tests.fake_file_system import FakeFileSystemService
 from transcriber.commands.command_handlers import handle_merge
 from transcriber.config import TranscribeConfig
 from transcriber.constants import MULTIPLE_TRANSCRIPTS_SEPARATOR
-from transcriber.exception import AbortRemainingBundleJobsException
+from transcriber.exception import AbortRemainingBundleJobsException, NoPreviousBundleException
 from transcriber.transcribe_bundle import TranscribeBundle
 
 
@@ -31,6 +31,8 @@ class TestHandleMerge:
             commands=[previous_cmd_raw1, previous_cmd_raw2],
             audio_length=30.0,
             commands_executed=False,
+            transcript_model_used="model-a",
+            keep_forever=True,
         )
         # Manually mark only first command as executed to test mixed states
         assert previous_bundle.commands
@@ -50,6 +52,8 @@ class TestHandleMerge:
             commands=[current_command_raw1, current_command_raw2, current_command_raw3],
             audio_length=20.0,
             commands_executed=False,
+            transcript_model_used="model-b",
+            keep_forever=False,
         )
         # Mark only second command as executed
         assert current_bundle.commands
@@ -108,7 +112,133 @@ class TestHandleMerge:
         assert commands[3].executed is True  # current bundle second command
         assert commands[4].executed is False  # current bundle third command, never executed, should still be false
 
-        # Possible improvement: Add testing of keep_forever and transcript_model_used merging
+        # Verify transcript model usage was merged (both models present)
+        merged_model = merged_bundle.metadata.transcript_model_used
+        assert merged_model is not None
+        assert "model-a" in merged_model
+        assert "model-b" in merged_model
+
+        # Verify keep_forever is promoted to True when either source bundle is kept forever
+        assert merged_bundle.metadata.keep_forever is True
+
+    def test_handle_merge_merges_transcript_model_and_keep_forever_edge_cases(
+        self,
+        fake_config: TranscribeConfig,
+        fake_fs: FakeFileSystemService,
+        fake_audio_service: FakeAudioService,
+        transcribe_bundle_factory: TranscribeBundleFactory,
+    ) -> None:
+        """Verify transcript_model_used dedup/None handling and keep_forever promotion."""
+        # Previous has no model, current has one -> model carried over from current
+        previous_bundle = transcribe_bundle_factory(
+            bundle_name="2025-01-15_previous",
+            audio_filename="Recording 20250115010000.mp3",
+            transcript_text="previous transcript",
+            audio_length=30.0,
+            transcript_model_used=None,
+            keep_forever=False,
+        )
+        # Current reuses the same model as previous would have, plus keep_forever True
+        current_bundle = transcribe_bundle_factory(
+            bundle_name="2025-01-15_meeting",
+            audio_filename="Recording 20250115090000.mp3",
+            transcript_text="current transcript",
+            audio_length=20.0,
+            transcript_model_used="model-a",
+            keep_forever=True,
+        )
+
+        previous_bundle_dir = previous_bundle.get_bundle_dir()
+
+        with pytest.raises(AbortRemainingBundleJobsException):
+            handle_merge(current_bundle, fake_config, "merge")
+
+        merged_bundle = TranscribeBundle.from_existing_directory(
+            existing_dir=previous_bundle_dir,
+            config=fake_config,
+            fs_service=fake_fs,
+            audio_service=fake_audio_service,
+        )
+
+        # Model carried over from current since previous had none
+        assert merged_bundle.metadata.transcript_model_used == "model-a"
+        # keep_forever promoted to True because current bundle set it
+        assert merged_bundle.metadata.keep_forever is True
+
+        # Now merge again with a bundle that reuses the same model and no keep_forever.
+        # Its timestamp (12:00) must be strictly later than the merged previous
+        # bundle's first audio (01:00) and within the 12h merge window.
+        third_model = "model-a"
+        third_bundle = transcribe_bundle_factory(
+            bundle_name="2025-01-15_later",
+            audio_filename="Recording 20250115120000.mp3",
+            transcript_text="third transcript",
+            audio_length=10.0,
+            transcript_model_used=third_model,
+            keep_forever=False,
+        )
+        third_bundle_dir = third_bundle.get_bundle_dir()
+
+        with pytest.raises(AbortRemainingBundleJobsException):
+            handle_merge(third_bundle, fake_config, "merge")
+
+        twice_merged = TranscribeBundle.from_existing_directory(
+            existing_dir=previous_bundle_dir,
+            config=fake_config,
+            fs_service=fake_fs,
+            audio_service=fake_audio_service,
+        )
+
+        # Duplicate model is not appended again (substring check prevents duplication)
+        assert twice_merged.metadata.transcript_model_used == third_model
+        # keep_forever stays True from the earlier merge
+        assert twice_merged.metadata.keep_forever is True
+        assert not fake_fs.directory_exists(third_bundle_dir)
+
+    def test_handle_merge_concatenates_different_transcript_models(
+        self,
+        fake_config: TranscribeConfig,
+        fake_fs: FakeFileSystemService,
+        fake_audio_service: FakeAudioService,
+        transcribe_bundle_factory: TranscribeBundleFactory,
+    ) -> None:
+        """Verify different transcript models from both bundles are both present after merge."""
+        previous_model = "whisper"
+        current_model = "gpt-4o-transcribe"
+        previous_bundle = transcribe_bundle_factory(
+            bundle_name="2025-01-15_previous",
+            audio_filename="Recording 20250115010000.mp3",
+            transcript_text="previous transcript",
+            audio_length=30.0,
+            transcript_model_used=previous_model,
+            keep_forever=False,
+        )
+        current_bundle = transcribe_bundle_factory(
+            bundle_name="2025-01-15_meeting",
+            audio_filename="Recording 20250115090000.mp3",
+            transcript_text="current transcript",
+            audio_length=20.0,
+            transcript_model_used=current_model,
+            keep_forever=False,
+        )
+
+        previous_bundle_dir = previous_bundle.get_bundle_dir()
+
+        with pytest.raises(AbortRemainingBundleJobsException):
+            handle_merge(current_bundle, fake_config, "merge")
+
+        merged_bundle = TranscribeBundle.from_existing_directory(
+            existing_dir=previous_bundle_dir,
+            config=fake_config,
+            fs_service=fake_fs,
+            audio_service=fake_audio_service,
+        )
+
+        # Both models should be present in the merged metadata, regardless of exact syntax.
+        merged_model = merged_bundle.metadata.transcript_model_used
+        assert merged_model is not None
+        assert previous_model in merged_model
+        assert current_model in merged_model
 
     def test_handle_merge_fails_when_previous_bundle_is_too_old(
         self,
