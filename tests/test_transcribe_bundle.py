@@ -665,7 +665,7 @@ class TestTranscribeBundleIntegration:
             "---\n"
             "original_audio_filenames: [part1.mp3]\n"
             "audio_length: null\n"
-            "transcript_model_used: null\n"
+            "transcript_model_used: []\n"
             "summary_model_used: null\n"
             "bundle_name_generated: false\n"
             "keep_forever: false\n"

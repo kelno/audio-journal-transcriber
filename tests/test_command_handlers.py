@@ -457,42 +457,6 @@ class TestHandleMerge:
             "gpt-4o-transcribe",
         ]
 
-    def test_metadata_reads_legacy_string_transcript_model_used(
-        self,
-        fake_config: TranscribeConfig,
-        fake_fs: FakeFileSystemService,
-        fake_audio_service: FakeAudioService,
-        transcribe_bundle_factory: TranscribeBundleFactory,
-    ) -> None:
-        """Verify a legacy single-string transcript_model_used is read as a one-element list."""
-        bundle = transcribe_bundle_factory(
-            bundle_name="2025-01-15_legacy",
-            audio_filename="Recording 20250115090000.mp3",
-            audio_length=20.0,
-        )
-        bundle_dir = bundle.get_bundle_dir()
-        # Overwrite metadata with the old string format to simulate an existing bundle.
-        fake_fs.write_file(
-            bundle_dir / "_metadata.md",
-            "---\n"
-            "original_audio_filenames:\n"
-            "- Recording 20250115090000.mp3\n"
-            "audio_length: 20.0\n"
-            "transcript_model_used: legacy-model\n"
-            "summary_model_used: null\n"
-            "bundle_name_generated: false\n"
-            "keep_forever: false\n"
-            "---\n",
-        )
-
-        reloaded = TranscribeBundle.from_existing_directory(
-            existing_dir=bundle_dir,
-            config=fake_config,
-            fs_service=fake_fs,
-            audio_service=fake_audio_service,
-        )
-        assert reloaded.metadata.transcript_model_used == ["legacy-model"]
-
     def test_handle_merge_fails_when_previous_bundle_is_too_old(
         self,
         fake_config: TranscribeConfig,

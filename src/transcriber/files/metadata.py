@@ -23,29 +23,6 @@ class Metadata(BaseModel):
     bundle_name_generated: bool = False
     keep_forever: bool = False
 
-    @field_validator("transcript_model_used", mode="before")
-    @classmethod
-    def _coerce_transcript_model_used(cls, value: object) -> object:
-        """Accept a single string (legacy format) as a one-element list.
-
-        Older bundles stored this field as a plain string; newer ones store a list.
-        ``None`` becomes an empty list. Duplicate entries are removed while keeping
-        the first occurrence order.
-        """
-        if value is None:
-            return []
-        if isinstance(value, str):
-            return [value]
-        if isinstance(value, list):
-            seen: set[str] = set()
-            deduped: list[str] = []
-            for item in value:
-                if isinstance(item, str) and item not in seen:
-                    seen.add(item)
-                    deduped.append(item)
-            return deduped
-        return value
-
 
 class MetadataFile(Metadata):
     @staticmethod
