@@ -10,8 +10,17 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from transcriber.config import TranscribeConfig
-from transcriber.constants import MULTIPLE_TRANSCRIPTS_SEPARATOR, SUMMARY_FILENAME
-from transcriber.exception import AbortRemainingBundleJobsException, NoPreviousBundleException, UnknownCommandException
+from transcriber.constants import (
+    MERGE_FAILED_FILENAME,
+    MULTIPLE_TRANSCRIPTS_SEPARATOR,
+    SUMMARY_FILENAME,
+)
+from transcriber.exception import (
+    AbortRemainingBundleJobsException,
+    MergeBlockedException,
+    NoPreviousBundleException,
+    UnknownCommandException,
+)
 from transcriber.files.metadata import AudioFileMeta
 from transcriber.files.text_file import TranscriptFile
 from transcriber.logger import logger
@@ -19,6 +28,7 @@ from transcriber.transcribe_bundle import TranscribeBundle
 
 if TYPE_CHECKING:
     from transcriber.commands.command import Command
+    from transcriber.files.file_system import FileSystemService
 
 # Returns success
 CommandHandler = Callable[[TranscribeBundle, TranscribeConfig, str], None]
@@ -98,6 +108,37 @@ def _move_audio_to_bundle(source: TranscribeBundle, target: TranscribeBundle) ->
     ]
 
 
+def _write_merge_failed_marker(
+    bundle: TranscribeBundle,
+    source_name: str,
+    target_name: str,
+    error: str,
+    fs_service: FileSystemService,
+) -> None:
+    """Write an on-disk marker that a merge involving `bundle` did not complete.
+
+    Written into both the source and the target bundle directories so a failed merge
+    blocks automatic retries regardless of which bundle a later merge resolves to.
+    The marker is removed on success (the source is deleted, the target marker cleared).
+    """
+    marker_path = bundle.get_bundle_dir() / MERGE_FAILED_FILENAME
+    content = (
+        f"Merge of {source_name} into {target_name} did not complete.\n"
+        f"Automatic retry is BLOCKED while this marker is present. HUMAN ACTION REQUIRED: "
+        f"inspect the bundle, fix any inconsistency, then delete {MERGE_FAILED_FILENAME} "
+        f"to allow merging again. Error:\n"
+        f"{error}\n"
+    )
+    fs_service.write_file(marker_path, content)
+
+
+def _remove_merge_failed_marker(target: TranscribeBundle, fs_service: FileSystemService) -> None:
+    """Remove the merge-failed marker once the merge has committed successfully."""
+    marker_path = target.get_bundle_dir() / MERGE_FAILED_FILENAME
+    if fs_service.file_exists(marker_path):
+        fs_service.delete_file(marker_path)
+
+
 def _merge_transcripts(source: TranscribeBundle, target: TranscribeBundle) -> None:
     target_t = target.transcript
     source_t = source.transcript
@@ -146,12 +187,49 @@ def _merge_commands(source: TranscribeBundle, target: TranscribeBundle) -> None:
         target.commands.write(target.get_bundle_dir(), target.fs_service)
 
 
+def _write_fail_markers(source: TranscribeBundle, target: TranscribeBundle) -> None:
+    target_bundle_dir = target.get_bundle_dir()
+    source_bundle_dir = source.get_bundle_dir()
+
+    for owner, bundle_dir in (
+        (target, target_bundle_dir),
+        (source, source_bundle_dir),
+    ):
+        if owner.fs_service.file_exists(bundle_dir / MERGE_FAILED_FILENAME):
+            msg = (
+                f"{owner}: MERGE BLOCKED, a previous merge failed "
+                f"(marker {MERGE_FAILED_FILENAME} present). Automatic retry is disabled; "
+                f"HUMAN ACTION REQUIRED: inspect the bundle, fix any inconsistency, "
+                f"then delete {MERGE_FAILED_FILENAME} to allow merging again."
+            )
+            logger.error(msg)
+            raise MergeBlockedException(msg)
+
+    # Write failure markers up front into BOTH bundles. If the merge aborts mid-way,
+    # these cues stay on disk (both bundles are preserved and retryable), making a
+    # partial/failed merge obvious and blocking future auto-retries from either side.
+    _write_merge_failed_marker(
+        bundle=source,
+        source_name=source.bundle_name,
+        target_name=target.bundle_name,
+        error="merge interrupted before completion (source)",
+        fs_service=source.fs_service,
+    )
+    _write_merge_failed_marker(
+        bundle=target,
+        source_name=source.bundle_name,
+        target_name=target.bundle_name,
+        error="merge interrupted before completion (target)",
+        fs_service=source.fs_service,
+    )
+
+
 @command_handler
-def handle_merge(current_bundle: TranscribeBundle, _config: TranscribeConfig, merge_cmd_text: str) -> None:
+def handle_merge(source: TranscribeBundle, _config: TranscribeConfig, merge_cmd_text: str) -> None:
     """Merge the current recording with the previous one.
 
     Args:
-        current_bundle: The transcribe bundle to operate on.
+        source: The transcribe bundle to operate on.
         config: The transcribe configuration.
         merge_cmd_text: The original command text.
 
@@ -167,63 +245,87 @@ def handle_merge(current_bundle: TranscribeBundle, _config: TranscribeConfig, me
         - The current (source) bundle directory is deleted once the merge succeeds.
 
     """
-    logger.info(f"Running merge command for {current_bundle} (command text: {merge_cmd_text})")
+    logger.info(f"Running merge command for {source} (command text: {merge_cmd_text})")
 
-    store_dir = current_bundle.config.general.store_dir
+    store_dir = source.config.general.store_dir
     bundles = TranscribeBundle.gather_existing_bundles(
         store_dir=store_dir,
         dry_run=False,
         cleanup_bundle=False,
-        config=current_bundle.config,
-        fs_service=current_bundle.fs_service,
-        audio_service=current_bundle.audio_service,
+        config=source.config,
+        fs_service=source.fs_service,
+        audio_service=source.audio_service,
     )
 
-    previous_bundle = TranscribeBundle.find_previous_bundle(current_bundle, bundles)
-    if previous_bundle is None:
+    target = TranscribeBundle.find_previous_bundle(source, bundles)
+    if target is None:
         msg = "No previous bundle found to merge with"
         raise NoPreviousBundleException(msg)
 
     # The merge target is chosen purely by recency within the merge window, not by
     # explicit user intent. Surface the chosen target prominently (with the time
     # gap) so a wrong-target merge is noticeable in the logs rather than silent.
-    gap_hours = (current_bundle.get_bundle_date() - previous_bundle.get_bundle_date()).total_seconds() / 3600
+    gap_hours = (source.get_bundle_date() - target.get_bundle_date()).total_seconds() / 3600
     logger.info(
-        f"{current_bundle}: Merge target selected -> {previous_bundle}"
-        f"gap = {gap_hours:.1f}h (merge window: {current_bundle.config.general.merge_max_hours:.1f}h)",
+        f"{source}: Merge target selected -> {target}gap = {gap_hours:.1f}h (merge window: {source.config.general.merge_max_hours:.1f}h)",
     )
 
-    previous_bundle_dir = previous_bundle.get_bundle_dir()
-    current_bundle_dir = current_bundle.get_bundle_dir()
+    target_bundle_dir = target.get_bundle_dir()
+    source_bundle_dir = source.get_bundle_dir()
 
-    _move_audio_to_bundle(source=current_bundle, target=previous_bundle)
-    # Mark merge command as executed before merging
-    # If we don't it could trigger another merge for the target bundle
-    current_bundle.set_command_executed(merge_cmd_text)
-    _merge_commands(source=current_bundle, target=previous_bundle)
-    _merge_transcripts(source=current_bundle, target=previous_bundle)
+    # Circuit-breaker: a previous failed merge leaves a _merge_failed.md in BOTH the
+    # source and the target. Refuse to merge automatically until a human removes the
+    # relevant marker, so we never merge into a partially-mutated target nor retry a
+    # source whose earlier merge failed (even if its resolved target later changes).
+    _write_fail_markers(source=source, target=target)
 
-    # Clear the summary on every merge so it regenerates for the combined bundle.
-    # Intentional policy: a summary produced from only part of the merged content
-    # would be stale, so we always drop it (and any summary on the current bundle).
-    if previous_bundle.summary:
-        previous_bundle.summary = None
-        previous_bundle.metadata.summary_model_used = None
-        summary_path = previous_bundle_dir / SUMMARY_FILENAME
-        if previous_bundle.fs_service.file_exists(summary_path):
-            previous_bundle.fs_service.delete_file(summary_path)
+    try:
+        _merge_commands(source=source, target=target)
+        _merge_transcripts(source=source, target=target)
 
-    previous_bundle.metadata.bundle_name_generated = False
-    previous_bundle.metadata.keep_forever = previous_bundle.metadata.keep_forever or current_bundle.metadata.keep_forever
-    # Single, final metadata commit. All in-memory merge state (audio list, length,
-    # transcript models, summary reset, keep_forever, bundle_name_generated) is
-    # persisted here at once. The source bundle is only deleted afterwards, so a
-    # failure before this point leaves the target untouched and the source recoverable.
-    previous_bundle.metadata.write(previous_bundle_dir, previous_bundle.fs_service)
+        # Clear the summary on every merge so it regenerates for the combined bundle.
+        # Intentional policy: a summary produced from only part of the merged content
+        # would be stale, so we always drop it (and any summary on the source bundle).
+        if target.summary:
+            target.summary = None
+            target.metadata.summary_model_used = None
+            summary_path = target_bundle_dir / SUMMARY_FILENAME
+            if target.fs_service.file_exists(summary_path):
+                target.fs_service.delete_file(summary_path)
 
-    current_bundle.fs_service.delete_directory(current_bundle_dir)
+        target.metadata.bundle_name_generated = False
+        target.metadata.keep_forever = target.metadata.keep_forever or source.metadata.keep_forever
+        # Commit target metadata (without the source audio yet) so a failure below
+        # leaves the source bundle fully intact and retryable.
+        target.metadata.write(target_bundle_dir, target.fs_service)
 
-    msg = f"Merged bundle {current_bundle.bundle_name} into {previous_bundle.bundle_name}"
+        # Move audio into the target only after the target is committed. This is the
+        # last mutation before deletion, so a failed merge never strands the source
+        # without its audio: the source stays whole and the merge is safely retried.
+        _move_audio_to_bundle(source=source, target=target)
+        # Rebuild target metadata now that the source audio is included, then commit.
+        target.metadata.write(target_bundle_dir, target.fs_service)
+
+        # The merge command now lives in the target bundle (merged above), so mark it
+        # executed there. This must happen before the source is deleted, both to avoid
+        # writing to a removed directory and to stop the merged command from
+        # re-triggering a merge on the next run. Audio has already been moved into the
+        # target, so deleting the source loses no audio.
+        target.set_command_executed(merge_cmd_text)
+
+        # Source removed only after the merge is fully committed to the target.
+        source.fs_service.delete_directory(source_bundle_dir)
+    except Exception:
+        logger.exception(
+            f"Merge of {source.bundle_name} into {target.bundle_name} failed; "
+            f"source bundle is preserved and retryable (marker written to target).",
+        )
+        raise
+
+    # Merge is now done and irreversible: clear the failure marker.
+    _remove_merge_failed_marker(target, source.fs_service)
+
+    msg = f"Merged bundle {source} into {target}"
     logger.info(msg)
     raise AbortRemainingBundleJobsException(msg)
 

@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import pytest
 
 from tests.bundle_fixtures import TranscribeBundleFactory
@@ -5,8 +7,12 @@ from tests.fake_audio_service import FakeAudioService
 from tests.fake_file_system import FakeFileSystemService
 from transcriber.commands.command_handlers import handle_merge
 from transcriber.config import TranscribeConfig
-from transcriber.constants import MULTIPLE_TRANSCRIPTS_SEPARATOR
-from transcriber.exception import AbortRemainingBundleJobsException, NoPreviousBundleException
+from transcriber.constants import MERGE_FAILED_FILENAME, MULTIPLE_TRANSCRIPTS_SEPARATOR
+from transcriber.exception import (
+    AbortRemainingBundleJobsException,
+    MergeBlockedException,
+    NoPreviousBundleException,
+)
 from transcriber.transcribe_bundle import TranscribeBundle
 
 
@@ -445,6 +451,181 @@ class TestHandleMerge:
         # The merge command is marked executed; the other command is not.
         assert commands[0].executed is True
         assert commands[1].executed is False
+
+    def test_handle_merge_marks_merge_command_executed_in_target(
+        self,
+        fake_config: TranscribeConfig,
+        fake_fs: FakeFileSystemService,
+        fake_audio_service: FakeAudioService,
+        transcribe_bundle_factory: TranscribeBundleFactory,
+    ) -> None:
+        """The merge command lives in the target after merge; it must be marked executed there.
+
+        Otherwise the next run would see the (unexecuted) merge command in the target
+        and re-trigger a merge.
+        """
+        previous_bundle = transcribe_bundle_factory(
+            bundle_name="2025-01-15_previous",
+            audio_filename="Recording 20250115010000.mp3",
+        )
+        current_bundle = transcribe_bundle_factory(
+            bundle_name="2025-01-15_meeting",
+            audio_filename="Recording 20250115090000.mp3",
+            commands=["merge", "other"],
+        )
+        previous_bundle_dir = previous_bundle.get_bundle_dir()
+
+        with pytest.raises(AbortRemainingBundleJobsException):
+            handle_merge(current_bundle, fake_config, "merge")
+
+        merged_bundle = TranscribeBundle.from_existing_directory(
+            existing_dir=previous_bundle_dir,
+            config=fake_config,
+            fs_service=fake_fs,
+            audio_service=fake_audio_service,
+        )
+        assert merged_bundle.commands is not None
+        merge_cmd = next(c for c in merged_bundle.commands.commands if c.text == "merge")
+        assert merge_cmd.executed is True
+
+    def test_handle_merge_removes_failure_marker_on_success(
+        self,
+        fake_config: TranscribeConfig,
+        fake_fs: FakeFileSystemService,
+        transcribe_bundle_factory: TranscribeBundleFactory,
+    ) -> None:
+        """On a successful merge, the _merge_failed.md cue is cleared."""
+        previous_bundle = transcribe_bundle_factory(
+            bundle_name="2025-01-15_previous",
+            audio_filename="Recording 20250115010000.mp3",
+        )
+        current_bundle = transcribe_bundle_factory(
+            bundle_name="2025-01-15_meeting",
+            audio_filename="Recording 20250115090000.mp3",
+            commands=["merge"],
+        )
+        previous_bundle_dir = previous_bundle.get_bundle_dir()
+
+        with pytest.raises(AbortRemainingBundleJobsException):
+            handle_merge(current_bundle, fake_config, "merge")
+
+        assert not fake_fs.file_exists(previous_bundle_dir / MERGE_FAILED_FILENAME)
+
+    def test_handle_merge_leaves_marker_and_source_on_failure(
+        self,
+        fake_config: TranscribeConfig,
+        fake_fs: FakeFileSystemService,
+        transcribe_bundle_factory: TranscribeBundleFactory,
+    ) -> None:
+        """A failed merge keeps the source bundle (and its audio) and writes a failure cue.
+
+        The merge command must NOT be marked executed, so the merge stays retryable.
+        """
+        previous_bundle = transcribe_bundle_factory(
+            bundle_name="2025-01-15_previous",
+            audio_filename="Recording 20250115010000.mp3",
+        )
+        current_bundle = transcribe_bundle_factory(
+            bundle_name="2025-01-15_meeting",
+            audio_filename="Recording 20250115090000.mp3",
+            commands=["merge"],
+        )
+        previous_bundle_dir = previous_bundle.get_bundle_dir()
+        current_bundle_dir = current_bundle.get_bundle_dir()
+
+        # Make the target metadata write fail to simulate a mid-merge crash.
+        original_write = fake_fs.write_file
+
+        def _failing_write(path: Path, content: str) -> None:
+            if path.name == "_metadata.md":
+                msg = "simulated metadata write failure"
+                raise OSError(msg)
+            original_write(path, content)
+
+        fake_fs.write_file = _failing_write  # type: ignore[method-assign]
+
+        # The merge aborts; the original exception propagates.
+        with pytest.raises(OSError, match="simulated metadata write failure"):
+            handle_merge(current_bundle, fake_config, "merge")
+
+        # Source bundle (and its audio) is preserved and retryable.
+        assert fake_fs.directory_exists(current_bundle_dir)
+        assert fake_fs.file_exists(current_bundle_dir / "Recording 20250115090000.mp3")
+        # Failure cue is present in BOTH the target and the source bundle.
+        assert fake_fs.file_exists(previous_bundle_dir / MERGE_FAILED_FILENAME)
+        assert fake_fs.file_exists(current_bundle_dir / MERGE_FAILED_FILENAME)
+        # Merge command is NOT marked executed, so the merge can be retried.
+        assert current_bundle.commands is not None
+        assert current_bundle.commands.commands[0].executed is False
+
+        # A subsequent merge attempt into the same (marked) target is blocked, so the
+        # system does not auto-retry against a potentially inconsistent target.
+        with pytest.raises(MergeBlockedException):
+            handle_merge(current_bundle, fake_config, "merge")
+        # The markers are still present after the blocked attempt.
+        assert fake_fs.file_exists(previous_bundle_dir / MERGE_FAILED_FILENAME)
+        assert fake_fs.file_exists(current_bundle_dir / MERGE_FAILED_FILENAME)
+
+        # A subsequent merge attempt into the same (marked) target is blocked, so the
+        # system does not auto-retry against a potentially inconsistent target.
+        with pytest.raises(MergeBlockedException):
+            handle_merge(current_bundle, fake_config, "merge")
+        # The marker is still present after the blocked attempt.
+        assert fake_fs.file_exists(previous_bundle_dir / MERGE_FAILED_FILENAME)
+
+    def test_handle_merge_blocks_further_bundle_merging_into_failed_target(
+        self,
+        fake_config: TranscribeConfig,
+        fake_fs: FakeFileSystemService,
+        transcribe_bundle_factory: TranscribeBundleFactory,
+    ) -> None:
+        """Both source and target markers block retries, independent of bundle order.
+
+        A failed merge writes a marker into BOTH bundles. The source marker protects
+        the source even when it later becomes the target of a newer bundle (i.e. its
+        resolved predecessor shifts), which the target-only marker would miss.
+        """
+        previous_bundle = transcribe_bundle_factory(
+            bundle_name="2025-01-15_previous",
+            audio_filename="Recording 20250115010000.mp3",
+        )
+        current_bundle = transcribe_bundle_factory(
+            bundle_name="2025-01-15_meeting",
+            audio_filename="Recording 20250115090000.mp3",
+            commands=["merge"],
+        )
+        previous_bundle_dir = previous_bundle.get_bundle_dir()
+        current_bundle_dir = current_bundle.get_bundle_dir()
+
+        # Simulate a failed merge: markers already present in BOTH bundles.
+        fake_fs.write_file(
+            previous_bundle_dir / MERGE_FAILED_FILENAME,
+            "Merge of 2025-01-15_meeting into 2025-01-15_previous did not complete.\n",
+        )
+        fake_fs.write_file(
+            current_bundle_dir / MERGE_FAILED_FILENAME,
+            "Merge of 2025-01-15_meeting into 2025-01-15_previous did not complete.\n",
+        )
+
+        # The original source retrying into the failed target is blocked.
+        with pytest.raises(MergeBlockedException):
+            handle_merge(current_bundle, fake_config, "merge")
+
+        # A newer bundle merges into its immediate predecessor, which is the failed
+        # source (meeting, 09:00). Because the source carries its own marker, this
+        # merge is blocked too -- the target-only marker would have missed this.
+        newer_bundle = transcribe_bundle_factory(
+            bundle_name="2025-01-15_later",
+            audio_filename="Recording 20250115120000.mp3",
+            commands=["merge"],
+        )
+        with pytest.raises(MergeBlockedException):
+            handle_merge(newer_bundle, fake_config, "merge")
+
+        # Neither source bundle was deleted; both markers remain.
+        assert fake_fs.directory_exists(current_bundle_dir)
+        assert fake_fs.file_exists(previous_bundle_dir / MERGE_FAILED_FILENAME)
+        assert fake_fs.file_exists(current_bundle_dir / MERGE_FAILED_FILENAME)
 
     def test_handle_merge_merges_transcript_models_as_ordered_set(
         self,

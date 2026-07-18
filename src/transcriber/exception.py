@@ -37,5 +37,14 @@ class NoPreviousBundleException(AudioTranscriberException):
 
 
 @final
+class MergeBlockedException(AudioTranscriberException):
+    """A previous merge into the target bundle failed and left a failure marker.
+
+    Auto-retry is blocked until the marker is removed by hand, so a partially
+    merged/inconsistent target is not merged into again automatically.
+    """
+
+
+@final
 class UnknownCommandException(AudioTranscriberException):
     """Command text couldn't be matched to a know command type."""

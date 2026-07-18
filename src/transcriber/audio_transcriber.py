@@ -4,7 +4,12 @@ from pathlib import Path
 from transcriber.ai_manager import AIManager
 from transcriber.audio_service import AudioService, RealAudioService
 from transcriber.config import TranscribeConfig
-from transcriber.exception import AbortRemainingBundleJobsException, AudioTranscriberException, TooShortException
+from transcriber.exception import (
+    AbortRemainingBundleJobsException,
+    AudioTranscriberException,
+    MergeBlockedException,
+    TooShortException,
+)
 from transcriber.files.file_system import FileSystemService, RealFileSystemService
 from transcriber.globals import is_handled_audio_file
 from transcriber.transcribe_bundle import TranscribeBundle
@@ -98,6 +103,13 @@ class AudioTranscriber:
                     logger.debug(
                         f"Skipping remaining jobs for current bundle, requested by job {job}: {e}",
                     )
+                    break  # skip remaining jobs in this bundle
+                except MergeBlockedException as e:
+                    # A previous merge into the target failed and left a marker. Stop
+                    # processing this bundle and do NOT re-enqueue it, so the failed
+                    # merge is not retried automatically until the marker is cleared.
+                    # This requires human intervention.
+                    logger.error(f"Merge blocked, bundle skipped (human action required): {e}")
                     break  # skip remaining jobs in this bundle
                 except Exception:  # pylint: disable=broad-exception-caught
                     logger.exception(f"Error processing [{job}] (skipping any remaining jobs for this bundle).")
