@@ -37,9 +37,14 @@ def _move_audio_to_bundle(source: TranscribeBundle, target: TranscribeBundle) ->
 
     Side Effects:
         - Moves audio files from source to target bundle directory
-        - Updates target bundle's source_audios list
-        - Updates target bundle's metadata with audio information
-        - Updates transcript model usage information in metadata
+        - Updates target bundle's in-memory source_audios, audio_length and
+          transcript_model_used metadata
+
+    Note:
+        This function only mutates in-memory state (audio list, length, merged
+        models). It does NOT write metadata to disk; the caller is responsible for
+        a single final metadata write once the whole merge is composed. This keeps
+        the target bundle from being persisted in a half-built state.
 
     """
     target_bundle_dir = target.get_bundle_dir()
@@ -73,13 +78,13 @@ def _move_audio_to_bundle(source: TranscribeBundle, target: TranscribeBundle) ->
     target.metadata.audio_length = sum(audio_lengths)
 
     # Merge transcript model usage as an ordered set (no duplicates, exact match).
+    # In-memory only; the caller writes metadata once at the end.
     if source.metadata.transcript_model_used:
         merged_models = list(target.metadata.transcript_model_used)
         for model in source.metadata.transcript_model_used:
             if model not in merged_models:
                 merged_models.append(model)
         target.metadata.transcript_model_used = merged_models
-        target.metadata.write(target.get_bundle_dir(), target.fs_service)
 
 
 def _merge_transcripts(source: TranscribeBundle, target: TranscribeBundle) -> None:
@@ -182,6 +187,10 @@ def handle_merge(current_bundle: TranscribeBundle, _config: TranscribeConfig, me
     previous_bundle.metadata.bundle_name_generated = False
     if current_bundle.metadata.keep_forever > previous_bundle.metadata.keep_forever:
         previous_bundle.metadata.keep_forever = True
+    # Single, final metadata commit. All in-memory merge state (audio list, length,
+    # transcript models, summary reset, keep_forever, bundle_name_generated) is
+    # persisted here at once. The source bundle is only deleted afterwards, so a
+    # failure before this point leaves the target untouched and the source recoverable.
     previous_bundle.metadata.write(previous_bundle_dir, current_bundle.fs_service)
 
     current_bundle.fs_service.delete_directory(current_bundle_dir)
