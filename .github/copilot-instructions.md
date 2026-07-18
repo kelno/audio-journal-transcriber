@@ -28,3 +28,4 @@
 
 - Target Python 3.14+ and use modern language features and standard library APIs where appropriate.
 - We use "uv" instead of directly pip. For example use "uv run pytest" instead of trying to activate the venv using other scripts.
+- Check linter issues with both `uv run basedpyright <file>` and `uv run ruff check --fix <file>`
