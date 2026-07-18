@@ -76,31 +76,6 @@ class MetadataFile(Metadata):
             error_msg = f"Invalid metadata file {meta_file}, failed to find frontmatter"
             raise ValueError(error_msg)
 
-        # --- Backward compatibility with older metadata formats ---
-        # Old singular key.
-        if "original_audio_filename" in data:
-            data["original_audio_filenames"] = [data["original_audio_filename"]]
-            del data["original_audio_filename"]
-
-        # Old format stored a flat list of filenames plus a single bundle-level
-        # transcript_model_used. Convert into the per-file audio_files format,
-        # distributing the old global model to every file (lossless for "which
-        # model transcribed this bundle").
-        if "audio_files" not in data and "original_audio_filenames" in data:
-            old_models = data.get("transcript_model_used")
-            if old_models is None:
-                model_list: list[str] = []
-            elif isinstance(old_models, str):
-                model_list = [old_models]
-            else:
-                model_list = list(old_models)
-            data["audio_files"] = [
-                {"filename": name, "transcript_model_used": list(model_list)} for name in data["original_audio_filenames"]
-            ]
-        # Drop the now-obsolete flat fields if present.
-        data.pop("original_audio_filenames", None)
-        data.pop("transcript_model_used", None)
-
         return MetadataFile.model_validate(data)
 
     def write(self, bundle_dir: Path, fs_service: FileSystemService) -> None:
