@@ -193,8 +193,7 @@ def handle_merge(current_bundle: TranscribeBundle, _config: TranscribeConfig, me
             previous_bundle.fs_service.delete_file(summary_path)
 
     previous_bundle.metadata.bundle_name_generated = False
-    if current_bundle.metadata.keep_forever > previous_bundle.metadata.keep_forever:
-        previous_bundle.metadata.keep_forever = True
+    previous_bundle.metadata.keep_forever = previous_bundle.metadata.keep_forever or current_bundle.metadata.keep_forever
     # Single, final metadata commit. All in-memory merge state (audio list, length,
     # transcript models, summary reset, keep_forever, bundle_name_generated) is
     # persisted here at once. The source bundle is only deleted afterwards, so a
