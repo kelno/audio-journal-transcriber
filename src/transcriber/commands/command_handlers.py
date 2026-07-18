@@ -184,6 +184,15 @@ def handle_merge(current_bundle: TranscribeBundle, _config: TranscribeConfig, me
         msg = "No previous bundle found to merge with"
         raise NoPreviousBundleException(msg)
 
+    # The merge target is chosen purely by recency within the merge window, not by
+    # explicit user intent. Surface the chosen target prominently (with the time
+    # gap) so a wrong-target merge is noticeable in the logs rather than silent.
+    gap_hours = (current_bundle.get_bundle_date() - previous_bundle.get_bundle_date()).total_seconds() / 3600
+    logger.info(
+        f"{current_bundle}: Merge target selected -> {previous_bundle}"
+        f"gap = {gap_hours:.1f}h (merge window: {current_bundle.config.general.merge_max_hours:.1f}h)",
+    )
+
     previous_bundle_dir = previous_bundle.get_bundle_dir()
     current_bundle_dir = current_bundle.get_bundle_dir()
 
