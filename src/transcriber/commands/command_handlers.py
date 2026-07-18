@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from transcriber.config import TranscribeConfig
 from transcriber.constants import MULTIPLE_TRANSCRIPTS_SEPARATOR, SUMMARY_FILENAME
@@ -16,6 +17,9 @@ from transcriber.files.metadata import AudioFileMeta
 from transcriber.files.text_file import TranscriptFile
 from transcriber.logger import logger
 from transcriber.transcribe_bundle import TranscribeBundle
+
+if TYPE_CHECKING:
+    from transcriber.commands.command import Command
 
 # Returns success
 CommandHandler = Callable[[TranscribeBundle, TranscribeConfig, str], None]
@@ -114,6 +118,10 @@ def _merge_transcripts(source: TranscribeBundle, target: TranscribeBundle) -> No
 def _merge_commands(source: TranscribeBundle, target: TranscribeBundle) -> None:
     """Merge commands from source bundle into target bundle.
 
+    Commands are identified by their stable ``id``. If the same id appears in
+    both bundles (e.g. a copy/pasted bundle directory), it is treated as the
+    same command and kept only once.
+
     Args:
         source: The source bundle containing commands to merge.
         target: The target bundle to receive the merged commands.
@@ -124,8 +132,12 @@ def _merge_commands(source: TranscribeBundle, target: TranscribeBundle) -> None:
 
     """
     if target.commands and source.commands:  # merge case
-        merged_commands = target.commands.commands + source.commands.commands
-        target.commands = CommandsFile(text="", commands=merged_commands)
+        # Dedupe by id: a repeated id denotes the same command (e.g. a bundle
+        # directory that was copy/pasted), so later occurrences are dropped.
+        merged_by_id: dict[str, Command] = {}
+        for cmd in target.commands.commands + source.commands.commands:
+            merged_by_id.setdefault(cmd.id, cmd)
+        target.commands = CommandsFile(text="", commands=list(merged_by_id.values()))
     elif source.commands:  # only source has commands
         # Create a copy to avoid sharing the same object reference
         target.commands = CommandsFile(text="", commands=list(source.commands.commands))

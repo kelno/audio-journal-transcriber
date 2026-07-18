@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime  # noqa: TC003
 from typing import Any
+from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field, field_serializer
 
@@ -20,7 +21,8 @@ class Command(BaseModel):
 
     model_config = ConfigDict(validate_assignment=True)  # pyright: ignore[reportUnannotatedClassAttribute]
 
-    text: str  # The natural language prompt. Should be unique for a bundle as it's used as identifier.
+    id: str = Field(default_factory=lambda: uuid4().hex)  # Stable unique identifier for this command
+    text: str  # The natural language prompt.
     executed: bool = False
     executed_at: datetime | None = None
     matched_type: command_type.CommandType | None = None

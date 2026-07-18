@@ -11,6 +11,56 @@ from transcriber.transcribe_bundle import TranscribeBundle
 
 
 class TestHandleMerge:
+    def test_handle_merge_dedupes_commands_with_same_id(
+        self,
+        fake_config: TranscribeConfig,
+        fake_fs: FakeFileSystemService,
+        fake_audio_service: FakeAudioService,
+        transcribe_bundle_factory: TranscribeBundleFactory,
+    ) -> None:
+        """Verify commands sharing a stable id collapse to one on merge (copy/paste scenario)."""
+        previous_bundle = transcribe_bundle_factory(
+            bundle_name="2025-01-15_previous",
+            audio_filename="Recording 20250115010000.mp3",
+            commands=["shared", "only previous"],
+        )
+        current_bundle = transcribe_bundle_factory(
+            bundle_name="2025-01-15_meeting",
+            audio_filename="Recording 20250115090000.mp3",
+            commands=["shared", "only current"],
+        )
+
+        # Simulate a copy/pasted bundle: the "shared" command carries the same id
+        # in both bundles, while the distinct commands keep their own ids.
+        assert previous_bundle.commands
+        assert current_bundle.commands
+        shared_id = previous_bundle.commands.commands[0].id
+        current_bundle.commands.commands[0].id = shared_id
+        previous_bundle.commands.write(previous_bundle.get_bundle_dir(), fake_fs)
+        current_bundle.commands.write(current_bundle.get_bundle_dir(), fake_fs)
+
+        previous_bundle_dir = previous_bundle.get_bundle_dir()
+        current_bundle_dir = current_bundle.get_bundle_dir()
+
+        with pytest.raises(AbortRemainingBundleJobsException):
+            handle_merge(current_bundle, fake_config, "shared")
+
+        assert not fake_fs.directory_exists(current_bundle_dir)
+
+        merged_bundle = TranscribeBundle.from_existing_directory(
+            existing_dir=previous_bundle_dir,
+            config=fake_config,
+            fs_service=fake_fs,
+            audio_service=fake_audio_service,
+        )
+
+        # The shared id appears once; the two distinct commands are both kept.
+        assert merged_bundle.commands is not None
+        commands = merged_bundle.commands.commands
+        assert len(commands) == 3
+        assert [cmd.text for cmd in commands] == ["shared", "only previous", "only current"]
+        assert sum(1 for cmd in commands if cmd.id == shared_id) == 1
+
     def test_handle_merge_merges_with_recent_previous_bundle(
         self,
         fake_config: TranscribeConfig,
