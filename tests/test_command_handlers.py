@@ -108,6 +108,8 @@ class TestHandleMerge:
         assert commands[3].executed is True  # current bundle second command
         assert commands[4].executed is False  # current bundle third command, never executed, should still be false
 
+        # Possible improvement: Add testing of keep_forever and transcript_model_used merging
+
     def test_handle_merge_fails_when_previous_bundle_is_too_old(
         self,
         fake_config: TranscribeConfig,
