@@ -73,7 +73,7 @@ class AudioTranscriber:
             remaining_jobs_in_bundle = jobs_bundle.copy()
             for job in jobs_bundle:
                 try:
-                    logger.info(f"Processing job: {job}")
+                    logger.debug(f"Processing job: {job}")
                     job.run(
                         ai_manager=self.ai_manager,
                         config=self.config,
@@ -92,7 +92,7 @@ class AudioTranscriber:
                     logger.debug(
                         f"Skipping remaining jobs for current bundle, requested by job {job}: {e}",
                     )
-                    break # skip remaining jobs in this bundle
+                    break  # skip remaining jobs in this bundle
                 except Exception:  # pylint: disable=broad-exception-caught
                     logger.exception(f"Error processing [{job}] (skipping any remaining jobs for this bundle).")
                     if len(remaining_jobs_in_bundle) > 0:
@@ -148,7 +148,7 @@ class AudioTranscriber:
         logger.info(f"Gathering audio files from input directory: {input_dir}")
         bundles = self.gather_pending_audio_files(input_dir)
         store_dir = self.config.general.store_dir
-        logger.info(f"Gathering bundles from managed store directory:  {store_dir}")
+        logger.info(f"Gathering bundles from managed store directory: {store_dir}")
         bundles.extend(
             TranscribeBundle.gather_existing_bundles(
                 store_dir=store_dir,
@@ -203,7 +203,7 @@ class AudioTranscriber:
         if not bundle.source_audios:
             return []
 
-        jobs : list[TranscribeBundleJob] = []
+        jobs: list[TranscribeBundleJob] = []
         is_new_audio = not file_is_in_directory_tree(bundle.source_audios[0], store_dir)
         if is_new_audio:
             jobs.append(CreateBundleJob(bundle, dry_run))
@@ -262,10 +262,7 @@ class AudioTranscriber:
         existing_jobs: list[TranscribeBundleJob],
     ) -> bool:
         """Return whether a summary job can be scheduled."""
-        return (
-            bundle.transcript is not None
-            or any(isinstance(job, TranscriptionJob) for job in existing_jobs)
-        )
+        return bundle.transcript is not None or any(isinstance(job, TranscriptionJob) for job in existing_jobs)
 
     def run(self) -> list[BundleJobs]:
         """Process all files.
@@ -281,14 +278,15 @@ class AudioTranscriber:
         ensure_directory_exists(store_dir)
 
         self.log_section_header("Gathering Jobs")
-        jobs = self.gather_jobs(input_dir)
+        all_bundle_jobs = self.gather_jobs(input_dir)
         unprocessed_bundles = list[BundleJobs]()
-        if not jobs:
+        if not all_bundle_jobs:
             logger.info("No jobs found for processing")
         else:
-            logger.info(f"Found pending jobs for {len(jobs)} bundles")
+            total_jobs = sum(len(bundle_jobs) for bundle_jobs in all_bundle_jobs)
+            logger.info(f"Found {total_jobs} pending jobs for {len(all_bundle_jobs)} bundles")
             self.log_section_header("Processing Jobs")
-            unprocessed_bundles = self.process_jobs(jobs)
+            unprocessed_bundles = self.process_jobs(all_bundle_jobs)
 
         if not self.dry_run:
             remove_empty_subdirs(input_dir)

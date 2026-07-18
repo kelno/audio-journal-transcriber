@@ -23,8 +23,8 @@ class Command:
     executed: bool = False
     executed_at: datetime | None = None
     matched_type: command_type.CommandType | None = None
-    # (NYI) last_error: str | None = None # Debug error string to help debugging
-    # TODO: add a retry system, up to a configured amount of times. And stop trying if reached.
+    # (NYI) last_error: str | None = None # Debug error string to help debugging (https://github.com/kelno/audio-journal-transcriber/issues/5)
+    # TODO: add a retry system, up to a configured amount of times. And stop trying if reached. https://github.com/kelno/audio-journal-transcriber/issues/6
 
     def to_dict(self) -> dict[str, Any]:
         """Convert command to dictionary for YAML serialization."""

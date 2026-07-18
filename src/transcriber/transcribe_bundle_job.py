@@ -18,6 +18,7 @@ from .logger import logger
 from .transcribe_bundle import TranscribeBundle
 from .utils import ensure_directory_exists
 
+
 @dataclass
 class TranscribeBundleJob(ABC):
     """Abstract base class for all job types."""
@@ -122,7 +123,7 @@ class TranscriptionJob(TranscribeBundleJob):
             error_msg = f"{self}: Bundle has no audio files set"
             raise FileNotFoundError(error_msg)
 
-        logger.info(f"Transcribing {len(self.bundle.source_audios)} audio file(s)")
+        logger.info(f"{self.bundle}: Transcribing {len(self.bundle.source_audios)} audio file(s)")
 
         if not self.dry_run:
             transcripts: list[str] = []
@@ -165,7 +166,7 @@ class SummaryJob(TranscribeBundleJob):
             ValueError: If transcript is not available for summarization.
 
         """
-        logger.info(f"Summarizing {self.bundle}")
+        logger.info(f"{self.bundle}: Generating summary")
 
         if self.dry_run:
             return
@@ -190,7 +191,7 @@ class BundleNameJob(TranscribeBundleJob):
         config: TranscribeConfig,
     ) -> None:
         """Main function."""
-        logger.info(f"Generating bundle name for {self.bundle}")
+        logger.info(f"{self.bundle}: Generating bundle name")
         if self.dry_run:
             return
 
@@ -245,7 +246,7 @@ class GatherCommandsJob(TranscribeBundleJob):
         config: TranscribeConfig,
     ) -> None:
         """Main function."""
-        logger.info(f"Gathering commands for {self.bundle}")
+        logger.debug(f"Gathering commands for {self.bundle}")
         if self.dry_run:
             return
 
@@ -266,8 +267,9 @@ class GatherCommandsJob(TranscribeBundleJob):
         # which is still important because the command text is used as identifier
         commands = list(dict.fromkeys(commands))
 
-        logger.debug(f"{self}: Successfully extracted commands (len {len(commands)})")
+        logger.info(f"{self}: Successfully extracted commands (len {len(commands)})")
         self.bundle.set_and_write_commands(commands)
+
 
 @dataclass
 class RunCommandsJob(TranscribeBundleJob):
@@ -281,20 +283,20 @@ class RunCommandsJob(TranscribeBundleJob):
     ) -> None:
         if not self.bundle.commands:
             if self.dry_run:
-                logger.info("(dry-run) Skipping running commands as they are not gathered")
-                return # expected in dry run as commands might not have been gathered
+                logger.info(f"{self.bundle}: (dry-run) Skipping running commands as they are not gathered")
+                return  # expected in dry run as commands might not have been gathered
 
             msg = f"{self}: Cannot run commands without commands file"
             raise ValueError(msg)
 
         if not self.bundle.commands.commands:
-            return # no commands to run, that's valid
+            return  # no commands to run, that's valid
 
         if not any(not cmd.executed for cmd in self.bundle.commands.commands):
             logger.debug(f"All commands already executed for {self.bundle}")
             return
 
-        logger.info(f"Running commands for {self.bundle}")
+        logger.debug(f"Running commands for {self.bundle}")
 
         if self.dry_run:
             return
@@ -311,7 +313,7 @@ class RunCommandsJob(TranscribeBundleJob):
     def _prepare_commands(
         self,
         ai_manager: AIManager,
-        commands : list[Command],
+        commands: list[Command],
     ) -> list[Command]:
         """Ensure commands have a matched type and return pending commands."""
         pending_commands = []
@@ -340,11 +342,9 @@ class RunCommandsJob(TranscribeBundleJob):
 
         A bundle only ever has one effective command execution per command type, even across multiple job runs.
         """
-        assert(self.bundle.commands)
+        assert self.bundle.commands
         seen_executed_types: set[CommandType] = {
-            cmd.matched_type
-            for cmd in self.bundle.commands.commands
-            if cmd.executed and cmd.matched_type is not None
+            cmd.matched_type for cmd in self.bundle.commands.commands if cmd.executed and cmd.matched_type is not None
         }
 
         for cmd in pending_commands:
@@ -361,9 +361,7 @@ class RunCommandsJob(TranscribeBundleJob):
                     self.bundle.set_command_executed(cmd.text)
                     continue
 
-                logger.info(
-                    f"Executing {matched_type.value} command for bundle {self.bundle}",
-                )
+                logger.info(f"Executing {matched_type.value} command for bundle {self.bundle}")
 
                 handler = COMMAND_REGISTRY[matched_type].handler
                 handler(self.bundle, config, cmd.text)
@@ -372,9 +370,7 @@ class RunCommandsJob(TranscribeBundleJob):
                 seen_executed_types.add(matched_type)
 
             except AbortRemainingBundleJobsException:
-                logger.debug(
-                    f"{cmd} requested aborting remaining jobs for bundle {self.bundle}"
-                )
+                logger.debug(f"{cmd} requested aborting remaining jobs for bundle {self.bundle}")
                 raise  # raise it further to the job execution loop
 
             except Exception:
@@ -382,7 +378,7 @@ class RunCommandsJob(TranscribeBundleJob):
                 logger.exception(
                     f"Failed to process bundle {self.bundle} command '{cmd.text}'",
                 )
-                # TODO: log error in command file: self.bundle.set_last_error...
+                # TODO: log error in command file: self.bundle.set_last_error... https://github.com/kelno/audio-journal-transcriber/issues/5
                 # (need to create that logic)
                 raise
 

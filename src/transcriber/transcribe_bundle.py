@@ -12,6 +12,7 @@ from transcriber.constants import (
     SUMMARY_FILENAME,
     TRANSCRIPT_FILENAME,
 )
+from transcriber.exception import InvalidBundleException
 from transcriber.files.commands_file import CommandsFile
 from transcriber.files.file_system import FileSystemService, RealFileSystemService
 from transcriber.files.metadata import MetadataFile
@@ -43,7 +44,7 @@ class TranscribeBundle:
 
     @override
     def __str__(self) -> str:
-        return f'TranscribeBundle:"{self.bundle_name}"'
+        return f"[Bundle:{self.bundle_name}]"
 
     @staticmethod
     def _load_bundle_files(
@@ -59,8 +60,8 @@ class TranscribeBundle:
         """Load audio paths and text files from bundle directory."""
         meta_file_path = existing_dir / METADATA_FILENAME
         if not fs_service.file_exists(meta_file_path):
-            error_msg = "Bundle directory is invalid (no meta file)"
-            raise ValueError(error_msg)
+            error_msg = f"Bundle directory is invalid (no meta file): {existing_dir}"
+            raise InvalidBundleException(error_msg)
 
         metadata = MetadataFile.from_file(meta_file_path, fs_service)
 
@@ -349,7 +350,9 @@ class TranscribeBundle:
         for audio_path in self.source_audios:
             # if any audio file is NOT in the store, we're in an unexpected state, don't remove anything
             if not file_is_in_directory_tree(audio_path, store_dir):
-                logger.error(f"bundle: {self}: audio_source_needs_removal has unexpectedly found an audio file outside of store: {audio_path}")
+                logger.error(
+                    f"bundle: {self}: audio_source_needs_removal has unexpectedly found an audio file outside of store: {audio_path}"
+                )
                 return False
 
             file_date = get_file_modified_date(audio_path, tz)
@@ -406,8 +409,7 @@ class TranscribeBundle:
         previous_candidates = [
             bundle
             for bundle in bundles
-            if bundle.bundle_name != current_bundle.bundle_name
-            and bundle.get_bundle_date() < current_bundle_date
+            if bundle.bundle_name != current_bundle.bundle_name and bundle.get_bundle_date() < current_bundle_date
         ]
 
         if not previous_candidates:
@@ -428,7 +430,7 @@ class TranscribeBundle:
     def gather_existing_bundles(
         store_dir: Path,
         dry_run: bool,
-        cleanup_bundle: bool, # run bundle.cleanup_inconsistencies on found bundles
+        cleanup_bundle: bool,  # run bundle.cleanup_inconsistencies on found bundles
         config: TranscribeConfig,
         fs_service: FileSystemService,
     ) -> list["TranscribeBundle"]:
@@ -448,10 +450,8 @@ class TranscribeBundle:
                     if cleanup_bundle:
                         bundle.cleanup_inconsistencies(dry_run)
                     bundles.append(bundle)
-                except ValueError:
-                    logger.exception(
-                        f"Skipping invalid transcribe bundle {dir_path}",
-                    )
+                except InvalidBundleException:
+                    logger.exception(f"Skipping invalid transcribe bundle {dir_path}")
                 except Exception:
                     logger.exception(f"Unexpected exception met while gathering bundle {dir_path}")
 
@@ -529,7 +529,7 @@ class TranscribeBundle:
         cmd.executed = True
         cmd.executed_at = datetime.now(self.config.general.timezone)
 
-        assert(self.commands is not None)
+        assert self.commands is not None
         self.commands.write(self.get_bundle_dir(), self.fs_service)
 
     def init_metadata(
