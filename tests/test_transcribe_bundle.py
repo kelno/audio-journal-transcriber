@@ -5,6 +5,7 @@ from pathlib import Path
 import pydantic
 import pytest
 
+from tests.bundle_fixtures import TranscribeBundleFactory
 from transcriber.commands.command_type import CommandType
 from transcriber.config import TranscribeConfig
 from transcriber.constants import (
@@ -13,11 +14,10 @@ from transcriber.constants import (
     SUMMARY_FILENAME,
     TRANSCRIPT_FILENAME,
 )
+from transcriber.exception import InvalidBundleException
 from transcriber.files.metadata import MetadataFile
 from transcriber.files.text_file import TranscriptFile
 from transcriber.transcribe_bundle import TranscribeBundle
-
-from tests.bundle_fixtures import TranscribeBundleFactory
 
 from .fake_file_system import FakeFileSystemService
 
@@ -156,7 +156,7 @@ class TestTranscribeBundleFromExistingDirectory:
         fake_fs.delete_file(generic_bundle_dir / METADATA_FILENAME)
 
         with pytest.raises(
-            ValueError,
+            InvalidBundleException,
             match=r"Bundle directory is invalid.*no meta file",
         ):
             TranscribeBundle.from_existing_directory(
