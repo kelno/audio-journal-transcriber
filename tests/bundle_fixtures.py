@@ -5,6 +5,7 @@ from typing import Protocol
 
 import pytest
 
+from tests.fake_audio_service import FakeAudioService
 from tests.fake_file_system import FakeFileSystemService
 from transcriber.config import TranscribeConfig
 from transcriber.files.commands_file import CommandsFile
@@ -23,29 +24,35 @@ class TranscribeBundleFactory(Protocol):
         commands: list[str] | None = None,
         audio_length: float = 20.0,
         commands_executed: bool = False,
+        config: TranscribeConfig | None = None,
     ) -> TranscribeBundle:
         """Factory callable returning a `TranscribeBundle` for tests."""
         ...
-
 
 
 @pytest.fixture
 def transcribe_bundle_factory(
     fake_config: TranscribeConfig,
     fake_fs: FakeFileSystemService,
+    fake_audio_service: FakeAudioService,
 ) -> TranscribeBundleFactory:
     """Pytest fixture that returns a factory for creating test bundles."""
+
     def _create_bundle(
         bundle_name: str,
         audio_filename: str,
         transcript_text: str | None = None,
         summary_text: str | None = None,
         commands: list[str] | None = None,
-        audio_length: float = 20.0,
+        audio_length: float = 20.0,  # Will get registered to fake_audio_service so get_audio_duration can be used later
         commands_executed: bool = False,
+        config: TranscribeConfig | None = None,
     ) -> TranscribeBundle:
-        bundle_dir = fake_config.general.store_dir / bundle_name
+        config = config or fake_config
+        bundle_dir = config.general.store_dir / bundle_name
         fake_fs.create_directory(bundle_dir)
+
+        fake_audio_service.set_audio_duration(bundle_dir / audio_filename, audio_length)
 
         bundle = TranscribeBundle(
             bundle_name=bundle_dir.name,
@@ -55,7 +62,8 @@ def transcribe_bundle_factory(
             summary=SummaryFile(summary_text) if summary_text else None,
             commands=CommandsFile.from_command_list(commands) if commands else None,
             fs_service=fake_fs,
-            config=fake_config,
+            audio_service=fake_audio_service,
+            config=config,
         )
         bundle.init_metadata([audio_filename], [audio_length])
 

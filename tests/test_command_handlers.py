@@ -1,11 +1,8 @@
-from pathlib import Path
-
 import pytest
-from _pytest.monkeypatch import MonkeyPatch
 
 from tests.bundle_fixtures import TranscribeBundleFactory
+from tests.fake_audio_service import FakeAudioService
 from tests.fake_file_system import FakeFileSystemService
-from transcriber.audio_manipulation import AudioManipulation
 from transcriber.commands.command_handlers import handle_merge
 from transcriber.config import TranscribeConfig
 from transcriber.constants import MULTIPLE_TRANSCRIPTS_SEPARATOR
@@ -18,8 +15,8 @@ class TestHandleMerge:
         self,
         fake_config: TranscribeConfig,
         fake_fs: FakeFileSystemService,
+        fake_audio_service: FakeAudioService,
         transcribe_bundle_factory: TranscribeBundleFactory,
-        monkeypatch: MonkeyPatch,
     ) -> None:
         """Verify merge can join bundles while preserving all command state and other metadata."""
         previous_audio_filename = "Recording 20250115010000.mp3"
@@ -61,12 +58,6 @@ class TestHandleMerge:
         current_bundle_dir = current_bundle.get_bundle_dir()
         current_bundle.commands.write(current_bundle_dir, fake_fs)
 
-        # TODO (for human): proper mocking instead of monkeypatching the method directly!!
-        def fake_audio_duration(_: Path) -> float:
-            return 20.0
-
-        monkeypatch.setattr(AudioManipulation, "get_audio_duration", fake_audio_duration)
-
         with pytest.raises(AbortRemainingBundleJobsException):
             handle_merge(current_bundle, fake_config, current_command_raw1)
 
@@ -76,6 +67,7 @@ class TestHandleMerge:
             existing_dir=previous_bundle_dir,
             config=fake_config,
             fs_service=fake_fs,
+            audio_service=fake_audio_service,
         )
 
         # Verify audio files were merged
@@ -83,7 +75,7 @@ class TestHandleMerge:
             previous_audio_filename,
             current_audio_filename,
         }
-        assert merged_bundle.metadata.audio_length == 40.0
+        assert merged_bundle.metadata.audio_length == (30.0 + 20.0)
 
         # Verify transcripts were concatenated
         assert merged_bundle.transcript is not None

@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import override
 
-from transcriber.audio_manipulation import AudioManipulation
+from transcriber.audio_service import AudioService
 from transcriber.commands.command import Command
 from transcriber.commands.command_interpreter import extract_raw_commands, interpret_command
 from transcriber.commands.command_registry import COMMAND_REGISTRY
@@ -81,7 +81,7 @@ class CreateBundleJob(TranscribeBundleJob):
 
                 # Validate all files
                 for source_path, _ in files_to_move:
-                    audio_length = AudioManipulation.get_audio_duration(source_path)
+                    audio_length = self.bundle.audio_service.get_audio_duration(source_path)
                     if min_length and audio_length < min_length:
                         raise TooShortException(
                             source_audio=source_path,

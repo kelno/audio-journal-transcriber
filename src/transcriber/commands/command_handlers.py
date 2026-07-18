@@ -11,7 +11,6 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from pathlib import Path
 
-from transcriber.audio_manipulation import AudioManipulation
 from transcriber.config import TranscribeConfig
 from transcriber.constants import MULTIPLE_TRANSCRIPTS_SEPARATOR, SUMMARY_FILENAME
 from transcriber.exception import AbortRemainingBundleJobsException
@@ -49,6 +48,7 @@ def handle_merge(bundle: TranscribeBundle, _config: TranscribeConfig, merge_cmd_
         cleanup_bundle=False,
         config=bundle.config,
         fs_service=bundle.fs_service,
+        audio_service=bundle.audio_service,
     )
 
     previous_bundle = TranscribeBundle.find_previous_bundle(bundle, bundles)
@@ -82,8 +82,8 @@ def handle_merge(bundle: TranscribeBundle, _config: TranscribeConfig, merge_cmd_
     previous_bundle.metadata.original_audio_filenames = [audio.name for audio in previous_bundle.source_audios]
 
     audio_lengths = [
-        AudioManipulation.get_audio_duration(audio)
-        for audio in previous_bundle.source_audios
+        bundle.audio_service.get_audio_duration(audio)
+        for audio in previous_bundle.source_audios  # comment for format
     ]
     previous_bundle.metadata.audio_length = sum(audio_lengths)
 

@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from transcriber.ai_manager import AIManager
-from transcriber.audio_manipulation import AudioManipulation
+from transcriber.audio_service import AudioService, RealAudioService
 from transcriber.config import TranscribeConfig
 from transcriber.exception import AbortRemainingBundleJobsException, AudioTranscriberException, TooShortException
 from transcriber.files.file_system import FileSystemService, RealFileSystemService
@@ -37,6 +37,7 @@ class AudioTranscriber:
     ai_manager: AIManager
     config: TranscribeConfig
     fs_service: FileSystemService
+    audio_service: AudioService
 
     def __init__(
         self,
@@ -45,6 +46,7 @@ class AudioTranscriber:
         config: TranscribeConfig,
         only_one_bundle: bool = False,
         fs_service: FileSystemService | None = None,
+        audio_service: AudioService | None = None,
     ) -> None:
         """Initialize the audio transcriber."""
         self.dry_run = dry_run
@@ -52,6 +54,7 @@ class AudioTranscriber:
         self.ai_manager = ai_manager
         self.config = config
         self.fs_service = fs_service or RealFileSystemService(config)
+        self.audio_service = audio_service or RealAudioService()
 
     def __post_init__(self) -> None:
         """Initialize the audio transcriber."""
@@ -115,7 +118,7 @@ class AudioTranscriber:
             msg = f"Input directory does not exist: {input_dir}"
             raise AudioTranscriberException(msg)
 
-        if not AudioManipulation.validate_ffmpeg():
+        if not self.audio_service.validate_ffmpeg():
             msg = f"ffmpeg is not available in path: {input_dir}"
             raise AudioTranscriberException(msg)
 
@@ -129,7 +132,8 @@ class AudioTranscriber:
                 bundle = TranscribeBundle.from_audio_file(
                     source_audio=path,
                     config=self.config,
-                    fs_service=self.fs_service,  # type: ignore[arg-type]
+                    fs_service=self.fs_service,
+                    audio_service=self.audio_service,
                 )
                 bundles.append(bundle)
 
@@ -159,6 +163,7 @@ class AudioTranscriber:
                 cleanup_bundle=True,
                 config=self.config,
                 fs_service=self.fs_service,  # type: ignore[arg-type]
+                audio_service=self.audio_service,
             ),
         )
 
@@ -299,6 +304,6 @@ class AudioTranscriber:
         self.log_section_header("Summary")
         logger.info("Transcription process finished.")
         if len(unprocessed_bundles) > 0:
-            logger.info(f"{len(unprocessed_bundles)} were not fully processed.")
+            logger.info(f"{len(unprocessed_bundles)} bundle(s) were not fully processed.")
 
         return unprocessed_bundles

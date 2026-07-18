@@ -3,6 +3,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import cast, override
 
+from transcriber.audio_service import AudioService
 from transcriber.commands.command import Command
 from transcriber.commands.command_type import CommandType
 from transcriber.config import TranscribeConfig
@@ -33,6 +34,7 @@ from transcriber.utils import (
 @dataclass
 class TranscribeBundle:
     fs_service: FileSystemService
+    audio_service: AudioService
     config: TranscribeConfig
 
     bundle_name: str  # directory name is derived from here
@@ -88,6 +90,7 @@ class TranscribeBundle:
         existing_dir: Path,
         config: TranscribeConfig,
         fs_service: FileSystemService,
+        audio_service: AudioService,
     ) -> "TranscribeBundle":
         """Load an existing saved TranscribeBundle instance from a directory.
 
@@ -95,6 +98,7 @@ class TranscribeBundle:
             existing_dir: Path to the existing bundle directory.
             config: The configuration object containing timezone and other settings.
             fs_service: FileSystemService instance for file operations.
+            audio_service: AudioManipulation instance for audio operations. If None, creates new instance.
 
         Returns:
             TranscribeBundle: The loaded bundle instance.
@@ -120,6 +124,7 @@ class TranscribeBundle:
             summary=summary,
             commands=commands,
             fs_service=fs_service,
+            audio_service=audio_service,
             config=config,
         )
         return bundle
@@ -130,6 +135,7 @@ class TranscribeBundle:
         source_audio: Path,
         config: TranscribeConfig,
         fs_service: FileSystemService,
+        audio_service: AudioService,
     ) -> "TranscribeBundle":
         """Create a new TranscribeBundle instance from an audio file."""
         metadata = MetadataFile(original_audio_filenames=[source_audio.name])
@@ -144,6 +150,7 @@ class TranscribeBundle:
             metadata=metadata,
             source_audios=[source_audio],
             fs_service=fs_service,
+            audio_service=audio_service,
             config=config,
         )
 
@@ -152,8 +159,9 @@ class TranscribeBundle:
         cls,
         source_audios: list[Path],
         config: TranscribeConfig,
+        fs_service: FileSystemService,
+        audio_service: AudioService,
         bundle_name: str | None = None,
-        fs_service: FileSystemService | None = None,
     ) -> "TranscribeBundle":
         """Create a new TranscribeBundle from multiple audio files."""
         if not source_audios:
@@ -171,14 +179,12 @@ class TranscribeBundle:
                 config,
             )
 
-        if fs_service is None:
-            fs_service = RealFileSystemService(config)
-
         return cls(
             bundle_name=bundle_name,
             metadata=metadata,
             source_audios=source_audios,
             fs_service=fs_service,
+            audio_service=audio_service,
             config=config,
         )
 
@@ -433,6 +439,7 @@ class TranscribeBundle:
         cleanup_bundle: bool,  # run bundle.cleanup_inconsistencies on found bundles
         config: TranscribeConfig,
         fs_service: FileSystemService,
+        audio_service: AudioService,
     ) -> list["TranscribeBundle"]:
         """Find and load all bundles from output_dir."""
         bundles: list[TranscribeBundle] = []
@@ -446,6 +453,7 @@ class TranscribeBundle:
                         dir_path,
                         config,
                         fs_service,
+                        audio_service,
                     )
                     if cleanup_bundle:
                         bundle.cleanup_inconsistencies(dry_run)

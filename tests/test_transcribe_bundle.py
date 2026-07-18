@@ -6,6 +6,7 @@ import pydantic
 import pytest
 
 from tests.bundle_fixtures import TranscribeBundleFactory
+from tests.fake_audio_service import FakeAudioService
 from transcriber.commands.command_type import CommandType
 from transcriber.config import TranscribeConfig
 from transcriber.constants import (
@@ -29,6 +30,7 @@ class TestTranscribeBundleFromAudioFile:
         self,
         fake_config: TranscribeConfig,
         fake_fs: FakeFileSystemService,
+        fake_audio_service: FakeAudioService,
     ) -> None:
         """Test creating a bundle from a single audio file."""
         audio_path = Path("/input/meeting.mp3")
@@ -37,6 +39,7 @@ class TestTranscribeBundleFromAudioFile:
             source_audio=audio_path,
             config=fake_config,
             fs_service=fake_fs,
+            audio_service=fake_audio_service,
         )
 
         # generate_generic_bundle_name should match this
@@ -50,6 +53,7 @@ class TestTranscribeBundleFromAudioFile:
         self,
         fake_config: TranscribeConfig,
         fake_fs: FakeFileSystemService,
+        fake_audio_service: FakeAudioService,
     ) -> None:
         """Test that the provided fs_service is assigned to the bundle."""
         audio_path = Path("/input/test.mp3")
@@ -58,6 +62,7 @@ class TestTranscribeBundleFromAudioFile:
             source_audio=audio_path,
             config=fake_config,
             fs_service=fake_fs,
+            audio_service=fake_audio_service,
         )
 
         assert bundle.fs_service is fake_fs
@@ -70,6 +75,7 @@ class TestTranscribeBundleFromAudioFiles:
         self,
         fake_config: TranscribeConfig,
         fake_fs: FakeFileSystemService,
+        fake_audio_service: FakeAudioService,
     ) -> None:
         """Test creating bundle from multiple files with explicit fs_service."""
         audio_files = [
@@ -81,6 +87,7 @@ class TestTranscribeBundleFromAudioFiles:
             source_audios=audio_files,
             config=fake_config,
             fs_service=fake_fs,
+            audio_service=fake_audio_service,
         )
 
         assert bundle.source_audios == audio_files
@@ -89,6 +96,8 @@ class TestTranscribeBundleFromAudioFiles:
     def test_from_audio_files_without_fs_service_creates_real_service(
         self,
         fake_config: TranscribeConfig,
+        fake_fs: FakeFileSystemService,
+        fake_audio_service: FakeAudioService,
     ) -> None:
         """Test that from_audio_files creates RealFileSystemService if not provided."""
         audio_files = [Path("/input/test.mp3")]
@@ -96,6 +105,8 @@ class TestTranscribeBundleFromAudioFiles:
         bundle = TranscribeBundle.from_audio_files(
             source_audios=audio_files,
             config=fake_config,
+            fs_service=fake_fs,
+            audio_service=fake_audio_service,
         )
 
         # Should have created a real service, not None
@@ -105,6 +116,7 @@ class TestTranscribeBundleFromAudioFiles:
         self,
         fake_config: TranscribeConfig,
         fake_fs: FakeFileSystemService,
+        fake_audio_service: FakeAudioService,
     ) -> None:
         """Test that from_audio_files raises ValueError on empty list."""
         with pytest.raises(ValueError, match="Must provide at least one audio file"):
@@ -112,6 +124,7 @@ class TestTranscribeBundleFromAudioFiles:
                 source_audios=[],
                 config=fake_config,
                 fs_service=fake_fs,
+                audio_service=fake_audio_service,
             )
 
 
@@ -123,6 +136,7 @@ class TestTranscribeBundleFromExistingDirectory:
         self,
         fake_config: TranscribeConfig,
         fake_fs: FakeFileSystemService,
+        fake_audio_service: FakeAudioService,
         generic_bundle_dir: Path,
     ) -> None:
         """Test loading a bundle from an existing directory."""
@@ -136,6 +150,7 @@ class TestTranscribeBundleFromExistingDirectory:
             existing_dir=generic_bundle_dir,
             config=fake_config,
             fs_service=fake_fs,
+            audio_service=fake_audio_service,
         )
         bundle.cleanup_inconsistencies(False)
 
@@ -150,6 +165,7 @@ class TestTranscribeBundleFromExistingDirectory:
         self,
         fake_config: TranscribeConfig,
         fake_fs: FakeFileSystemService,
+        fake_audio_service: FakeAudioService,
         generic_bundle_dir: Path,
     ) -> None:
         """Test that loading raises if metadata file is missing."""
@@ -163,6 +179,7 @@ class TestTranscribeBundleFromExistingDirectory:
                 existing_dir=generic_bundle_dir,
                 config=fake_config,
                 fs_service=fake_fs,
+                audio_service=fake_audio_service,
             )
 
     @pytest.mark.usefixtures("generic_bundle")
@@ -170,6 +187,7 @@ class TestTranscribeBundleFromExistingDirectory:
         self,
         fake_config: TranscribeConfig,
         fake_fs: FakeFileSystemService,
+        fake_audio_service: FakeAudioService,
         generic_bundle_dir: Path,
     ) -> None:
         """Test that loading raises if metadata file is missing."""
@@ -194,6 +212,7 @@ class TestTranscribeBundleFromExistingDirectory:
                 existing_dir=generic_bundle_dir,
                 config=fake_config,
                 fs_service=fake_fs,
+                audio_service=fake_audio_service,
             )
 
 
@@ -286,6 +305,7 @@ class TestTranscribeBundleWriteOperations:
         self,
         fake_config: TranscribeConfig,
         fake_fs: FakeFileSystemService,
+        fake_audio_service: FakeAudioService,
         generic_bundle_dir: Path,
     ) -> None:
         """Test initializing metadata with file information."""
@@ -297,6 +317,7 @@ class TestTranscribeBundleWriteOperations:
             summary=None,
             commands=None,
             fs_service=fake_fs,
+            audio_service=fake_audio_service,
             config=fake_config,
         )
 
@@ -440,6 +461,7 @@ class TestTranscribeBundleRenaming:
         self,
         fake_config: TranscribeConfig,
         fake_fs: FakeFileSystemService,
+        fake_audio_service: FakeAudioService,
     ) -> None:
         """Test that renaming raises if directory doesn't exist."""
         bundle = TranscribeBundle(
@@ -447,6 +469,7 @@ class TestTranscribeBundleRenaming:
             metadata=MetadataFile(original_audio_filenames=["meeting.mp3"]),
             source_audios=[Path("/store/2025-01-15_meeting/meeting.mp3")],
             fs_service=fake_fs,
+            audio_service=fake_audio_service,
             config=fake_config,
         )
         # don't write it to filesystem
@@ -462,6 +485,7 @@ class TestGatherExistingBundles:
         self,
         fake_config: TranscribeConfig,
         fake_fs: FakeFileSystemService,
+        fake_audio_service: FakeAudioService,
         transcribe_bundle_factory: TranscribeBundleFactory,
     ) -> None:
         """Test that gather_existing_bundles finds valid bundles."""
@@ -482,6 +506,7 @@ class TestGatherExistingBundles:
             cleanup_bundle=True,
             config=fake_config,
             fs_service=fake_fs,
+            audio_service=fake_audio_service,
         )
 
         assert len(bundles) == 2
@@ -494,6 +519,7 @@ class TestGatherExistingBundles:
         self,
         fake_config: TranscribeConfig,
         fake_fs: FakeFileSystemService,
+        fake_audio_service: FakeAudioService,
         generic_bundle: TranscribeBundle,
     ) -> None:
         """Test that gather_existing_bundles skips invalid bundles."""
@@ -510,6 +536,7 @@ class TestGatherExistingBundles:
             cleanup_bundle=True,
             config=fake_config,
             fs_service=fake_fs,
+            audio_service=fake_audio_service,
         )
 
         # at this point we have 1 valid bundle (generic_bundle) and 1 invalid one
@@ -544,26 +571,21 @@ class TestGatherExistingBundles:
     def test_find_previous_bundle_respects_merge_window(
         self,
         fake_config: TranscribeConfig,
-        fake_fs: FakeFileSystemService,
+        transcribe_bundle_factory: TranscribeBundleFactory,
     ) -> None:
         """Test that the merge window filters out bundles that are too old."""
         fake_config.general.merge_max_hours = 12.0
 
-        distant_bundle = TranscribeBundle(
+        distant_bundle = transcribe_bundle_factory(
             bundle_name="2025-01-14_review",
-            metadata=MetadataFile(original_audio_filenames=["Recording 20250114120000.mp3"]),
-            source_audios=[Path("/fake/store/2025-01-14_review/Recording 20250114120000.mp3")],
-            fs_service=fake_fs,
+            audio_filename="Recording 20250114120000.mp3",
             config=fake_config,
         )
-        current_bundle = TranscribeBundle(
+        current_bundle = transcribe_bundle_factory(
             bundle_name="2025-01-15_meeting",
-            metadata=MetadataFile(original_audio_filenames=["Recording 20250115090000.mp3"]),
-            source_audios=[Path("/fake/store/2025-01-15_meeting/Recording 20250115090000.mp3")],
-            fs_service=fake_fs,
+            audio_filename="Recording 20250115090000.mp3",
             config=fake_config,
         )
-
         result = TranscribeBundle.find_previous_bundle(
             current_bundle=current_bundle,
             bundles=[distant_bundle, current_bundle],
@@ -579,6 +601,7 @@ class TestTranscribeBundleIntegration:
         self,
         fake_config: TranscribeConfig,
         fake_fs: FakeFileSystemService,
+        fake_audio_service: FakeAudioService,
     ) -> None:
         """Test a complete workflow: create, load, update bundle."""
         # Step 1: Create bundle from audio file
@@ -586,6 +609,7 @@ class TestTranscribeBundleIntegration:
         bundle = TranscribeBundle.from_audio_file(
             source_audio=audio_path,
             fs_service=fake_fs,
+            audio_service=fake_audio_service,
             config=fake_config,
         )
         assert bundle.transcript is None
@@ -615,6 +639,7 @@ class TestTranscribeBundleIntegration:
             existing_dir=bundle_dir,
             config=fake_config,
             fs_service=fake_fs,
+            audio_service=fake_audio_service,
         )
         assert reloaded.transcript is not None
         assert reloaded.transcript.text == "Meeting transcript here."
@@ -629,6 +654,7 @@ class TestTranscribeBundleIntegration:
         self,
         fake_config: TranscribeConfig,
         fake_fs: FakeFileSystemService,
+        fake_audio_service: FakeAudioService,
     ) -> None:
         """Test that refresh is triggered when new audio files are detected."""
         bundle_dir = Path("/store/2025-01-15_meeting")
@@ -654,6 +680,7 @@ class TestTranscribeBundleIntegration:
             existing_dir=bundle_dir,
             config=fake_config,
             fs_service=fake_fs,
+            audio_service=fake_audio_service,
         )
 
         # Bundle should have both files now
