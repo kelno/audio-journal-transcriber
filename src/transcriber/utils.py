@@ -31,7 +31,7 @@ def remove_empty_subdirs(directory: Path) -> None:
         logger.exception(f"Error while removing empty directory {directory}")
 
 
-# regex pattern to match obisidian recording filenames like "Recording YYYYMMDDHHMMSS"
+# regex pattern to match Obsidian recording filenames like "Recording YYYYMMDDHHMMSS"
 DATE_RE_PATTERN_OBSIDIAN_RECORDING = re.compile(
     r"^Recording (\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})",
 )
@@ -52,12 +52,10 @@ def extract_date_from_recording_filename(
             return None
 
     try:
-        year = int(m.group(1))
-        month = int(m.group(2))
-        day = int(m.group(3))
-        hour = int(m.group(4)) if m.lastindex >= 4 else 0
-        minute = int(m.group(5)) if m.lastindex >= 5 else 0
-        second = int(m.group(6)) if m.lastindex >= 6 else 0
+        year, month, day, hour, minute, second = (
+            int(value) if value is not None else 0
+            for value in m.group(1, 2, 3, 4, 5, 6)  # (comment for format)
+        )
         return datetime(year, month, day, hour, minute, second, tzinfo=tz)
     except ValueError:
         logger.warning(f"Filename {filename} contains an invalid date: {m.groups()}")
