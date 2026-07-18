@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 import yaml
+from pydantic import ValidationError
 
 from tests.bundle_fixtures import TranscribeBundleFactory
 from tests.fake_file_system import FakeFileSystemService
@@ -71,14 +72,14 @@ class TestCommandCreation:
             "executed_at": None,
         }
 
-        with pytest.raises(TypeError, match="Invalid command data"):
+        with pytest.raises(ValidationError):
             Command.from_dict(data)
 
     def test_command_from_dict_invalid_executed_type(self) -> None:
         """Test that from_dict raises TypeError if executed is not a bool."""
-        data = {"text": "play", "executed": "yes", "executed_at": None}
+        data = {"text": "play", "executed": "yay", "executed_at": None}
 
-        with pytest.raises(TypeError, match="Invalid command data"):
+        with pytest.raises(ValidationError):
             Command.from_dict(data)
 
 
@@ -159,7 +160,7 @@ class TestCommandsFileSerialization:
         yaml_content = """- executed: false
   executed_at: null
 """
-        with pytest.raises(TypeError, match="Invalid command data"):
+        with pytest.raises(ValidationError):
             CommandsFile(text=yaml_content)
 
     def test_parse_yaml_invalid_structure_wrong_type(self) -> None:
@@ -221,8 +222,7 @@ class TestCommandsFileWriteRead:
 """
         fake_fs.write_file(bundle_dir / "_commands.md", invalid_yaml)
 
-        # Trying to read should raise ValueError
-        with pytest.raises(TypeError, match="Invalid command data"):
+        with pytest.raises(ValidationError):
             CommandsFile.from_file(bundle_dir / "_commands.md", fake_fs)
 
     def test_read_completely_invalid_yaml(self, fake_fs: FakeFileSystemService) -> None:
@@ -234,7 +234,7 @@ class TestCommandsFileWriteRead:
 """
         fake_fs.write_file(bundle_dir / "_commands.md", invalid_yaml)
 
-        # Should raise ValueError
+        # Should raise
         with pytest.raises(yaml.YAMLError):
             CommandsFile.from_file(bundle_dir / "_commands.md", fake_fs)
 
