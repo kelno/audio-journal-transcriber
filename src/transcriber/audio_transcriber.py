@@ -293,5 +293,7 @@ class AudioTranscriber:
 
         self.log_section_header("Summary")
         logger.info("Transcription process finished.")
+        if len(unprocessed_bundles) > 0:
+            logger.info(f"{len(unprocessed_bundles)} were not fully processed.")
 
         return unprocessed_bundles
