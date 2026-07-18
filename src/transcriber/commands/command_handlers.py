@@ -6,7 +6,10 @@ Contains the implementation logic for each command type.
 from __future__ import annotations
 
 from collections.abc import Callable
-from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 from transcriber.audio_manipulation import AudioManipulation
 from transcriber.config import TranscribeConfig
@@ -96,11 +99,7 @@ def handle_merge(bundle: TranscribeBundle, _config: TranscribeConfig, merge_cmd_
         previous_bundle.commands.write(previous_bundle_dir, bundle.fs_service)
 
     if previous_bundle.transcript and bundle.transcript:
-        merged_text = (
-            previous_bundle.transcript.text
-            + MULTIPLE_TRANSCRIPTS_SEPARATOR
-            + bundle.transcript.text
-        )
+        merged_text = previous_bundle.transcript.text + MULTIPLE_TRANSCRIPTS_SEPARATOR + bundle.transcript.text
         previous_bundle.transcript = TranscriptFile(merged_text)
         previous_bundle.transcript.write(previous_bundle_dir, bundle.fs_service)
 

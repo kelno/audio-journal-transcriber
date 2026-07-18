@@ -98,7 +98,7 @@ class CreateBundleJob(TranscribeBundleJob):
                 self.bundle.update_audio_paths([Path(p) for _, p in files_to_move])
                 self.bundle.init_metadata(
                     filenames=[p.name for _, p in files_to_move],
-                    audio_lengths=audio_lengths,
+                    audio_lengths=audio_lengths,  # (comment for format)
                 )
 
 
@@ -176,7 +176,7 @@ class SummaryJob(TranscribeBundleJob):
             raise ValueError(msg)
 
         summary_content = ai_manager.get_ai_summary(self.bundle.transcript.text)
-        logger.info(f"Summary complete: {summary_content[:40]}")
+        logger.info(f"Summary complete. Excerpt: {summary_content[:40]}")
         self.bundle.set_and_write_summary(summary_content)
 
 

@@ -351,7 +351,7 @@ class TranscribeBundle:
             # if any audio file is NOT in the store, we're in an unexpected state, don't remove anything
             if not file_is_in_directory_tree(audio_path, store_dir):
                 logger.error(
-                    f"bundle: {self}: audio_source_needs_removal has unexpectedly found an audio file outside of store: {audio_path}"
+                    f"bundle: {self}: audio_source_needs_removal has unexpectedly found an audio file outside of store: {audio_path}",
                 )
                 return False
 

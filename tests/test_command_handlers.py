@@ -2,22 +2,15 @@ from pathlib import Path
 
 import pytest
 from _pytest.monkeypatch import MonkeyPatch
-from transcriber.constants import MULTIPLE_TRANSCRIPTS_SEPARATOR
 
 from tests.bundle_fixtures import TranscribeBundleFactory
+from tests.fake_file_system import FakeFileSystemService
 from transcriber.audio_manipulation import AudioManipulation
 from transcriber.commands.command_handlers import handle_merge
-from transcriber.commands.command_registry import COMMAND_REGISTRY
-from transcriber.commands.command_type import CommandType
 from transcriber.config import TranscribeConfig
+from transcriber.constants import MULTIPLE_TRANSCRIPTS_SEPARATOR
 from transcriber.exception import AbortRemainingBundleJobsException
 from transcriber.transcribe_bundle import TranscribeBundle
-from transcriber.transcribe_bundle_job import RunCommandsJob
-from transcriber.ai_manager import AIManager
-
-from tests.fake_clients import FakeAudioClient, FakeChatClient
-
-from tests.fake_file_system import FakeFileSystemService
 
 
 class TestHandleMerge:
@@ -63,7 +56,7 @@ class TestHandleMerge:
         )
         # Mark only second command as executed
         assert current_bundle.commands
-        assert current_bundle.commands.commands[0].executed is False # our merge command, starts at false
+        assert current_bundle.commands.commands[0].executed is False  # our merge command, starts at false
         current_bundle.commands.commands[1].executed = True
         current_bundle_dir = current_bundle.get_bundle_dir()
         current_bundle.commands.write(current_bundle_dir, fake_fs)
@@ -117,7 +110,9 @@ class TestHandleMerge:
         # Verify execution states were preserved from source bundles
         assert commands[0].executed is True  # previous bundle first command
         assert commands[1].executed is False  # previous bundle second command
-        assert commands[2].executed is True  # current bundle first command, started as false but now true because it's the merge command that gots executed
+        assert (
+            commands[2].executed is True
+        )  # current bundle first command, started as false but now true because it's the merge command that gots executed
         assert commands[3].executed is True  # current bundle second command
         assert commands[4].executed is False  # current bundle third command, never executed, should still be false
 

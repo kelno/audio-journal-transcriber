@@ -5,12 +5,12 @@ from typing import Protocol
 
 import pytest
 
+from tests.fake_file_system import FakeFileSystemService
 from transcriber.config import TranscribeConfig
 from transcriber.files.commands_file import CommandsFile
 from transcriber.files.metadata import MetadataFile
 from transcriber.files.text_file import SummaryFile, TranscriptFile
 from transcriber.transcribe_bundle import TranscribeBundle
-from tests.fake_file_system import FakeFileSystemService
 
 
 class TranscribeBundleFactory(Protocol):
@@ -24,7 +24,9 @@ class TranscribeBundleFactory(Protocol):
         audio_length: float = 20.0,
         commands_executed: bool = False,
     ) -> TranscribeBundle:
+        """Factory callable returning a `TranscribeBundle` for tests."""
         ...
+
 
 
 @pytest.fixture
@@ -32,6 +34,7 @@ def transcribe_bundle_factory(
     fake_config: TranscribeConfig,
     fake_fs: FakeFileSystemService,
 ) -> TranscribeBundleFactory:
+    """Pytest fixture that returns a factory for creating test bundles."""
     def _create_bundle(
         bundle_name: str,
         audio_filename: str,
@@ -72,6 +75,7 @@ def transcribe_bundle_factory(
         return bundle
 
     return _create_bundle
+
 
 @pytest.fixture
 def generic_bundle_dir(
