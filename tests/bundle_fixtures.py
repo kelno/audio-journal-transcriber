@@ -22,7 +22,6 @@ class TranscribeBundleFactory(Protocol):
         transcript_text: str | None = None,
         summary_text: str | None = None,
         commands: list[str] | None = None,
-        audio_length: float = 20.0,
         commands_executed: bool = False,
         transcript_model_used: list[str] | str | None = None,
         keep_forever: bool = False,
@@ -46,7 +45,6 @@ def transcribe_bundle_factory(
         transcript_text: str | None = None,
         summary_text: str | None = None,
         commands: list[str] | None = None,
-        audio_length: float = 20.0,
         commands_executed: bool = False,
         transcript_model_used: list[str] | str | None = None,
         keep_forever: bool = False,
@@ -56,7 +54,7 @@ def transcribe_bundle_factory(
         bundle_dir = config.general.store_dir / bundle_name
         fake_fs.create_directory(bundle_dir)
 
-        fake_audio_service.set_audio_duration(bundle_dir / audio_filename, audio_length)
+        fake_audio_service.set_audio_duration(bundle_dir / audio_filename, 20.0)
 
         bundle = TranscribeBundle(
             bundle_name=bundle_dir.name,
@@ -69,7 +67,7 @@ def transcribe_bundle_factory(
             audio_service=fake_audio_service,
             config=config,
         )
-        bundle.init_metadata([audio_filename], [audio_length])
+        bundle.init_metadata([audio_filename])
 
         if transcript_model_used is not None:
             bundle.metadata.transcript_model_used = (
@@ -121,5 +119,4 @@ def generic_bundle(
     return transcribe_bundle_factory(
         bundle_name=generic_bundle_dir.name,
         audio_filename="meeting.mp3",
-        audio_length=3600.0,
     )

@@ -29,7 +29,6 @@ class TestHandleMerge:
             transcript_text="previous transcript",
             summary_text="previous summary",
             commands=[previous_cmd_raw1, previous_cmd_raw2],
-            audio_length=30.0,
             commands_executed=False,
             transcript_model_used="model-a",
             keep_forever=True,
@@ -50,7 +49,6 @@ class TestHandleMerge:
             audio_filename=current_audio_filename,
             transcript_text=current_transcript_text,
             commands=[current_command_raw1, current_command_raw2, current_command_raw3],
-            audio_length=20.0,
             commands_executed=False,
             transcript_model_used="model-b",
             keep_forever=False,
@@ -79,7 +77,6 @@ class TestHandleMerge:
             previous_audio_filename,
             current_audio_filename,
         }
-        assert merged_bundle.metadata.audio_length == (30.0 + 20.0)
 
         # Verify transcripts were concatenated
         assert merged_bundle.transcript is not None
@@ -134,7 +131,6 @@ class TestHandleMerge:
             bundle_name="2025-01-15_previous",
             audio_filename="Recording 20250115010000.mp3",
             transcript_text="previous transcript",
-            audio_length=30.0,
             transcript_model_used=None,
             keep_forever=False,
         )
@@ -143,7 +139,6 @@ class TestHandleMerge:
             bundle_name="2025-01-15_meeting",
             audio_filename="Recording 20250115090000.mp3",
             transcript_text="current transcript",
-            audio_length=20.0,
             transcript_model_used="model-a",
             keep_forever=True,
             commands=["merge"],
@@ -174,7 +169,6 @@ class TestHandleMerge:
             bundle_name="2025-01-15_later",
             audio_filename="Recording 20250115120000.mp3",
             transcript_text="third transcript",
-            audio_length=10.0,
             transcript_model_used=third_model,
             keep_forever=False,
             commands=["merge"],
@@ -211,7 +205,6 @@ class TestHandleMerge:
             bundle_name="2025-01-15_previous",
             audio_filename="Recording 20250115010000.mp3",
             transcript_text="previous transcript",
-            audio_length=30.0,
             transcript_model_used=previous_model,
             keep_forever=False,
         )
@@ -219,7 +212,6 @@ class TestHandleMerge:
             bundle_name="2025-01-15_meeting",
             audio_filename="Recording 20250115090000.mp3",
             transcript_text="current transcript",
-            audio_length=20.0,
             transcript_model_used=current_model,
             keep_forever=False,
             commands=["merge"],
@@ -256,12 +248,10 @@ class TestHandleMerge:
             bundle_name="2025-01-15_previous",
             audio_filename="Recording 20250115010000.mp3",
             transcript_text=previous_transcript_text,
-            audio_length=30.0,
         )
         current_bundle = transcribe_bundle_factory(
             bundle_name="2025-01-15_meeting",
             audio_filename="Recording 20250115090000.mp3",
-            audio_length=20.0,
             commands=["merge"],
         )
 
@@ -297,13 +287,11 @@ class TestHandleMerge:
         previous_bundle = transcribe_bundle_factory(
             bundle_name="2025-01-15_previous",
             audio_filename="Recording 20250115010000.mp3",
-            audio_length=30.0,
         )
         current_bundle = transcribe_bundle_factory(
             bundle_name="2025-01-15_meeting",
             audio_filename="Recording 20250115090000.mp3",
             transcript_text=current_transcript_text,
-            audio_length=20.0,
             commands=["merge"],
         )
 
@@ -338,12 +326,10 @@ class TestHandleMerge:
         previous_bundle = transcribe_bundle_factory(
             bundle_name="2025-01-15_previous",
             audio_filename="Recording 20250115010000.mp3",
-            audio_length=30.0,
         )
         current_bundle = transcribe_bundle_factory(
             bundle_name="2025-01-15_meeting",
             audio_filename="Recording 20250115090000.mp3",
-            audio_length=20.0,
             commands=["merge"],
         )
 
@@ -377,12 +363,10 @@ class TestHandleMerge:
         previous_bundle = transcribe_bundle_factory(
             bundle_name="2025-01-15_previous",
             audio_filename="Recording 20250115010000.mp3",
-            audio_length=30.0,
         )
         current_bundle = transcribe_bundle_factory(
             bundle_name="2025-01-15_meeting",
             audio_filename="Recording 20250115090000.mp3",
-            audio_length=20.0,
             commands=[merge_cmd, other_cmd],
         )
 
@@ -422,7 +406,6 @@ class TestHandleMerge:
             bundle_name="2025-01-15_previous",
             audio_filename="Recording 20250115010000.mp3",
             transcript_text="previous transcript",
-            audio_length=30.0,
             transcript_model_used=["whisper", "whisper-large"],
             keep_forever=False,
             commands=["merge"],
@@ -431,7 +414,6 @@ class TestHandleMerge:
             bundle_name="2025-01-15_meeting",
             audio_filename="Recording 20250115090000.mp3",
             transcript_text="current transcript",
-            audio_length=20.0,
             transcript_model_used=["whisper-large", "gpt-4o-transcribe"],
             keep_forever=False,
             commands=["merge"],
@@ -466,13 +448,11 @@ class TestHandleMerge:
         transcribe_bundle_factory(
             bundle_name="2025-01-14_previous",
             audio_filename="Recording 20250114090000.mp3",
-            audio_length=30.0,
         )
 
         current_bundle = transcribe_bundle_factory(
             bundle_name="2025-01-15_meeting",
             audio_filename="Recording 20250115090000.mp3",
-            audio_length=20.0,
         )
 
         with pytest.raises(NoPreviousBundleException):
@@ -487,7 +467,6 @@ class TestHandleMerge:
         current_bundle = transcribe_bundle_factory(
             bundle_name="2025-01-15_meeting",
             audio_filename="curr.mp3",
-            audio_length=20.0,
         )
 
         with pytest.raises(NoPreviousBundleException):

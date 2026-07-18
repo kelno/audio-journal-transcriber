@@ -37,8 +37,7 @@ def _move_audio_to_bundle(source: TranscribeBundle, target: TranscribeBundle) ->
 
     Side Effects:
         - Moves audio files from source to target bundle directory
-        - Updates target bundle's in-memory source_audios, audio_length and
-          transcript_model_used metadata
+        - Updates target bundle's in-memory source_audios and transcript_model_used metadata
 
     Note:
         This function only mutates in-memory state (audio list, length, merged
@@ -70,12 +69,6 @@ def _move_audio_to_bundle(source: TranscribeBundle, target: TranscribeBundle) ->
         source.config,
     )
     target.metadata.original_audio_filenames = [audio.name for audio in target.source_audios]
-
-    audio_lengths = [
-        source.audio_service.get_audio_duration(audio)
-        for audio in target.source_audios  # comment for format
-    ]
-    target.metadata.audio_length = sum(audio_lengths)
 
     # Merge transcript model usage as an ordered set (no duplicates, exact match).
     # In-memory only; the caller writes metadata once at the end.

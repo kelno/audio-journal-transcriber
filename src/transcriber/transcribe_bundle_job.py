@@ -60,7 +60,6 @@ class CreateBundleJob(TranscribeBundleJob):
             raise FileNotFoundError(error_msg)
 
         final_audio_paths = self.bundle.get_bundle_audio_paths()
-        audio_lengths: list[float] = []
         files_to_move: list[tuple[Path, Path]] = []
 
         # Check all files and validate
@@ -87,7 +86,6 @@ class CreateBundleJob(TranscribeBundleJob):
                             audio_length=audio_length,
                             min_length=min_length,
                         )
-                    audio_lengths.append(audio_length)
 
                 # Move all files
                 ensure_directory_exists(final_audio_paths[0].parent)
@@ -97,7 +95,6 @@ class CreateBundleJob(TranscribeBundleJob):
                 self.bundle.update_audio_paths([Path(p) for _, p in files_to_move])
                 self.bundle.init_metadata(
                     filenames=[p.name for _, p in files_to_move],
-                    audio_lengths=audio_lengths,  # (comment for format)
                 )
 
 

@@ -156,7 +156,6 @@ class TestTranscribeBundleFromExistingDirectory:
 
         assert bundle.bundle_name == "2025-01-15_meeting"
         assert bundle.source_audios == [generic_bundle_dir / "meeting.mp3"]
-        assert bundle.metadata.audio_length == 3600.0
         assert bundle.transcript is not None
         assert isinstance(bundle.transcript, TranscriptFile)
 
@@ -195,7 +194,6 @@ class TestTranscribeBundleFromExistingDirectory:
         metadata_yaml = (
             "---\n"
             "original_audio_filenames: None\n"  # this is the wrong line
-            "audio_length: 3600.0\n"
             "transcript_model_used: null\n"
             "summary_model_used: null\n"
             "bundle_name_generated: false\n"
@@ -322,12 +320,10 @@ class TestTranscribeBundleWriteOperations:
         )
 
         filenames = ["part1.mp3", "part2.mp3"]
-        audio_lengths = [1800.0, 1200.0]
 
-        bundle.init_metadata(filenames, audio_lengths)
+        bundle.init_metadata(filenames)
 
         assert bundle.metadata.original_audio_filenames == filenames
-        assert bundle.metadata.audio_length == 3000.0
         assert fake_fs.file_exists(generic_bundle_dir / METADATA_FILENAME)
 
 
@@ -664,7 +660,6 @@ class TestTranscribeBundleIntegration:
         metadata_yaml = (
             "---\n"
             "original_audio_filenames: [part1.mp3]\n"
-            "audio_length: null\n"
             "transcript_model_used: []\n"
             "summary_model_used: null\n"
             "bundle_name_generated: false\n"

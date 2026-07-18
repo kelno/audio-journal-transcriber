@@ -576,12 +576,9 @@ class TranscribeBundle:
     def init_metadata(
         self,
         filenames: list[str],
-        audio_lengths: list[float],
     ) -> None:
         """Initialize metadata with multiple files."""
         self.metadata.original_audio_filenames = filenames
-        # Store total length
-        self.metadata.audio_length = sum(audio_lengths)
         self.metadata.write(self.get_bundle_dir(), self.fs_service)
 
     def set_and_write_bundle_name(

@@ -14,7 +14,6 @@ class Metadata(BaseModel):
     """
 
     original_audio_filenames: list[str] = Field(min_length=0)
-    audio_length: float | None = None
     # Ordered set of transcript models used for this bundle. Stored as a list (not a
     # set) so YAML serialization is stable and human-readable. Accepts a bare string
     # for backward compatibility with bundles written before this was a list.
