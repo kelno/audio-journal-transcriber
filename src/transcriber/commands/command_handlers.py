@@ -12,7 +12,6 @@ from typing import TYPE_CHECKING
 from transcriber.config import TranscribeConfig
 from transcriber.constants import MULTIPLE_TRANSCRIPTS_SEPARATOR, SUMMARY_FILENAME
 from transcriber.exception import AbortRemainingBundleJobsException, NoPreviousBundleException, UnknownCommandException
-from transcriber.files.commands_file import CommandsFile
 from transcriber.files.metadata import AudioFileMeta
 from transcriber.files.text_file import TranscriptFile
 from transcriber.logger import logger
@@ -137,10 +136,11 @@ def _merge_commands(source: TranscribeBundle, target: TranscribeBundle) -> None:
         merged_by_id: dict[str, Command] = {}
         for cmd in target.commands.commands + source.commands.commands:
             merged_by_id.setdefault(cmd.id, cmd)
-        target.commands = CommandsFile(text="", commands=list(merged_by_id.values()))
+        target.commands.commands = list(merged_by_id.values())
     elif source.commands:  # only source has commands
-        # Create a copy to avoid sharing the same object reference
-        target.commands = CommandsFile(text="", commands=list(source.commands.commands))
+        # Replace with a copy of the source commands to avoid sharing references.
+        target.commands = source.commands
+        target.commands.commands = list(source.commands.commands)
 
     if target.commands:
         target.commands.write(target.get_bundle_dir(), target.fs_service)
