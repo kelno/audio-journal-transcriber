@@ -33,11 +33,17 @@ def main() -> None:
         action="store_true",
         help="Run in daemon mode, watching file changes and processing continuously.",
     )
+    parser.add_argument(
+        "--one",
+        action="store_true",
+        help="Only process one bundle (for testing).",
+    )
     args = parser.parse_args()
 
     dry_run = args.dry_run
     debug = args.debug
     daemon = args.daemon
+    one_bundle = args.one
 
     configure_logger(debug)
 
@@ -59,6 +65,7 @@ def main() -> None:
         dry_run=dry_run,
         ai_manager=ai_manager,
         config=config,
+        only_one_bundle=one_bundle,
     )
     try:
         unprocessed = transcriber.run()
