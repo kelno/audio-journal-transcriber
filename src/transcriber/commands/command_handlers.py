@@ -130,6 +130,17 @@ def handle_merge(current_bundle: TranscribeBundle, _config: TranscribeConfig, me
         config: The transcribe configuration.
         merge_cmd_text: The original command text.
 
+    Side effects / merge policy:
+        - Audio, transcript, commands and transcript-model metadata are merged into
+          the previous (target) bundle.
+        - The summary is always cleared (and ``summary_model_used`` reset) so it gets
+          regenerated for the combined bundle. This is intentional: a summary written
+          for only part of the merged content would be stale. Any summary on the
+          current bundle is therefore dropped.
+        - ``bundle_name_generated`` is reset to False so the name can be regenerated.
+        - ``keep_forever`` is promoted to True if either source bundle had it set.
+        - The current (source) bundle directory is deleted once the merge succeeds.
+
     """
     logger.info(f"Running merge command for {current_bundle} (command text: {merge_cmd_text})")
 
@@ -158,7 +169,9 @@ def handle_merge(current_bundle: TranscribeBundle, _config: TranscribeConfig, me
     _merge_commands(source=current_bundle, target=previous_bundle)
     _merge_transcripts(source=current_bundle, target=previous_bundle)
 
-    # Clear previous summary to let it regenerate
+    # Clear the summary on every merge so it regenerates for the combined bundle.
+    # Intentional policy: a summary produced from only part of the merged content
+    # would be stale, so we always drop it (and any summary on the current bundle).
     if previous_bundle.summary:
         previous_bundle.summary = None
         previous_bundle.metadata.summary_model_used = None
