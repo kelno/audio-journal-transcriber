@@ -146,6 +146,7 @@ class TestHandleMerge:
             audio_length=20.0,
             transcript_model_used="model-a",
             keep_forever=True,
+            commands=["merge"],
         )
 
         previous_bundle_dir = previous_bundle.get_bundle_dir()
@@ -176,6 +177,7 @@ class TestHandleMerge:
             audio_length=10.0,
             transcript_model_used=third_model,
             keep_forever=False,
+            commands=["merge"],
         )
         third_bundle_dir = third_bundle.get_bundle_dir()
 
@@ -220,6 +222,7 @@ class TestHandleMerge:
             audio_length=20.0,
             transcript_model_used=current_model,
             keep_forever=False,
+            commands=["merge"],
         )
 
         previous_bundle_dir = previous_bundle.get_bundle_dir()
@@ -259,6 +262,7 @@ class TestHandleMerge:
             bundle_name="2025-01-15_meeting",
             audio_filename="Recording 20250115090000.mp3",
             audio_length=20.0,
+            commands=["merge"],
         )
 
         previous_bundle_dir = previous_bundle.get_bundle_dir()
@@ -300,6 +304,7 @@ class TestHandleMerge:
             audio_filename="Recording 20250115090000.mp3",
             transcript_text=current_transcript_text,
             audio_length=20.0,
+            commands=["merge"],
         )
 
         previous_bundle_dir = previous_bundle.get_bundle_dir()
@@ -339,6 +344,7 @@ class TestHandleMerge:
             bundle_name="2025-01-15_meeting",
             audio_filename="Recording 20250115090000.mp3",
             audio_length=20.0,
+            commands=["merge"],
         )
 
         previous_bundle_dir = previous_bundle.get_bundle_dir()
@@ -357,6 +363,51 @@ class TestHandleMerge:
         )
 
         assert merged_bundle.transcript is None
+
+    def test_handle_merge_copies_source_commands_when_target_has_none(
+        self,
+        fake_config: TranscribeConfig,
+        fake_fs: FakeFileSystemService,
+        fake_audio_service: FakeAudioService,
+        transcribe_bundle_factory: TranscribeBundleFactory,
+    ) -> None:
+        """Verify source commands are copied when the target bundle has no commands."""
+        merge_cmd = "merge"
+        other_cmd = "do something"
+        previous_bundle = transcribe_bundle_factory(
+            bundle_name="2025-01-15_previous",
+            audio_filename="Recording 20250115010000.mp3",
+            audio_length=30.0,
+        )
+        current_bundle = transcribe_bundle_factory(
+            bundle_name="2025-01-15_meeting",
+            audio_filename="Recording 20250115090000.mp3",
+            audio_length=20.0,
+            commands=[merge_cmd, other_cmd],
+        )
+
+        previous_bundle_dir = previous_bundle.get_bundle_dir()
+        current_bundle_dir = current_bundle.get_bundle_dir()
+
+        with pytest.raises(AbortRemainingBundleJobsException):
+            handle_merge(current_bundle, fake_config, merge_cmd)
+
+        assert not fake_fs.directory_exists(current_bundle_dir)
+
+        merged_bundle = TranscribeBundle.from_existing_directory(
+            existing_dir=previous_bundle_dir,
+            config=fake_config,
+            fs_service=fake_fs,
+            audio_service=fake_audio_service,
+        )
+
+        # Target had no commands; source commands are copied over and preserved.
+        assert merged_bundle.commands is not None
+        commands = merged_bundle.commands.commands
+        assert [cmd.text for cmd in commands] == [merge_cmd, other_cmd]
+        # The merge command is marked executed; the other command is not.
+        assert commands[0].executed is True
+        assert commands[1].executed is False
 
     def test_handle_merge_fails_when_previous_bundle_is_too_old(
         self,

@@ -98,13 +98,12 @@ def _merge_transcripts(source: TranscribeBundle, target: TranscribeBundle) -> No
         target.transcript.write(target.get_bundle_dir(), target.fs_service)
 
 
-def _merge_commands(source: TranscribeBundle, target: TranscribeBundle, merge_cmd_text: str) -> None:
+def _merge_commands(source: TranscribeBundle, target: TranscribeBundle) -> None:
     """Merge commands from source bundle into target bundle.
 
     Args:
         source: The source bundle containing commands to merge.
         target: The target bundle to receive the merged commands.
-        merge_cmd_text: The original merge command text to mark as executed.
 
     Side Effects:
         - Marks the merge command as executed in the source bundle
@@ -112,19 +111,14 @@ def _merge_commands(source: TranscribeBundle, target: TranscribeBundle, merge_cm
         - Writes the merged commands file to the target bundle directory
 
     """
-    if not source.commands:
-        return
-
-    # Mark merge command as executed before merging
-    # If we don't it could trigger another merge for the target bundle
-    source.set_command_executed(merge_cmd_text)
-    if target.commands:
+    if target.commands and source.commands:  # merge case
         merged_commands = target.commands.commands + source.commands.commands
         target.commands = CommandsFile(text="", commands=merged_commands)
-    else:
+    elif source.commands:  # only sources has command
         target.commands = source.commands
 
-    target.commands.write(target.get_bundle_dir(), source.fs_service)
+    if target.commands:
+        target.commands.write(target.get_bundle_dir(), target.fs_service)
 
 
 @command_handler
@@ -158,7 +152,10 @@ def handle_merge(current_bundle: TranscribeBundle, _config: TranscribeConfig, me
     current_bundle_dir = current_bundle.get_bundle_dir()
 
     _move_audio_to_bundle(source=current_bundle, target=previous_bundle)
-    _merge_commands(source=current_bundle, target=previous_bundle, merge_cmd_text=merge_cmd_text)
+    # Mark merge command as executed before merging
+    # If we don't it could trigger another merge for the target bundle
+    current_bundle.set_command_executed(merge_cmd_text)
+    _merge_commands(source=current_bundle, target=previous_bundle)
     _merge_transcripts(source=current_bundle, target=previous_bundle)
 
     # Clear previous summary to let it regenerate
