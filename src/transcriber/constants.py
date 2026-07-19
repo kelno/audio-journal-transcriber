@@ -11,8 +11,9 @@ DELETED_DIR_NAME = "_deleted"
 # summary regeneration.
 CUSTOM_CONTEXT_FILENAME = "custom_context.md"
 DEFAULT_CUSTOM_CONTEXT_CONTENT = (
-    '[//]: # "Optional context to help the summary. Lines starting with [//]: are ignored."\n'
-    '[//]: # "Example: this voice memo is a draft message to my friend Alice."\n'
+    "[//]: # Optional context to help the summary. Lines starting with [//]: are ignored.\n"
+    "[//]: # Changes to this file will trigger a new summary and bundle name generation.\n"
+    "[//]: # Example: this voice memo is a draft message to my friend Alice.\n"
 )
 
 MULTIPLE_TRANSCRIPTS_SEPARATOR = "\n\n---\n(next transcripted audio follows)\n\n"
