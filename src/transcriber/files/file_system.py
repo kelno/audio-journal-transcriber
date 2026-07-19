@@ -50,6 +50,11 @@ class FileSystemService(ABC):
         ...
 
     @abstractmethod
+    def ensure_directory_exists(self, directory: Path) -> None:
+        """Create directory and any necessary parent directories if they don't exist."""
+        ...
+
+    @abstractmethod
     def read_file(self, path: Path) -> str:
         """Read file contents.
 
@@ -213,6 +218,12 @@ class RealFileSystemService(FileSystemService):
 
         """
         return path.is_dir()
+
+    @override
+    def ensure_directory_exists(self, directory: Path) -> None:
+        """Create directory and any necessary parent directories if they don't exist."""
+        if not directory.exists():
+            directory.mkdir(parents=True, exist_ok=True)
 
     @override
     def read_file(self, path: Path) -> str:

@@ -18,7 +18,6 @@ from .exception import AbortRemainingBundleJobsException, EmptyTranscriptExcepti
 from .files.metadata import AudioFileMeta
 from .logger import logger
 from .transcribe_bundle import TranscribeBundle
-from .utils import ensure_directory_exists
 
 
 @dataclass
@@ -81,7 +80,7 @@ class CreateBundleJob(TranscribeBundleJob):
                 self._validate_audio_files(files_to_move, config.general.min_length_seconds)
 
                 # Move all files
-                ensure_directory_exists(final_audio_paths[0].parent)
+                self.bundle.fs_service.ensure_directory_exists(final_audio_paths[0].parent)
                 for source_path, final_path in files_to_move:
                     self.bundle.fs_service.move_file(source_path, final_path)
 

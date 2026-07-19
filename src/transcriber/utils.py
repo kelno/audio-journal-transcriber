@@ -7,12 +7,6 @@ from zoneinfo import ZoneInfo
 from .logger import logger
 
 
-def ensure_directory_exists(directory: Path) -> None:
-    """Create directory and any necessary parent directories if they don't exist."""
-    if not directory.exists():
-        directory.mkdir(parents=True, exist_ok=True)
-
-
 def remove_empty_subdirs(directory: Path) -> None:
     """Recursively remove directories inside given directory if they're empty."""
     try:

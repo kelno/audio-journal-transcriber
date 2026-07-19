@@ -33,6 +33,12 @@ class FakeFileSystemService(FileSystemService):
         return path in self.directories
 
     @override
+    def ensure_directory_exists(self, directory: Path) -> None:
+        """Create directory and any necessary parent directories if they don't exist."""
+        if not self.directory_exists(directory):
+            self.create_directory(directory)
+
+    @override
     def read_file(self, path: Path) -> str:
         """Read file contents.
 

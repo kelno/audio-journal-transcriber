@@ -26,7 +26,6 @@ from transcriber.transcribe_bundle_job import (
     TranscriptionJob,
 )
 from transcriber.utils import (
-    ensure_directory_exists,
     file_is_in_directory_tree,
     remove_empty_subdirs,
 )
@@ -127,7 +126,7 @@ class AudioTranscriber:
     def validate_environment(self) -> None:
         """Raise if missing any environment requirements."""
         input_dir = self.config.general.input_dir
-        if not input_dir.exists():
+        if not self.fs_service.directory_exists(input_dir):
             msg = f"Input directory does not exist: {input_dir}"
             raise AudioTranscriberException(msg)
 
@@ -159,7 +158,7 @@ class AudioTranscriber:
         Returns a BundleJobs for each audio file found in pending directory,
         and for each bundle found in the managed store directory.
         """
-        if not input_dir.exists():
+        if not self.fs_service.directory_exists(input_dir):
             msg = f"Input directory does not exist: {input_dir}"
             raise FileNotFoundError(msg)
 
@@ -313,7 +312,7 @@ class AudioTranscriber:
         store_dir = self.config.general.store_dir
 
         # Create store_dir if needed
-        ensure_directory_exists(store_dir)
+        self.fs_service.ensure_directory_exists(store_dir)
 
         self.log_section_header("Gathering Jobs")
         all_bundle_jobs = self.gather_jobs(input_dir)
