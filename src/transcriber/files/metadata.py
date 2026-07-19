@@ -29,6 +29,9 @@ class Metadata(BaseModel):
     summary_model_used: str | None = None
     bundle_name_generated: bool = False
     keep_forever: bool = False
+    # sha256[:16] of the effective custom_context.md content. None means the hash
+    # has not been computed yet (e.g. metadata written before this field existed).
+    summary_context_hash: str | None = None
 
 
 class MetadataFile(Metadata):

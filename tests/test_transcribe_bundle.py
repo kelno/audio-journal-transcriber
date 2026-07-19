@@ -11,16 +11,149 @@ from transcriber.commands.command_type import CommandType
 from transcriber.config import TranscribeConfig
 from transcriber.constants import (
     COMMANDS_FILENAME,
+    CUSTOM_CONTEXT_FILENAME,
+    DEFAULT_CUSTOM_CONTEXT_CONTENT,
     METADATA_FILENAME,
     SUMMARY_FILENAME,
     TRANSCRIPT_FILENAME,
 )
 from transcriber.exception import InvalidBundleException
 from transcriber.files.metadata import AudioFileMeta, MetadataFile
-from transcriber.files.text_file import TranscriptFile
+from transcriber.files.text_file import CustomContextFile, TranscriptFile
 from transcriber.transcribe_bundle import TranscribeBundle
 
 from .fake_file_system import FakeFileSystemService
+
+
+class TestCustomContextFile:
+    """Tests for the per-bundle custom_context.md model and helpers."""
+
+    def test_filename_is_custom_context_md(self) -> None:
+        """CustomContextFile uses the expected filename."""
+        assert CustomContextFile(text="").get_filename() == CUSTOM_CONTEXT_FILENAME
+
+    def test_from_file_reads_content(self, fake_fs: FakeFileSystemService, generic_bundle_dir: Path) -> None:
+        """Loading a custom_context.md file yields its text."""
+        fake_fs.write_file(generic_bundle_dir / CUSTOM_CONTEXT_FILENAME, "This is a message to my lord and master Bobby.")
+        ctx = CustomContextFile.from_file(generic_bundle_dir / CUSTOM_CONTEXT_FILENAME, fake_fs)
+        assert ctx.text == "This is a message to my lord and master Bobby."
+
+
+class TestCustomContextHelpers:
+    """Tests for get_effective_context and compute_context_hash."""
+
+    def test_missing_file_is_empty_context(
+        self,
+        fake_config: TranscribeConfig,
+        fake_fs: FakeFileSystemService,
+        fake_audio_service: FakeAudioService,
+        generic_bundle: TranscribeBundle,
+    ) -> None:
+        """A bundle without a custom_context.md resolves to empty context."""
+        bundle = TranscribeBundle.from_existing_directory(
+            existing_dir=generic_bundle.get_bundle_dir(),
+            config=fake_config,
+            fs_service=fake_fs,
+            audio_service=fake_audio_service,
+        )
+        assert bundle.custom_context is None
+        assert bundle.get_effective_context() == ""
+
+    def test_default_header_is_empty_context(
+        self,
+        fake_config: TranscribeConfig,
+        fake_fs: FakeFileSystemService,
+        fake_audio_service: FakeAudioService,
+        generic_bundle: TranscribeBundle,
+    ) -> None:
+        """The pregenerated comment-only header counts as empty context."""
+        fake_fs.write_file(generic_bundle.get_bundle_dir() / CUSTOM_CONTEXT_FILENAME, DEFAULT_CUSTOM_CONTEXT_CONTENT)
+        bundle = TranscribeBundle.from_existing_directory(
+            existing_dir=generic_bundle.get_bundle_dir(),
+            config=fake_config,
+            fs_service=fake_fs,
+            audio_service=fake_audio_service,
+        )
+        assert bundle.get_effective_context() == ""
+
+    def test_comment_lines_are_stripped(
+        self,
+        fake_config: TranscribeConfig,
+        fake_fs: FakeFileSystemService,
+        fake_audio_service: FakeAudioService,
+        generic_bundle: TranscribeBundle,
+    ) -> None:
+        """Markdown comment lines are ignored; only real content remains."""
+        content = '[//]: # "ignored header line"\nThis is my rant about pastas.\n[//]: # "another ignored line"\n'
+        fake_fs.write_file(generic_bundle.get_bundle_dir() / CUSTOM_CONTEXT_FILENAME, content)
+        bundle = TranscribeBundle.from_existing_directory(
+            existing_dir=generic_bundle.get_bundle_dir(),
+            config=fake_config,
+            fs_service=fake_fs,
+            audio_service=fake_audio_service,
+        )
+        assert bundle.get_effective_context() == "This is my rant about pastas."
+
+    def test_hash_is_stable_and_ignores_comment_edits(
+        self,
+        fake_config: TranscribeConfig,
+        fake_fs: FakeFileSystemService,
+        fake_audio_service: FakeAudioService,
+        generic_bundle: TranscribeBundle,
+    ) -> None:
+        """Editing only the comment header must not change the context hash."""
+        generic_bundle_dir = generic_bundle.get_bundle_dir()
+        fake_fs.write_file(generic_bundle_dir / CUSTOM_CONTEXT_FILENAME, DEFAULT_CUSTOM_CONTEXT_CONTENT)
+        bundle_a = TranscribeBundle.from_existing_directory(
+            existing_dir=generic_bundle_dir,
+            config=fake_config,
+            fs_service=fake_fs,
+            audio_service=fake_audio_service,
+        )
+        hash_a = bundle_a.compute_context_hash()
+
+        # Change only the comment text, keep it comment-only.
+        fake_fs.write_file(
+            generic_bundle_dir / CUSTOM_CONTEXT_FILENAME,
+            '[//]: # "a different header comment"\n',
+        )
+        bundle_b = TranscribeBundle.from_existing_directory(
+            existing_dir=generic_bundle_dir,
+            config=fake_config,
+            fs_service=fake_fs,
+            audio_service=fake_audio_service,
+        )
+        assert bundle_b.compute_context_hash() == hash_a
+
+    def test_hash_changes_with_real_content(
+        self,
+        fake_config: TranscribeConfig,
+        fake_fs: FakeFileSystemService,
+        fake_audio_service: FakeAudioService,
+        generic_bundle: TranscribeBundle,
+        generic_bundle_dir: Path,
+    ) -> None:
+        """Adding real (non-comment) content changes the context hash."""
+        fake_fs.write_file(generic_bundle_dir / CUSTOM_CONTEXT_FILENAME, DEFAULT_CUSTOM_CONTEXT_CONTENT)
+        bundle_a = TranscribeBundle.from_existing_directory(
+            existing_dir=generic_bundle_dir,
+            config=fake_config,
+            fs_service=fake_fs,
+            audio_service=fake_audio_service,
+        )
+        hash_a = bundle_a.compute_context_hash()
+
+        fake_fs.write_file(
+            generic_bundle_dir / CUSTOM_CONTEXT_FILENAME,
+            DEFAULT_CUSTOM_CONTEXT_CONTENT + "This is a message to my team lead.\n",
+        )
+        bundle_b = TranscribeBundle.from_existing_directory(
+            existing_dir=generic_bundle_dir,
+            config=fake_config,
+            fs_service=fake_fs,
+            audio_service=fake_audio_service,
+        )
+        assert bundle_b.compute_context_hash() != hash_a
 
 
 class TestTranscribeBundleFromAudioFile:

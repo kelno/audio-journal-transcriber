@@ -10,7 +10,7 @@ from tests.fake_file_system import FakeFileSystemService
 from transcriber.config import TranscribeConfig
 from transcriber.files.commands_file import CommandsFile
 from transcriber.files.metadata import AudioFileMeta, MetadataFile
-from transcriber.files.text_file import SummaryFile, TranscriptFile
+from transcriber.files.text_file import CustomContextFile, SummaryFile, TranscriptFile
 from transcriber.transcribe_bundle import TranscribeBundle
 
 
@@ -49,6 +49,7 @@ def transcribe_bundle_factory(
         transcript_model_used: list[str] | str | None = None,
         keep_forever: bool = False,
         config: TranscribeConfig | None = None,
+        custom_context: CustomContextFile | None = None,
     ) -> TranscribeBundle:
         config = config or fake_config
         bundle_dir = config.general.store_dir / bundle_name
@@ -66,6 +67,7 @@ def transcribe_bundle_factory(
             fs_service=fake_fs,
             audio_service=fake_audio_service,
             config=config,
+            custom_context=custom_context,
         )
         bundle.init_metadata([audio_filename])
 
@@ -73,8 +75,10 @@ def transcribe_bundle_factory(
             models = [transcript_model_used] if isinstance(transcript_model_used, str) else transcript_model_used
             if bundle.metadata.audio_files:
                 bundle.metadata.audio_files[0].transcript_model_used = models
+
         if keep_forever:
             bundle.metadata.keep_forever = keep_forever
+
         bundle.metadata.write(bundle_dir, fake_fs)
 
         if commands and bundle.commands:
@@ -87,8 +91,12 @@ def transcribe_bundle_factory(
 
         if transcript_text and bundle.transcript:
             bundle.transcript.write(bundle_dir, fake_fs)
+
         if summary_text and bundle.summary:
             bundle.summary.write(bundle_dir, fake_fs)
+
+        if custom_context and bundle.custom_context:
+            bundle.custom_context.write(bundle_dir, fake_fs)
 
         return bundle
 

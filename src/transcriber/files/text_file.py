@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import override
 
 from transcriber.constants import (
+    CUSTOM_CONTEXT_FILENAME,
     SUMMARY_FILENAME,
     TRANSCRIPT_FILENAME,
 )
@@ -58,6 +59,40 @@ class TextFile(ABC):
 
         Returns:
             TextFile: An instance of the appropriate TextFile subclass.
+
+        """
+        text = fs_service.read_file(file_path)
+        return cls(text=text)
+
+
+@dataclass
+class CustomContextFile(TextFile):
+    """Represents a user-provided context file in a bundle.
+
+    The content helps the summary process with information the transcript lacks
+    (e.g. who a message is addressed to). Markdown comment lines starting with
+    '[//]:' are ignored when computing the effective context.
+    """
+
+    @override
+    def get_filename(self) -> str:
+        return CUSTOM_CONTEXT_FILENAME
+
+    @classmethod
+    @override
+    def from_file(
+        cls,
+        file_path: Path,
+        fs_service: FileSystemService,
+    ) -> "CustomContextFile":
+        """Create a CustomContextFile instance from an existing file.
+
+        Args:
+            file_path: Path to the file to read.
+            fs_service: FileSystemService instance for reading files.
+
+        Returns:
+            CustomContextFile: A CustomContextFile instance.
 
         """
         text = fs_service.read_file(file_path)

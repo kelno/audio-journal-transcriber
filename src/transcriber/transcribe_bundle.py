@@ -1,5 +1,6 @@
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
+from hashlib import sha256
 from pathlib import Path
 from typing import override
 
@@ -9,6 +10,7 @@ from transcriber.commands.command_type import CommandType
 from transcriber.config import TranscribeConfig
 from transcriber.constants import (
     COMMANDS_FILENAME,
+    CUSTOM_CONTEXT_FILENAME,
     METADATA_FILENAME,
     SUMMARY_FILENAME,
     TRANSCRIPT_FILENAME,
@@ -18,6 +20,7 @@ from transcriber.files.commands_file import CommandsFile
 from transcriber.files.file_system import FileSystemService
 from transcriber.files.metadata import AudioFileMeta, MetadataFile
 from transcriber.files.text_file import (
+    CustomContextFile,
     SummaryFile,
     TranscriptFile,
 )
@@ -43,6 +46,7 @@ class TranscribeBundle:
     transcript: TranscriptFile | None = None
     summary: SummaryFile | None = None
     commands: CommandsFile | None = None
+    custom_context: CustomContextFile | None = None
 
     @override
     def __str__(self) -> str:
@@ -58,6 +62,7 @@ class TranscribeBundle:
         TranscriptFile | None,
         SummaryFile | None,
         CommandsFile | None,
+        CustomContextFile | None,
     ]:
         """Load audio paths and text files from bundle directory."""
         meta_file_path = existing_dir / METADATA_FILENAME
@@ -71,6 +76,7 @@ class TranscribeBundle:
         transcript: TranscriptFile | None = None
         summary: SummaryFile | None = None
         commands: CommandsFile | None = None
+        custom_context: CustomContextFile | None = None
 
         for file_path in fs_service.list_directory(existing_dir):
             if is_handled_audio_file(file_path.suffix):
@@ -81,8 +87,10 @@ class TranscribeBundle:
                 summary = SummaryFile.from_file(file_path, fs_service)
             elif file_path.name == COMMANDS_FILENAME:
                 commands = CommandsFile.from_file(file_path, fs_service)
+            elif file_path.name == CUSTOM_CONTEXT_FILENAME:
+                custom_context = CustomContextFile.from_file(file_path, fs_service)
 
-        return metadata, source_audios, transcript, summary, commands
+        return metadata, source_audios, transcript, summary, commands, custom_context
 
     @classmethod
     def from_existing_directory(
@@ -108,7 +116,7 @@ class TranscribeBundle:
 
         """
         bundle_name = existing_dir.name
-        metadata, source_audios, transcript, summary, commands = cls._load_bundle_files(
+        metadata, source_audios, transcript, summary, commands, custom_context = cls._load_bundle_files(
             existing_dir,
             fs_service,
         )
@@ -123,6 +131,7 @@ class TranscribeBundle:
             transcript=transcript,
             summary=summary,
             commands=commands,
+            custom_context=custom_context,
             fs_service=fs_service,
             audio_service=audio_service,
             config=config,
@@ -506,6 +515,28 @@ class TranscribeBundle:
         self.metadata.write(self.get_bundle_dir(), self.fs_service)
         self.summary = SummaryFile(summary)
         self.summary.write(self.get_bundle_dir(), self.fs_service)
+
+    def get_effective_context(self) -> str:
+        """Return the user-provided context with comment lines and whitespace removed.
+
+        Markdown comment lines starting with ``[//]:`` are ignored so the
+        pregenerated header never counts as real content. A missing file or a
+        file containing only the default header both resolve to an empty string,
+        which keeps the summary stable across context-file additions/removals.
+        """
+        if self.custom_context is None:
+            return ""
+        lines = [line for line in self.custom_context.text.splitlines() if not line.lstrip().startswith("[//]:")]
+        return "\n".join(lines).strip()
+
+    def compute_context_hash(self) -> str:
+        """Return a short hash of the effective context for change detection.
+
+        Uses sha256 over the effective context; truncated to 16 hex characters.
+        Cheap for the small inputs involved and stable across runs.
+        """
+        effective = self.get_effective_context()
+        return sha256(effective.encode("utf-8")).hexdigest()[:16]
 
     def set_and_write_commands(
         self,
