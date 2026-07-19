@@ -59,19 +59,42 @@ class AIManager:
 
         return response
 
-    def get_ai_summary(self, transcript: str) -> str:
+    def get_ai_summary(
+        self,
+        transcript: str,
+        record_context: str | None = None,
+    ) -> str:
         """Generate AI summary from transcript.
+
+        Args:
+            transcript: The transcript text to summarize.
+            record_context: Optional per-recording context provided by the user
+                (e.g. who a message is addressed to). It is kept distinct from the
+                operator-level global context so the model knows which is which.
 
         Raises:
             *: Pass through any exceptions from the OpenAI client.
 
         """
-        extra_context_prompt = (
-            f"Some extra context:\n{self.config.text.extra_context}" if self.config.text.extra_context is not None else ""
-        )
+        global_context = self.config.text.extra_context or "None provided."
+        recording_context = record_context or "None provided."
         prompt = f"""
             You are part of an automated pipeline that transcribes personal audio recordings and summarizes them.
             Your task: Summarize the input transcript and output a structured markdown file.
+
+            **Context to help you summarize**
+            The transcript is a raw spoken recording and may lack context (for example, who a
+            message is addressed to, or the broader situation). Use the sections below to resolve
+            ambiguity and fill gaps. Never invent facts that contradict the transcript; if the
+            context conflicts with what was actually said, follow the transcript and note the conflict.
+
+            <operator_global_context>
+            {global_context}
+            </operator_global_context>
+
+            <recording_specific_context>
+            {recording_context}
+            </recording_specific_context>
 
             **Instructions**
             - Detect the language of the transcript and **write the entire content (except section titles) in that same language**.
@@ -89,13 +112,12 @@ class AIManager:
             # Action items
             [List of actionable points only if clearly stated in the transcript; otherwise write "(None)"]
             ```
-            {extra_context_prompt}
             ---
             Transcript:
             {transcript}
         """
         summary = self.query_chat_completion(prompt)
-        logger.debug(f"get_ai_summary succeeded. Excerpt: {summary[:160]} [...]")
+        logger.debug(f"get_ai_summary succeeded. Excerpt: {summary[:160]} [...]]")
         return summary
 
     def get_bundle_name_summary(self, summary: str) -> str:

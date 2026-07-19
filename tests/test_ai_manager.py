@@ -169,6 +169,32 @@ We discussed the Q3 roadmap...
         prompt = messages[1]["content"]
         assert "Important: Be concise" in prompt
 
+    def test_get_ai_summary_separates_global_and_recording_context(
+        self,
+        fake_config: TranscribeConfig,
+    ) -> None:
+        """Global and recording-specific context appear in distinct labeled blocks."""
+        fake_config.text.extra_context = "Operator note: always be formal"
+        fake_chat_client = FakeChatClient(response="Summary")
+        fake_audio_client = FakeAudioClient()
+        ai_manager = AIManager(
+            audio_client=fake_audio_client,
+            chat_client=fake_chat_client,
+            config=fake_config,
+        )
+
+        ai_manager.get_ai_summary(
+            "transcript",
+            record_context="This is a recording of me trying to convince my wife pigeons are the best birds.",
+        )
+
+        prompt = fake_chat_client.completion_calls[0][1]["content"]
+        # Both contexts are present and clearly labeled/distinguishable.
+        assert "<operator_global_context>" in prompt
+        assert "Operator note: always be formal" in prompt
+        assert "<recording_specific_context>" in prompt
+        assert "This is a recording of me trying to convince my wife pigeons are the best birds." in prompt
+
 
 class TestAIManagerBundleName:
     """Tests for the get_bundle_name_summary method."""

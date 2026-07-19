@@ -217,9 +217,17 @@ class SummaryJob(TranscribeBundleJob):
             msg = f"{self}: Cannot generate ai summary without transcript"
             raise ValueError(msg)
 
-        summary_content = ai_manager.get_ai_summary(self.bundle.transcript.text)
+        summary_content = ai_manager.get_ai_summary(
+            self.bundle.transcript.text,
+            record_context=self.bundle.get_effective_context(),
+        )
         logger.info(f"Summary complete. Excerpt: {summary_content[:40]}")
         self.bundle.set_and_write_summary(summary_content)
+
+        # Persist the context hash so the next run can detect whether the
+        # user-edited custom_context.md requires regenerating the summary.
+        self.bundle.metadata.summary_context_hash = self.bundle.compute_context_hash()
+        self.bundle.metadata.write(self.bundle.get_bundle_dir(), self.bundle.fs_service)
 
 
 @dataclass

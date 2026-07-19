@@ -34,6 +34,7 @@ class TranscribeBundleFactory(Protocol):
         transcript_model_used: list[str] | str | None = None,
         keep_forever: bool = False,
         config: TranscribeConfig | None = None,
+        custom_context: str | None = None,
     ) -> TranscribeBundle:
         """Factory callable returning a `TranscribeBundle` for tests."""
         ...
@@ -57,7 +58,7 @@ def transcribe_bundle_factory(
         transcript_model_used: list[str] | str | None = None,
         keep_forever: bool = False,
         config: TranscribeConfig | None = None,
-        custom_context: CustomContextFile | None = None,
+        custom_context: str | None = None,
     ) -> TranscribeBundle:
         config = config or fake_config
         bundle_dir = config.general.store_dir / bundle_name
@@ -75,7 +76,7 @@ def transcribe_bundle_factory(
             fs_service=fake_fs,
             audio_service=fake_audio_service,
             config=config,
-            custom_context=custom_context,
+            custom_context=CustomContextFile(custom_context) if custom_context else None,
         )
         bundle.init_metadata([audio_filename])
 
@@ -97,18 +98,16 @@ def transcribe_bundle_factory(
 
         fake_fs.write_file(bundle_dir / audio_filename, "Audio")
 
-        if transcript_text and bundle.transcript:
+        if bundle.transcript:
             bundle.transcript.write(bundle_dir, fake_fs)
 
-        if summary_text and bundle.summary:
+        if bundle.summary:
             bundle.summary.write(bundle_dir, fake_fs)
 
-        if custom_context and bundle.custom_context:
-            bundle.custom_context.write(bundle_dir, fake_fs)
-        elif not fake_fs.file_exists(bundle_dir / CUSTOM_CONTEXT_FILENAME):
-            # Mirror CreateBundleJob: seed the default context file so the
-            # factory reflects real bundle behavior.
-            CustomContextFile(DEFAULT_CUSTOM_CONTEXT_CONTENT).write(bundle_dir, fake_fs)
+        if not bundle.custom_context:
+            bundle.custom_context = CustomContextFile(DEFAULT_CUSTOM_CONTEXT_CONTENT)
+
+        bundle.custom_context.write(bundle_dir, fake_fs)
 
         return bundle
 
