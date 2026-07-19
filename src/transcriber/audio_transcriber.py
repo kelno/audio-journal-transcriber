@@ -272,7 +272,7 @@ class AudioTranscriber:
         if not config.text.summary_enabled:
             return jobs
 
-        if not bundle.summary and self._should_generate_summary(bundle, existing_jobs):
+        if self._should_generate_summary(bundle, existing_jobs):
             jobs.append(SummaryJob(bundle, dry_run))
 
         # always needs to be done after summary as this relies on summary content
@@ -286,8 +286,21 @@ class AudioTranscriber:
         bundle: TranscribeBundle,
         existing_jobs: list[TranscribeBundleJob],
     ) -> bool:
-        """Return whether a summary job can be scheduled."""
-        return bundle.transcript is not None or any(isinstance(job, TranscriptionJob) for job in existing_jobs)
+        """Return whether a summary job should be scheduled for the bundle.
+
+        A summary is needed when:
+        - no summary exists yet and a transcript is (or will be) available, or
+        - a summary already exists but the user-provided context
+          (custom_context.md) changed since the summary was generated, detected
+          via the persisted summary_context_hash.
+        """
+        has_transcript = bundle.transcript is not None or any(isinstance(job, TranscriptionJob) for job in existing_jobs)
+        if not has_transcript:
+            return False
+        if bundle.summary is None:
+            return True
+        # Summary exists: regenerate only if the recording-specific context changed.
+        return bundle.metadata.summary_context_hash != bundle.compute_context_hash()
 
     def run(self) -> list[BundleJobs]:
         """Process all files.
