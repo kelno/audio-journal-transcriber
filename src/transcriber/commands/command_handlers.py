@@ -20,7 +20,7 @@ from transcriber.exception import (
     UnknownCommandException,
 )
 from transcriber.files.metadata import AudioFileMeta
-from transcriber.files.text_file import TranscriptFile
+from transcriber.files.text_file import CustomContextFile, TranscriptFile
 from transcriber.logger import logger
 from transcriber.transcribe_bundle import TranscribeBundle
 
@@ -136,6 +136,25 @@ def _remove_merge_failed_marker(target: TranscribeBundle, fs_service: FileSystem
         fs_service.delete_file(marker_path)
 
 
+def _merge_custom_context(source: TranscribeBundle, target: TranscribeBundle) -> None:
+    """Merge custom_context.md from the source bundle into the target.
+
+    The user-provided context of both bundles is concatenated (target's first, then
+    the source's) so the combined bundle keeps the context of both recordings.
+    Only the effective context is merged (markdown ``[//]:`` comment lines are
+    ignored), which avoids duplicating the boilerplate default header.
+
+    If the source has no effective context, the target is left untouched.
+    """
+    source_ctx = source.get_effective_context()
+    if not source_ctx:
+        return
+    target_ctx = target.get_effective_context()
+    merged = f"{target_ctx}\n\n{source_ctx}" if target_ctx else source_ctx
+    target.custom_context = CustomContextFile(merged)
+    target.custom_context.write(target.get_bundle_dir(), target.fs_service)
+
+
 def _merge_transcripts(source: TranscribeBundle, target: TranscribeBundle) -> None:
     target_t = target.transcript
     source_t = source.transcript
@@ -233,6 +252,8 @@ def handle_merge(source: TranscribeBundle, _config: TranscribeConfig, merge_cmd_
     Side effects / merge policy:
         - Audio, transcript, commands and transcript-model metadata are merged into
           the previous (target) bundle.
+        - The per-bundle custom_context.md is concatenated into the target so the
+          combined bundle keeps the context of both recordings.
         - The summary is always cleared (and ``summary_model_used`` reset) so it gets
           regenerated for the combined bundle. This is intentional: a summary written
           for only part of the merged content would be stale. Any summary on the
@@ -279,6 +300,7 @@ def handle_merge(source: TranscribeBundle, _config: TranscribeConfig, merge_cmd_
     try:
         _merge_commands(source=source, target=target)
         _merge_transcripts(source=source, target=target)
+        _merge_custom_context(source=source, target=target)
 
         # Clear the summary on every merge so it regenerates for the combined bundle.
         # Intentional policy: a summary produced from only part of the merged content

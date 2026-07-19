@@ -7,12 +7,13 @@ from tests.fake_audio_service import FakeAudioService
 from tests.fake_file_system import FakeFileSystemService
 from transcriber.commands.command_handlers import handle_merge
 from transcriber.config import TranscribeConfig
-from transcriber.constants import MERGE_FAILED_FILENAME, MULTIPLE_TRANSCRIPTS_SEPARATOR
+from transcriber.constants import CUSTOM_CONTEXT_FILENAME, MERGE_FAILED_FILENAME, MULTIPLE_TRANSCRIPTS_SEPARATOR
 from transcriber.exception import (
     AbortRemainingBundleJobsException,
     MergeBlockedException,
     NoPreviousBundleException,
 )
+from transcriber.files.text_file import CustomContextFile
 from transcriber.transcribe_bundle import TranscribeBundle
 
 
@@ -250,6 +251,46 @@ class TestHandleMerge:
         # keep_forever stays True from the earlier merge
         assert twice_merged.metadata.keep_forever is True
         assert not fake_fs.directory_exists(third_bundle_dir)
+
+    def test_handle_merge_concatenates_custom_context(
+        self,
+        fake_config: TranscribeConfig,
+        fake_fs: FakeFileSystemService,
+        fake_audio_service: FakeAudioService,
+        transcribe_bundle_factory: TranscribeBundleFactory,
+    ) -> None:
+        """Merge concatenates the source's custom_context into the target."""
+        previous_context = "Context about the previous recording.\n"
+        previous_bundle = transcribe_bundle_factory(
+            bundle_name="2025-01-15_previous",
+            audio_filename="Recording 20250115010000.mp3",
+            transcript_text="previous transcript",
+            custom_context=previous_context,
+        )
+        current_context = "Context about the current recording.\n"
+        current_bundle = transcribe_bundle_factory(
+            bundle_name="2025-01-15_meeting",
+            audio_filename="Recording 20250115090000.mp3",
+            transcript_text="current transcript",
+            commands=["merge"],
+            custom_context=current_context,
+        )
+        previous_bundle_dir = previous_bundle.get_bundle_dir()
+        current_bundle_dir = current_bundle.get_bundle_dir()
+
+        with pytest.raises(AbortRemainingBundleJobsException):
+            handle_merge(current_bundle, fake_config, "merge")
+
+        assert not fake_fs.directory_exists(current_bundle_dir)
+
+        merged_bundle = TranscribeBundle.from_existing_directory(
+            existing_dir=previous_bundle_dir,
+            config=fake_config,
+            fs_service=fake_fs,
+            audio_service=fake_audio_service,
+        )
+        # Both contexts are present in the merged bundle (concatenated, target first).
+        assert merged_bundle.get_effective_context() == (f"{previous_context.strip()}\n\n{current_context.strip()}")
 
     def test_handle_merge_concatenates_different_transcript_models(
         self,
