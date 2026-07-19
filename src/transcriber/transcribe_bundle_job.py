@@ -227,6 +227,10 @@ class SummaryJob(TranscribeBundleJob):
         # Persist the context hash so the next run can detect whether the
         # user-edited custom_context.md requires regenerating the summary.
         self.bundle.metadata.summary_context_hash = self.bundle.compute_context_hash()
+        # The summary changed (new content or new context), so the AI-generated
+        # name (derived from the summary) is stale. Reset the flag so the name
+        # job chains after this one and recomputes it.
+        self.bundle.metadata.bundle_name_generated = False
         self.bundle.metadata.write(self.bundle.get_bundle_dir(), self.bundle.fs_service)
 
 

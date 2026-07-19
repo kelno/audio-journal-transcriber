@@ -11,7 +11,7 @@ from transcriber.audio_transcriber import AudioTranscriber
 from transcriber.config import TranscribeConfig
 from transcriber.constants import CUSTOM_CONTEXT_FILENAME
 from transcriber.files.text_file import CustomContextFile
-from transcriber.transcribe_bundle_job import SummaryJob, TranscribeBundleJob
+from transcriber.transcribe_bundle_job import BundleNameJob, SummaryJob, TranscribeBundleJob
 
 
 @pytest.fixture
@@ -40,6 +40,9 @@ class TestSummaryScheduling:
 
     def _has_summary_job(self, jobs: list[TranscribeBundleJob]) -> bool:
         return any(isinstance(job, SummaryJob) for job in jobs)
+
+    def _has_name_job(self, jobs: list[TranscribeBundleJob]) -> bool:
+        return any(isinstance(job, BundleNameJob) for job in jobs)
 
     def test_no_summary_with_transcript_schedules(
         self,
@@ -94,6 +97,8 @@ class TestSummaryScheduling:
 
         jobs = audio_transcriber.gather_bundle_jobs(bundle, bundle.get_bundle_dir().parent, True, audio_transcriber.config)
         assert self._has_summary_job(jobs) is True
+        # The summary changed, so the name job must also chain to recompute it.
+        assert self._has_name_job(jobs) is True
 
     def test_existing_summary_with_removed_context_schedules(
         self,
