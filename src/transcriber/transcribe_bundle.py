@@ -546,37 +546,37 @@ class TranscribeBundle:
         self.commands = CommandsFile.from_command_list(commands)
         self.commands.write(self.get_bundle_dir(), self.fs_service)
 
-    def assert_command(self, cmd_text: str) -> Command:
+    def assert_command(self, cmd_id: str) -> Command:
         """Get a command by text. Command must exists, else throws exception."""
         if not self.commands:
             msg = "Trying to set command matched but bundle has no command"
             raise ValueError(msg)
 
         for cmd in self.commands.commands:
-            if cmd.text == cmd_text:  # we identify command by text
+            if cmd.id == cmd_id:  # we identify command by text
                 return cmd
 
-        msg = f"Failed to find command {cmd_text} in bundle {self}"
+        msg = f"Failed to find command {cmd_id} in bundle {self}"
         raise ValueError(msg)
 
-    def set_command_type(self, cmd_text: str, matched_type: CommandType) -> None:
+    def set_command_type(self, cmd_id: str, matched_type: CommandType) -> None:
         """Mark a raw command with it's matched type."""
-        cmd = self.assert_command(cmd_text)
+        cmd = self.assert_command(cmd_id)
         cmd.matched_type = matched_type
 
         assert self.commands is not None
         self.commands.write(self.get_bundle_dir(), self.fs_service)
 
-    def set_command_executed(self, cmd_text: str) -> None:
+    def set_command_executed(self, cmd_id: str) -> None:
         """Mark a raw command as executed."""
-        cmd = self.assert_command(cmd_text)
+        cmd = self.assert_command(cmd_id)
         cmd.executed = True
         cmd.executed_at = datetime.now(self.config.general.timezone)
 
         assert self.commands is not None
         self.commands.write(self.get_bundle_dir(), self.fs_service)
 
-    def set_last_error(self, cmd_text: str, error: object) -> None:
+    def set_last_error(self, cmd_id: str, error: object) -> None:
         """Set a debug error string for a command and write the commands file.
 
         Coerces `error` to `str`, normalizes newlines, and truncates very long
@@ -584,7 +584,7 @@ class TranscribeBundle:
         (`yaml.dump`) will safely encode multiline strings, so no escaping is
         required beyond ensuring we have a textual value.
         """
-        cmd = self.assert_command(cmd_text)
+        cmd = self.assert_command(cmd_id)
 
         # Sanitize: Coerce to string and normalize newlines
         error_str = str(error) if error is not None else ""

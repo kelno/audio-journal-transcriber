@@ -423,7 +423,9 @@ class TestTranscribeBundleWriteOperations:
         command_one = "do the thing"
         command_two = "do the other thing"
         generic_bundle.set_and_write_commands([command_one, command_two])
-        generic_bundle.set_command_type(command_one, CommandType.MERGE)
+        assert generic_bundle.commands
+        cmd_one_id = generic_bundle.commands.commands[0].id
+        generic_bundle.set_command_type(cmd_one_id, CommandType.MERGE)
 
         assert generic_bundle.commands
         assert generic_bundle.commands.commands[0].matched_type == CommandType.MERGE
@@ -433,7 +435,7 @@ class TestTranscribeBundleWriteOperations:
         assert generic_bundle.commands.commands[0].executed_at is None
         assert generic_bundle.commands.commands[1].executed_at is None
 
-        generic_bundle.set_command_executed(command_one)
+        generic_bundle.set_command_executed(cmd_one_id)
         assert generic_bundle.commands.commands[0].executed
         assert not generic_bundle.commands.commands[1].executed
         assert generic_bundle.commands.commands[0].executed_at is not None

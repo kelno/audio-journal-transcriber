@@ -343,18 +343,19 @@ class TestCommandsFileMarkExecuted:
     ) -> None:
         """Verify that `set_last_error` records error text in the commands file."""
         bundle_name = "2025-01-15_set_last_error"
-        cmd_text = "do something"
 
         # Create bundle with a single command and write initial files
         bundle = transcribe_bundle_factory(
             bundle_name=bundle_name,
             audio_filename="audio.mp3",
-            commands=[cmd_text],
+            commands=["do something"],
         )
+        assert bundle.commands
+        cmd = bundle.commands.commands[0]
 
         # Set a debug error for the command
         error_msg = "something failed during execution"
-        bundle.set_last_error(cmd_text, error_msg)
+        bundle.set_last_error(cmd.id, error_msg)
 
         # Read commands file and assert the last_error was recorded
         commands_file_path = bundle.get_bundle_dir() / COMMANDS_FILENAME

@@ -5,13 +5,14 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from transcriber.commands.command import Command
     from transcriber.commands.command_type import CommandType
     from transcriber.config import TranscribeConfig
     from transcriber.transcribe_bundle import TranscribeBundle
 
 # Signature shared by every command handler: (bundle, config, command_text) -> None.
 # Defined here rather than in command_handlers to avoid a circular import cycle.
-CommandHandler = Callable[["TranscribeBundle", "TranscribeConfig", str], None]
+CommandHandler = Callable[["TranscribeBundle", "TranscribeConfig", "Command"], None]
 
 
 @dataclass

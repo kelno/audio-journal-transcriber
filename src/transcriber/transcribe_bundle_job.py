@@ -390,7 +390,7 @@ class RunCommandsJob(TranscribeBundleJob):
                 # Should not happen under normal circumstances, but recover from
                 # inconsistent state if a command was marked executed without its type.
                 matched_type = interpret_command(cmd.text, ai_manager)
-                self.bundle.set_command_type(cmd.text, matched_type)
+                self.bundle.set_command_type(cmd.id, matched_type)
                 cmd.matched_type = matched_type
 
             pending_commands.append(cmd)
@@ -422,7 +422,7 @@ class RunCommandsJob(TranscribeBundleJob):
                     )
 
                     # Mark as executed to avoid picking it up when gathering bundle with pending commands.
-                    self.bundle.set_command_executed(cmd.text)
+                    self.bundle.set_command_executed(cmd.id)
                     continue
 
                 max_attemps = COMMAND_REGISTRY[matched_type].max_attempts
@@ -435,9 +435,9 @@ class RunCommandsJob(TranscribeBundleJob):
                 logger.info(f"Executing {matched_type.value} command for bundle {self.bundle}")
 
                 handler = COMMAND_REGISTRY[matched_type].handler
-                handler(self.bundle, config, cmd.text)
+                handler(self.bundle, config, cmd)
 
-                self.bundle.set_command_executed(cmd.text)
+                self.bundle.set_command_executed(cmd.id)
                 seen_executed_types.add(matched_type)
 
             except AbortRemainingBundleJobsException:
@@ -448,7 +448,7 @@ class RunCommandsJob(TranscribeBundleJob):
                 logger.exception(
                     f"{self.bundle}: Failed to process bundle command '{cmd.text}'",
                 )
-                self.bundle.set_last_error(cmd_text=cmd.text, error=str(e))
+                self.bundle.set_last_error(cmd_id=cmd.id, error=str(e))
                 self.bundle.add_command_attempt(cmd_text=cmd.text)
                 raise
 

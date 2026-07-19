@@ -241,13 +241,13 @@ def _write_fail_markers(source: TranscribeBundle, target: TranscribeBundle) -> N
 
 
 @command_handler
-def handle_merge(source: TranscribeBundle, _config: TranscribeConfig, merge_cmd_text: str) -> None:
+def handle_merge(source: TranscribeBundle, _config: TranscribeConfig, merge_cmd: Command) -> None:
     """Merge the current recording with the previous one.
 
     Args:
         source: The transcribe bundle to operate on.
         config: The transcribe configuration.
-        merge_cmd_text: The original command text.
+        merge_cmd: The original command triggering the merge.
 
     Side effects / merge policy:
         - Audio, transcript, commands and transcript-model metadata are merged into
@@ -263,7 +263,7 @@ def handle_merge(source: TranscribeBundle, _config: TranscribeConfig, merge_cmd_
         - The current (source) bundle directory is deleted once the merge succeeds.
 
     """
-    logger.info(f"Running merge command for {source} (command text: {merge_cmd_text})")
+    logger.info(f"Running merge command for {source} (command text: {merge_cmd.text})")
 
     store_dir = source.config.general.store_dir
     bundles = TranscribeBundle.gather_existing_bundles(
@@ -285,7 +285,7 @@ def handle_merge(source: TranscribeBundle, _config: TranscribeConfig, merge_cmd_
     # gap) so a wrong-target merge is noticeable in the logs rather than silent.
     gap_hours = (source.get_bundle_date() - target.get_bundle_date()).total_seconds() / 3600
     logger.info(
-        f"{source}: Merge target selected -> {target}gap = {gap_hours:.1f}h (merge window: {source.config.general.merge_max_hours:.1f}h)",
+        f"{source}: Merge target selected -> {target}, gap = {gap_hours:.1f}h (merge window: {source.config.general.merge_max_hours:.1f}h)",
     )
 
     target_bundle_dir = target.get_bundle_dir()
@@ -330,7 +330,7 @@ def handle_merge(source: TranscribeBundle, _config: TranscribeConfig, merge_cmd_
         # writing to a removed directory and to stop the merged command from
         # re-triggering a merge on the next run. Audio has already been moved into the
         # target, so deleting the source loses no audio.
-        target.set_command_executed(merge_cmd_text)
+        target.set_command_executed(merge_cmd.id)
 
         # Source removed only after the merge is fully committed to the target.
         source.fs_service.delete_directory(source_bundle_dir)
@@ -350,17 +350,17 @@ def handle_merge(source: TranscribeBundle, _config: TranscribeConfig, merge_cmd_
 
 
 @command_handler
-def handle_delete(bundle: TranscribeBundle, _config: TranscribeConfig, cmd_text: str) -> None:
+def handle_delete(bundle: TranscribeBundle, _config: TranscribeConfig, cmd: Command) -> None:
     """Delete the current recording.
 
     Args:
         bundle: The transcribe bundle to operate on.
         config: The transcribe configuration.
-        cmd_text: The original command text.
+        cmd: The original command triggering this.
 
     """
-    logger.debug(f"Running delete command for {bundle} (command text: {cmd_text})")
-    bundle.set_command_executed(cmd_text)
+    logger.debug(f"Running delete command for {bundle} (command text: {cmd.text})")
+    bundle.set_command_executed(cmd.id)
     bundle.fs_service.delete_directory(bundle.get_bundle_dir())
 
     msg = "Skip remaining jobs after delete command"
@@ -368,30 +368,30 @@ def handle_delete(bundle: TranscribeBundle, _config: TranscribeConfig, cmd_text:
 
 
 @command_handler
-def handle_unknown(_bundle: TranscribeBundle, _config: TranscribeConfig, cmd_text: str) -> None:
+def handle_unknown(_bundle: TranscribeBundle, _config: TranscribeConfig, cmd: Command) -> None:
     """Handle unknown command type.
 
     Args:
         bundle: The transcribe bundle to operate on.
         config: The transcribe configuration.
-        cmd_text: The original command text.
+        cmd: The original command triggering this.
 
     Raises:
         ValueError: Always raised as the command type is unknown.
 
     """
-    msg = f"Unknown command type cannot be executed (command text: {cmd_text})"
+    msg = f"Unknown command type cannot be executed (command text: {cmd.text})"
     raise UnknownCommandException(msg)
 
 
 @command_handler
-def handle_ignore(_bundle: TranscribeBundle, _config: TranscribeConfig, cmd_text: str) -> None:
+def handle_ignore(_bundle: TranscribeBundle, _config: TranscribeConfig, cmd: Command) -> None:
     """Handle ignore command type.
 
     Args:
         bundle: The transcribe bundle to operate on.
         config: The transcribe configuration.
-        cmd_text: The original command text.
+        cmd: The original command triggering this.
 
     """
-    logger.debug(f"Command {cmd_text} is ignored.")
+    logger.debug(f"Command {cmd.text} is ignored.")
