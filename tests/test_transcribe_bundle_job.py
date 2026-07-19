@@ -12,7 +12,6 @@ from transcriber.constants import (
     CUSTOM_CONTEXT_FILENAME,
     DEFAULT_CUSTOM_CONTEXT_CONTENT,
 )
-from transcriber.files.text_file import CustomContextFile
 from transcriber.transcribe_bundle import TranscribeBundle
 from transcriber.transcribe_bundle_job import CreateBundleJob, SummaryJob
 
@@ -125,8 +124,8 @@ class TestSummaryJob:
             audio_filename="memo.mp3",
             transcript_text="This is the transcript.",
         )
-        # Precondition: hash not yet computed.
-        assert bundle.metadata.summary_context_hash is None
+        # Precondition: hash was seeded at bundle creation (init_metadata).
+        assert bundle.metadata.summary_context_hash is not None
 
         job = SummaryJob(bundle, dry_run=False)
         job.run(fake_ai_manager, fake_config)

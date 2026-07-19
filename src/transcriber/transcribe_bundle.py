@@ -614,6 +614,7 @@ class TranscribeBundle:
     ) -> None:
         """Initialize metadata with multiple files."""
         self.metadata.audio_files = [AudioFileMeta(filename=name) for name in filenames]
+        self.metadata.summary_context_hash = self.compute_context_hash()
         self.metadata.write(self.get_bundle_dir(), self.fs_service)
 
     def set_and_write_bundle_name(

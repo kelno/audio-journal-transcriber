@@ -9,7 +9,6 @@ from tests.fake_audio_service import FakeAudioService
 from tests.fake_file_system import FakeFileSystemService
 from transcriber.config import TranscribeConfig
 from transcriber.constants import (
-    CUSTOM_CONTEXT_FILENAME,
     DEFAULT_CUSTOM_CONTEXT_CONTENT,
 )
 from transcriber.files.commands_file import CommandsFile
