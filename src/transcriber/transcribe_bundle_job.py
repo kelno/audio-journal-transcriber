@@ -76,17 +76,7 @@ class CreateBundleJob(TranscribeBundleJob):
             logger.info(f"Moving {len(files_to_move)} audio file(s) into bundle")
 
             if not self.dry_run:
-                min_length = config.general.min_length_seconds
-
-                # Validate all files
-                for source_path, _ in files_to_move:
-                    audio_length = self.bundle.audio_service.get_audio_duration(source_path)
-                    if min_length and audio_length < min_length:
-                        raise TooShortException(
-                            source_audio=source_path,
-                            audio_length=audio_length,
-                            min_length=min_length,
-                        )
+                self._validate_audio_files(files_to_move, config.general.min_length_seconds)
 
                 # Move all files
                 ensure_directory_exists(final_audio_paths[0].parent)
@@ -96,6 +86,39 @@ class CreateBundleJob(TranscribeBundleJob):
                 self.bundle.update_audio_paths([Path(p) for _, p in files_to_move])
                 self.bundle.init_metadata(
                     filenames=[p.name for _, p in files_to_move],
+                )
+
+    def _validate_audio_files(
+        self,
+        files_to_move: list[tuple[Path, Path]],
+        min_length: float,
+    ) -> None:
+        """Validate each audio file's duration before moving it into the bundle.
+
+        Logs the affected file path on decoder failures, then re-raises so the
+        caller's job loop can isolate the failure to this bundle.
+
+        Raises:
+            FileNotFoundError: If an audio file does not exist.
+            CouldntDecodeError: If an audio file is unsupported or corrupted.
+            TooShortException: If an audio file is shorter than min_length.
+            Exception: For other unexpected decoder errors.
+
+        """
+        for source_path, _ in files_to_move:
+            try:
+                audio_length = self.bundle.audio_service.get_audio_duration(source_path)
+            except FileNotFoundError:
+                logger.error(f"Audio file not found: {source_path}")
+                raise
+            except Exception as e:  # pylint: disable=broad-exception-caught
+                logger.error(f"Failed to read audio file {source_path}: {type(e).__name__}: {e}")
+                raise
+            if min_length and audio_length < min_length:
+                raise TooShortException(
+                    source_audio=source_path,
+                    audio_length=audio_length,
+                    min_length=min_length,
                 )
 
 
