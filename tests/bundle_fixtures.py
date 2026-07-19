@@ -8,9 +8,17 @@ import pytest
 from tests.fake_audio_service import FakeAudioService
 from tests.fake_file_system import FakeFileSystemService
 from transcriber.config import TranscribeConfig
+from transcriber.constants import (
+    CUSTOM_CONTEXT_FILENAME,
+    DEFAULT_CUSTOM_CONTEXT_CONTENT,
+)
 from transcriber.files.commands_file import CommandsFile
 from transcriber.files.metadata import AudioFileMeta, MetadataFile
-from transcriber.files.text_file import CustomContextFile, SummaryFile, TranscriptFile
+from transcriber.files.text_file import (
+    CustomContextFile,
+    SummaryFile,
+    TranscriptFile,
+)
 from transcriber.transcribe_bundle import TranscribeBundle
 
 
@@ -97,6 +105,10 @@ def transcribe_bundle_factory(
 
         if custom_context and bundle.custom_context:
             bundle.custom_context.write(bundle_dir, fake_fs)
+        elif not fake_fs.file_exists(bundle_dir / CUSTOM_CONTEXT_FILENAME):
+            # Mirror CreateBundleJob: seed the default context file so the
+            # factory reflects real bundle behavior.
+            CustomContextFile(DEFAULT_CUSTOM_CONTEXT_CONTENT).write(bundle_dir, fake_fs)
 
         return bundle
 

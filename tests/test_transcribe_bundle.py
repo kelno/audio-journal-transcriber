@@ -50,6 +50,9 @@ class TestCustomContextHelpers:
         generic_bundle: TranscribeBundle,
     ) -> None:
         """A bundle without a custom_context.md resolves to empty context."""
+        # The factory seeds a default context file; remove it to simulate a
+        # bundle that genuinely has no custom_context.md.
+        fake_fs.delete_file(generic_bundle.get_bundle_dir() / CUSTOM_CONTEXT_FILENAME)
         bundle = TranscribeBundle.from_existing_directory(
             existing_dir=generic_bundle.get_bundle_dir(),
             config=fake_config,
@@ -131,9 +134,9 @@ class TestCustomContextHelpers:
         fake_fs: FakeFileSystemService,
         fake_audio_service: FakeAudioService,
         generic_bundle: TranscribeBundle,
-        generic_bundle_dir: Path,
     ) -> None:
         """Adding real (non-comment) content changes the context hash."""
+        generic_bundle_dir = generic_bundle.get_bundle_dir()
         fake_fs.write_file(generic_bundle_dir / CUSTOM_CONTEXT_FILENAME, DEFAULT_CUSTOM_CONTEXT_CONTENT)
         bundle_a = TranscribeBundle.from_existing_directory(
             existing_dir=generic_bundle_dir,
@@ -145,7 +148,7 @@ class TestCustomContextHelpers:
 
         fake_fs.write_file(
             generic_bundle_dir / CUSTOM_CONTEXT_FILENAME,
-            DEFAULT_CUSTOM_CONTEXT_CONTENT + "This is a message to my team lead.\n",
+            DEFAULT_CUSTOM_CONTEXT_CONTENT + "This is a rant about I much I love drugs.\n",
         )
         bundle_b = TranscribeBundle.from_existing_directory(
             existing_dir=generic_bundle_dir,
