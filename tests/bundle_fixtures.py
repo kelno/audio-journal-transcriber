@@ -78,6 +78,7 @@ def transcribe_bundle_factory(
             custom_context=CustomContextFile(custom_context) if custom_context else None,
         )
         bundle.init_metadata([audio_filename])
+        bundle.init_custom_context()
 
         if transcript_model_used is not None:
             models = [transcript_model_used] if isinstance(transcript_model_used, str) else transcript_model_used
@@ -102,11 +103,6 @@ def transcribe_bundle_factory(
 
         if bundle.summary:
             bundle.summary.write(bundle_dir, fake_fs)
-
-        if not bundle.custom_context:
-            bundle.custom_context = CustomContextFile(DEFAULT_CUSTOM_CONTEXT_CONTENT)
-
-        bundle.custom_context.write(bundle_dir, fake_fs)
 
         return bundle
 

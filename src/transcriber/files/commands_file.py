@@ -60,8 +60,9 @@ class CommandsFile(TextFile):
             )
             raise
 
+    @classmethod
     @override
-    def get_filename(self) -> str:
+    def get_filename(cls) -> str:
         """Get the filename for this file."""
         return COMMANDS_FILENAME
 

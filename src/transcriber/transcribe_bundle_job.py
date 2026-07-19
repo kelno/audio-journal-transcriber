@@ -9,11 +9,8 @@ from transcriber.commands.command_interpreter import extract_raw_commands, inter
 from transcriber.commands.command_registry import COMMAND_REGISTRY
 from transcriber.commands.command_type import CommandType
 from transcriber.constants import (
-    CUSTOM_CONTEXT_FILENAME,
-    DEFAULT_CUSTOM_CONTEXT_CONTENT,
     MULTIPLE_TRANSCRIPTS_SEPARATOR,
 )
-from transcriber.files.text_file import CustomContextFile
 
 from .ai_manager import AIManager
 from .config import TranscribeConfig
@@ -92,16 +89,7 @@ class CreateBundleJob(TranscribeBundleJob):
                 self.bundle.init_metadata(
                     filenames=[p.name for _, p in files_to_move],
                 )
-
-                # Seed the per-bundle context file so the user has a discoverable
-                # place to add summary context. Only create it when missing so we
-                # never overwrite user-provided content on re-runs.
-                bundle_dir = self.bundle.get_bundle_dir()
-                if not self.bundle.fs_service.file_exists(bundle_dir / CUSTOM_CONTEXT_FILENAME):
-                    CustomContextFile(DEFAULT_CUSTOM_CONTEXT_CONTENT).write(
-                        bundle_dir,
-                        self.bundle.fs_service,
-                    )
+                self.bundle.init_custom_context()
 
     def _validate_audio_files(
         self,

@@ -11,6 +11,7 @@ from transcriber.config import TranscribeConfig
 from transcriber.constants import (
     COMMANDS_FILENAME,
     CUSTOM_CONTEXT_FILENAME,
+    DEFAULT_CUSTOM_CONTEXT_CONTENT,
     METADATA_FILENAME,
     SUMMARY_FILENAME,
     TRANSCRIPT_FILENAME,
@@ -614,6 +615,27 @@ class TranscribeBundle:
     ) -> None:
         """Initialize metadata with multiple files."""
         self.metadata.audio_files = [AudioFileMeta(filename=name) for name in filenames]
+        self.metadata.write(self.get_bundle_dir(), self.fs_service)
+
+    def init_custom_context(self) -> None:
+        """Seed the per-bundle context file so the user has a discoverable place to add summary context.
+
+        Possible cases in order of priority:
+        - self.custom_context is already set and can be used
+        - File already exists on disk and can be used
+        - A new empty file should be created
+        Use self.custom_context if already exists
+        Only create it when missing so we never overwrite user-provided content on re-runs.
+        """
+        custom_context_path = self.get_bundle_dir() / CustomContextFile.get_filename()
+        if self.custom_context:
+            self.custom_context.write(self.get_bundle_dir(), self.fs_service)
+        elif self.fs_service.file_exists(custom_context_path):
+            self.custom_context = CustomContextFile.from_file(custom_context_path, self.fs_service)
+        else:
+            self.custom_context = CustomContextFile(DEFAULT_CUSTOM_CONTEXT_CONTENT)
+            self.custom_context.write(self.get_bundle_dir(), self.fs_service)
+
         self.metadata.summary_context_hash = self.compute_context_hash()
         self.metadata.write(self.get_bundle_dir(), self.fs_service)
 

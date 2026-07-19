@@ -17,8 +17,9 @@ class TextFile(ABC):
 
     text: str
 
+    @classmethod
     @abstractmethod
-    def get_filename(self) -> str:
+    def get_filename(cls) -> str:
         """Get the filename for this text file.
 
         Returns:
@@ -74,8 +75,9 @@ class CustomContextFile(TextFile):
     '[//]:' are ignored when computing the effective context.
     """
 
+    @classmethod
     @override
-    def get_filename(self) -> str:
+    def get_filename(cls) -> str:
         return CUSTOM_CONTEXT_FILENAME
 
     @classmethod
@@ -103,8 +105,9 @@ class CustomContextFile(TextFile):
 class SummaryFile(TextFile):
     """Represents a summary file in a bundle."""
 
+    @classmethod
     @override
-    def get_filename(self) -> str:
+    def get_filename(cls) -> str:
         return SUMMARY_FILENAME
 
     @classmethod
@@ -132,8 +135,9 @@ class SummaryFile(TextFile):
 class TranscriptFile(TextFile):
     """Represents a transcript file in a bundle."""
 
+    @classmethod
     @override
-    def get_filename(self) -> str:
+    def get_filename(cls) -> str:
         return TRANSCRIPT_FILENAME
 
     @classmethod
