@@ -3,6 +3,7 @@ from pathlib import Path
 
 from transcriber.ai_manager import AIManager
 from transcriber.audio_service import AudioService, RealAudioService
+from transcriber.commands.command_registry import COMMAND_REGISTRY
 from transcriber.config import TranscribeConfig
 from transcriber.exception import (
     AbortRemainingBundleJobsException,
@@ -251,7 +252,9 @@ class AudioTranscriber:
                 RunCommandsJob(bundle, dry_run),
             ]
 
-        if bundle.commands.has_commands_needing_processing():
+        if bundle.commands.has_commands_needing_processing(
+            max_attempts_for=lambda cmd_type: COMMAND_REGISTRY[cmd_type].max_attempts,
+        ):
             return [RunCommandsJob(bundle, dry_run)]
 
         return []

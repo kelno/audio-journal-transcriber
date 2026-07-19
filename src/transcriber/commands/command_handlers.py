@@ -5,11 +5,9 @@ Contains the implementation logic for each command type.
 
 from __future__ import annotations
 
-from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from transcriber.config import TranscribeConfig
 from transcriber.constants import (
     MERGE_FAILED_FILENAME,
     MULTIPLE_TRANSCRIPTS_SEPARATOR,
@@ -28,10 +26,9 @@ from transcriber.transcribe_bundle import TranscribeBundle
 
 if TYPE_CHECKING:
     from transcriber.commands.command import Command
+    from transcriber.commands.command_definition import CommandHandler
+    from transcriber.config import TranscribeConfig
     from transcriber.files.file_system import FileSystemService
-
-# Returns success
-CommandHandler = Callable[[TranscribeBundle, TranscribeConfig, str], None]
 
 
 def command_handler(func: CommandHandler) -> CommandHandler:

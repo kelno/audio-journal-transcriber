@@ -1,9 +1,10 @@
 # pyright:  reportUnknownArgumentType=false
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import override
+from typing import TYPE_CHECKING, override
 
 import yaml
 
@@ -12,6 +13,9 @@ from transcriber.constants import COMMANDS_FILENAME
 from transcriber.files.file_system import FileSystemService
 from transcriber.files.text_file import TextFile
 from transcriber.logger import logger
+
+if TYPE_CHECKING:
+    from transcriber.commands.command_type import CommandType
 
 
 @dataclass
@@ -131,7 +135,10 @@ class CommandsFile(TextFile):
         output_file = bundle_dir / self.get_filename()
         fs_service.write_file(output_file, self.to_yaml())
 
-    def has_commands_needing_processing(self) -> bool:
+    def has_commands_needing_processing(
+        self,
+        max_attempts_for: Callable[["CommandType"], int],
+    ) -> bool:
         """Check if any command still needs to be executed.
 
         A command needs processing when it is not executed and has not yet
@@ -139,14 +146,18 @@ class CommandsFile(TextFile):
         that failed too many times are considered given up and are not reported
         as needing processing, so bundles are not endlessly re-enqueued for them.
 
+        The retry budget is injected (``max_attempts_for``) rather than imported
+        from the command registry, to keep this file free of a circular import
+        (``files`` <-> ``commands``).
+
+        Args:
+            max_attempts_for: Maps a command's matched type to its max attempt count.
+
         Returns:
             bool: True if at least one command still needs processing.
 
         """
-        from transcriber.commands.command_registry import COMMAND_REGISTRY  # noqa: PLC0415 # break circular dep
-
         return any(
-            not command.executed
-            and (command.matched_type is None or command.attempt_count < COMMAND_REGISTRY[command.matched_type].max_attempts)
+            not command.executed and (command.matched_type is None or command.attempt_count < max_attempts_for(command.matched_type))
             for command in self.commands
         )
