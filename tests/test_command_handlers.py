@@ -1,3 +1,4 @@
+from datetime import datetime
 from pathlib import Path
 
 import pytest
@@ -742,6 +743,7 @@ class TestHandleMerge:
         transcribe_bundle_factory(
             bundle_name="2025-01-14_previous",
             audio_filename="Recording 20250114090000.mp3",
+            bundle_date=datetime(year=2025, month=1, day=14, tzinfo=fake_config.general.timezone),
         )
 
         current_bundle = transcribe_bundle_factory(

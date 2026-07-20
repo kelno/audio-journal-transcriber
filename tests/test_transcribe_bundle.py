@@ -1,5 +1,6 @@
 """Tests for TranscribeBundle with FakeFileSystemService."""
 
+from datetime import datetime
 from pathlib import Path
 
 import pydantic
@@ -451,7 +452,10 @@ class TestTranscribeBundleWriteOperations:
         """Test initializing metadata with file information."""
         bundle = TranscribeBundle(
             bundle_name=generic_bundle_dir.name,
-            metadata=MetadataFile(audio_files=[]),
+            metadata=MetadataFile(
+                audio_files=[],
+                bundle_date=datetime.now(fake_config.general.timezone),
+            ),
             source_audios=[],
             transcript=None,
             summary=None,
@@ -604,7 +608,10 @@ class TestTranscribeBundleRenaming:
         """Test that renaming raises if directory doesn't exist."""
         bundle = TranscribeBundle(
             bundle_name="2025-01-15_meeting",
-            metadata=MetadataFile(audio_files=[AudioFileMeta(filename="meeting.mp3")]),
+            metadata=MetadataFile(
+                audio_files=[AudioFileMeta(filename="meeting.mp3")],
+                bundle_date=datetime.now(fake_config.general.timezone),
+            ),
             source_audios=[Path("/store/2025-01-15_meeting/meeting.mp3")],
             fs_service=fake_fs,
             audio_service=fake_audio_service,
@@ -718,11 +725,13 @@ class TestGatherExistingBundles:
             bundle_name="2025-01-14_review",
             audio_filename="Recording 20250114120000.mp3",
             config=fake_config,
+            bundle_date=datetime(year=2025, month=1, day=14, hour=12, tzinfo=fake_config.general.timezone),
         )
         current_bundle = transcribe_bundle_factory(
             bundle_name="2025-01-15_meeting",
             audio_filename="Recording 20250115090000.mp3",
             config=fake_config,
+            bundle_date=datetime(year=2025, month=1, day=15, hour=9, tzinfo=fake_config.general.timezone),
         )
         result = TranscribeBundle.find_previous_bundle(
             current_bundle=current_bundle,
@@ -730,6 +739,70 @@ class TestGatherExistingBundles:
         )
 
         assert result is None
+
+
+class TestBundleDate:
+    """Tests for the canonical metadata.bundle_date field."""
+
+    def test_init_metadata_seeds_bundle_date_from_audio_filename(
+        self,
+        fake_config: TranscribeConfig,
+        fake_fs: FakeFileSystemService,
+        fake_audio_service: FakeAudioService,
+    ) -> None:
+        """init_metadata computes bundle_date from the audio filename timestamp."""
+        bundle = TranscribeBundle.from_audio_file(
+            source_audio=fake_config.general.input_dir / "Recording 20250115143000.mp3",
+            config=fake_config,
+            fs_service=fake_fs,
+            audio_service=fake_audio_service,
+        )
+        bundle.init_metadata(["Recording 20250115143000.mp3"])
+
+        assert bundle.metadata.bundle_date is not None
+        assert bundle.metadata.bundle_date.year == 2025
+        assert bundle.metadata.bundle_date.month == 1
+        assert bundle.metadata.bundle_date.day == 15
+        assert bundle.metadata.bundle_date.hour == 14
+        assert bundle.metadata.bundle_date.minute == 30
+
+    def test_get_bundle_date_returns_canonical_metadata_date(
+        self,
+        fake_config: TranscribeConfig,
+        fake_fs: FakeFileSystemService,
+        fake_audio_service: FakeAudioService,
+    ) -> None:
+        """get_bundle_date returns metadata.bundle_date without recomputing."""
+        bundle = TranscribeBundle.from_audio_file(
+            source_audio=fake_config.general.input_dir / "Recording 20250115143000.mp3",
+            config=fake_config,
+            fs_service=fake_fs,
+            audio_service=fake_audio_service,
+        )
+        bundle.init_metadata(["Recording 20250115143000.mp3"])
+        # Sanity: the canonical date is the audio-derived one.
+        assert bundle.get_bundle_date() == bundle.metadata.bundle_date
+
+    def test_cleanup_warns_on_dirname_date_divergence(
+        self,
+        fake_config: TranscribeConfig,
+        fake_fs: FakeFileSystemService,
+        fake_audio_service: FakeAudioService,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """cleanup_inconsistencies warns when the dir name date != metadata date."""
+        bundle = TranscribeBundle.from_audio_file(
+            source_audio=fake_config.general.input_dir / "Recording 20250115143000.mp3",
+            config=fake_config,
+            fs_service=fake_fs,
+            audio_service=fake_audio_service,
+        )
+        bundle.init_metadata(["Recording 20250115143000.mp3"])
+        # Simulate an external directory rename: name says the 20th, metadata says the 15th.
+        bundle.bundle_name = "2025-01-20_renamed"
+        bundle.cleanup_inconsistencies(dry_run=True)
+
+        assert any("differs from canonical" in record.message for record in caplog.records)
 
 
 class TestTranscribeBundleIntegration:
@@ -801,6 +874,7 @@ class TestTranscribeBundleIntegration:
         # Create initial metadata with one file
         metadata_yaml = (
             "---\n"
+            "bundle_date: 2025-01-15 00:00:00+02:00\n"
             "audio_files:\n"
             "- filename: part1.mp3\n"
             "  transcript_model_used: []\n"

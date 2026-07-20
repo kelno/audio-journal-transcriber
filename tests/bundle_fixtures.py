@@ -1,5 +1,6 @@
 """Shared pytest fixtures for transcribe bundle tests."""
 
+from datetime import datetime
 from pathlib import Path
 from typing import Protocol
 
@@ -19,6 +20,7 @@ from transcriber.files.text_file import (
     TranscriptFile,
 )
 from transcriber.transcribe_bundle import TranscribeBundle
+from transcriber.utils import extract_date_from_recording_filename
 
 
 class TranscribeBundleFactory(Protocol):
@@ -26,6 +28,7 @@ class TranscribeBundleFactory(Protocol):
         self,
         bundle_name: str,
         audio_filename: str,
+        bundle_date: datetime | None = None,  # if None, use now()
         transcript_text: str | None = None,
         summary_text: str | None = None,
         commands: list[str] | None = None,
@@ -50,6 +53,7 @@ def transcribe_bundle_factory(
     def _create_bundle(
         bundle_name: str,
         audio_filename: str,
+        bundle_date: datetime | None = None,
         transcript_text: str | None = None,
         summary_text: str | None = None,
         commands: list[str] | None = None,
@@ -67,7 +71,10 @@ def transcribe_bundle_factory(
 
         bundle = TranscribeBundle(
             bundle_name=bundle_dir.name,
-            metadata=MetadataFile(audio_files=[AudioFileMeta(filename=audio_filename)]),
+            metadata=MetadataFile(
+                audio_files=[AudioFileMeta(filename=audio_filename)],
+                bundle_date=bundle_date or datetime.now(config.general.timezone),
+            ),
             source_audios=[bundle_dir / audio_filename],
             transcript=TranscriptFile(transcript_text) if transcript_text else None,
             summary=SummaryFile(summary_text) if summary_text else None,

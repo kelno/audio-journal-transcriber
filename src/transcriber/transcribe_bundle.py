@@ -148,13 +148,15 @@ class TranscribeBundle:
         audio_service: AudioService,
     ) -> "TranscribeBundle":
         """Create a new TranscribeBundle instance from an audio file."""
-        metadata = MetadataFile(audio_files=[AudioFileMeta(filename=source_audio.name)])
-        bundle_name = TranscribeBundle.generate_generic_bundle_name(
-            source_audio,
-            source_audio.name,
-            config,
+        bundle_date = TranscribeBundle.get_date_for_filename(source_audio, source_audio.name, config)
+        metadata = MetadataFile(
+            audio_files=[AudioFileMeta(filename=source_audio.name)],
+            bundle_date=bundle_date,
         )
-
+        bundle_name = TranscribeBundle.generate_generic_bundle_name(
+            bundle_date=bundle_date,
+            audio_filename=source_audio.name,
+        )
         return cls(
             bundle_name=bundle_name,
             metadata=metadata,
@@ -179,16 +181,21 @@ class TranscribeBundle:
             raise ValueError(msg)
 
         filenames = [f.name for f in source_audios]
+        bundle_date = TranscribeBundle.get_date_for_filename(
+            source_audios[0],
+            source_audios[0].name,
+            config,
+        )
         metadata = MetadataFile(
             audio_files=[AudioFileMeta(filename=name) for name in filenames],
+            bundle_date=bundle_date,
         )
 
         # Use first file for date generation if no bundle_name provided
         if not bundle_name:
             bundle_name = cls.generate_generic_bundle_name(
-                source_audios[0],
-                filenames[0],
-                config,
+                bundle_date=bundle_date,
+                audio_filename=source_audios[0].name,
             )
 
         return cls(
@@ -233,6 +240,23 @@ class TranscribeBundle:
                 f"Original: {original_audio_filenames}, Found: {current_audio_filenames}",
             )
             self.refresh(dry_run)
+
+        # Warn if the directory name's date prefix diverges from the canonical
+        # bundle_date (e.g. the directory was renamed externally). Metadata is the
+        # source of truth; we do not auto-rename, but surface the inconsistency.
+        name_prefix = self.bundle_name[:10]
+        try:
+            name_date = datetime.strptime(name_prefix, "%Y-%m-%d").replace(
+                tzinfo=self.config.general.timezone,
+            )
+        except ValueError:
+            name_date = None
+        if name_date is not None and name_date.date() != self.metadata.bundle_date.date():
+            logger.warning(
+                f"{self}: Bundle directory name date [{name_prefix}] differs from canonical "
+                f"metadata.bundle_date [{self.metadata.bundle_date.date()}]. "
+                f"Metadata is authoritative; the directory may have been renamed.",
+            )
 
     @staticmethod
     def sort_audio_files_chronologically(
@@ -309,33 +333,21 @@ class TranscribeBundle:
 
     @staticmethod
     def generate_bundle_name_date_prefix(
-        audio_path: Path | None,
-        audio_filename: str,
-        config: TranscribeConfig,
+        bundle_date: datetime,
     ) -> str:
         """Return a date prefix string in the 'YYYY-MM-DD' format."""
-        date_from_filename = TranscribeBundle.get_date_for_filename(
-            audio_path,
-            audio_filename,
-            config,
-        )
-        return date_from_filename.strftime("%Y-%m-%d")
+        return bundle_date.strftime("%Y-%m-%d")
 
     @classmethod
     def generate_generic_bundle_name(
         cls,
-        audio_path: Path | None,
+        bundle_date: datetime,
         audio_filename: str,
-        config: TranscribeConfig,
     ) -> str:
         """Generate a bundle name based on date and audio filename."""
-        logger.debug(f"Generating bundle name for audio file: [{audio_path}]")
+        logger.debug(f"Generating bundle name for audio file: [{audio_filename}]")
 
-        prefix = cls.generate_bundle_name_date_prefix(
-            audio_path,
-            audio_filename,
-            config,
-        )
+        prefix = cls.generate_bundle_name_date_prefix(bundle_date)
         return f"{prefix}_{Path(audio_filename).stem}"
 
     def audio_source_needs_removal(
@@ -393,21 +405,12 @@ class TranscribeBundle:
     def get_bundle_date(
         self,
     ) -> datetime:
-        """Get the most precise date available for the bundle.
+        """Get the canonical date of the bundle.
 
-        Prefers the first audio file's extracted timestamp if available,
-        otherwise falls back to the bundle name date.
+        The single source of truth is ``metadata.bundle_date`` (a precise datetime
+        computed once at creation).
         """
-        if self.source_audios and self.metadata.audio_files:
-            try:
-                return TranscribeBundle.get_date_for_filename(
-                    self.source_audios[0],
-                    self.metadata.audio_files[0].filename,
-                    self.config,
-                )
-            except ValueError:
-                pass
-        return self.get_date_from_bundle_name()
+        return self.metadata.bundle_date
 
     @classmethod
     def find_previous_bundle(
@@ -649,11 +652,7 @@ class TranscribeBundle:
             msg = f"Bundle directory {bundle_path_from} not found"
             raise FileNotFoundError(msg)
 
-        prefix = self.generate_bundle_name_date_prefix(
-            self.source_audios[0] if self.source_audios else None,
-            self.metadata.audio_files[0].filename if self.metadata.audio_files else "",
-            self.config,
-        )
+        prefix = self.generate_bundle_name_date_prefix(self.metadata.bundle_date)
         new_bundle_name = f"{prefix} {bundle_name_summary}"
 
         bundle_path_to = self.config.general.store_dir / new_bundle_name

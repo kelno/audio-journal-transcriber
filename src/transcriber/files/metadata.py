@@ -1,3 +1,4 @@
+from datetime import datetime
 from pathlib import Path
 
 import yaml
@@ -26,6 +27,9 @@ class Metadata(BaseModel):
     """
 
     audio_files: list[AudioFileMeta] = Field(default_factory=list)
+    # Canonical date of the bundle (precise datetime up to seconds).
+    # Computed once at creation from the first audio file's timestamp.
+    bundle_date: datetime
     summary_model_used: str | None = None
     bundle_name_generated: bool = False
     keep_forever: bool = False
