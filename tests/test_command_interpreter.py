@@ -3,14 +3,14 @@
 import pytest
 
 from tests.fake_clients import FakeAudioClient, FakeChatClient
-from transcriber.ai_manager import AIManager
+from transcriber.ai_manager import RealAIManager
 from transcriber.config import TranscribeConfig
 from transcriber.exception import UnexpectedChatClientAnswerException
 
 
-def _ai_manager_with_response(response: str, fake_config: TranscribeConfig) -> AIManager:
+def _ai_manager_with_response(response: str, fake_config: TranscribeConfig) -> RealAIManager:
     """Build an AIManager whose chat client returns the given response."""
-    return AIManager(
+    return RealAIManager(
         audio_client=FakeAudioClient(),
         chat_client=FakeChatClient(response=response),
         config=fake_config,

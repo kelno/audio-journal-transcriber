@@ -1,7 +1,7 @@
 import argparse
 import sys
 
-from transcriber.ai_manager import AIManager
+from transcriber.ai_manager import RealAIManager
 from transcriber.audio_transcriber import AudioTranscriber
 from transcriber.clients.openai_clients import OpenAIAudioClient, OpenAIChatClient
 from transcriber.config import TranscribeConfig
@@ -54,8 +54,8 @@ def main() -> None:
     audio_client = OpenAIAudioClient(config.audio)
     chat_client = OpenAIChatClient(config.text)
 
-    # Inject clients into AIManager
-    ai_manager = AIManager(
+    # Inject clients into RealAIManager
+    ai_manager = RealAIManager(
         audio_client=audio_client,
         chat_client=chat_client,
         config=config,

@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from transcriber.ai_manager import AIManager
+from transcriber.ai_manager import RealAIManager
 from transcriber.config import TranscribeConfig
 from transcriber.exception import EmptyChatClientAnswerException, InvalidBundleNameAnswerException
 
@@ -25,7 +25,7 @@ class TestAIManagerTranscription:
         # Arrange: Create fake client and AI manager
         fake_audio_client = FakeAudioClient(response=fake_transcribe)
         fake_chat_client = FakeChatClient()
-        ai_manager = AIManager(
+        ai_manager = RealAIManager(
             audio_client=fake_audio_client,
             chat_client=fake_chat_client,
             config=fake_config,
@@ -55,7 +55,7 @@ class TestAIManagerChatCompletion:
         fake_completion = "AI response here"
         fake_chat_client = FakeChatClient(response=fake_completion)
         fake_audio_client = FakeAudioClient()
-        ai_manager = AIManager(
+        ai_manager = RealAIManager(
             audio_client=fake_audio_client,
             chat_client=fake_chat_client,
             config=fake_config,
@@ -75,7 +75,7 @@ class TestAIManagerChatCompletion:
         # Arrange
         fake_chat_client = FakeChatClient(response="Response")
         fake_audio_client = FakeAudioClient()
-        ai_manager = AIManager(
+        ai_manager = RealAIManager(
             audio_client=fake_audio_client,
             chat_client=fake_chat_client,
             config=fake_config,
@@ -102,7 +102,7 @@ class TestAIManagerChatCompletion:
         # Arrange
         fake_chat_client = FakeChatClient(response="")  # Empty response
         fake_audio_client = FakeAudioClient()
-        ai_manager = AIManager(
+        ai_manager = RealAIManager(
             audio_client=fake_audio_client,
             chat_client=fake_chat_client,
             config=fake_config,
@@ -134,7 +134,7 @@ We discussed the Q3 roadmap...
 
         fake_chat_client = FakeChatClient(response=expected_summary)
         fake_audio_client = FakeAudioClient()
-        ai_manager = AIManager(
+        ai_manager = RealAIManager(
             audio_client=fake_audio_client,
             chat_client=fake_chat_client,
             config=fake_config,
@@ -155,7 +155,7 @@ We discussed the Q3 roadmap...
         fake_config.text.extra_context = "Important: Be concise"
         fake_chat_client = FakeChatClient(response="Summary")
         fake_audio_client = FakeAudioClient()
-        ai_manager = AIManager(
+        ai_manager = RealAIManager(
             audio_client=fake_audio_client,
             chat_client=fake_chat_client,
             config=fake_config,
@@ -177,7 +177,7 @@ We discussed the Q3 roadmap...
         fake_config.text.extra_context = "Operator note: always be formal"
         fake_chat_client = FakeChatClient(response="Summary")
         fake_audio_client = FakeAudioClient()
-        ai_manager = AIManager(
+        ai_manager = RealAIManager(
             audio_client=fake_audio_client,
             chat_client=fake_chat_client,
             config=fake_config,
@@ -208,7 +208,7 @@ class TestAIManagerBundleName:
         fake_response = "Meeting notes"
         fake_chat_client = FakeChatClient(response=fake_response)
         fake_audio_client = FakeAudioClient()
-        ai_manager = AIManager(
+        ai_manager = RealAIManager(
             audio_client=fake_audio_client,
             chat_client=fake_chat_client,
             config=fake_config,
@@ -230,7 +230,7 @@ class TestAIManagerBundleName:
             response="Meeting@#$%notes!@#$",  # Contains invalid characters
         )
         fake_audio_client = FakeAudioClient()
-        ai_manager = AIManager(
+        ai_manager = RealAIManager(
             audio_client=fake_audio_client,
             chat_client=fake_chat_client,
             config=fake_config,
@@ -252,7 +252,7 @@ class TestAIManagerBundleName:
             response="This is a very long bundle name that exceeds the maximum" * 3,
         )
         fake_audio_client = FakeAudioClient()
-        ai_manager = AIManager(
+        ai_manager = RealAIManager(
             audio_client=fake_audio_client,
             chat_client=fake_chat_client,
             config=fake_config,
@@ -270,7 +270,7 @@ class TestAIManagerBundleName:
         # Arrange
         fake_chat_client = FakeChatClientWithErrors()
         fake_audio_client = FakeAudioClient()
-        ai_manager = AIManager(
+        ai_manager = RealAIManager(
             audio_client=fake_audio_client,
             chat_client=fake_chat_client,
             config=fake_config,
@@ -288,7 +288,7 @@ class TestAIManagerBundleName:
         # Arrange
         fake_chat_client = FakeChatClient("none")
         fake_audio_client = FakeAudioClient()
-        ai_manager = AIManager(
+        ai_manager = RealAIManager(
             audio_client=fake_audio_client,
             chat_client=fake_chat_client,
             config=fake_config,
@@ -315,7 +315,7 @@ class TestAIManagerBundleName:
         # Arrange
         fake_chat_client = FakeChatClient(f"{command1}\n{command2}")
         fake_audio_client = FakeAudioClient()
-        ai_manager = AIManager(
+        ai_manager = RealAIManager(
             audio_client=fake_audio_client,
             chat_client=fake_chat_client,
             config=fake_config,

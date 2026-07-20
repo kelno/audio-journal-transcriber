@@ -3,10 +3,9 @@
 import pytest
 
 from tests.bundle_fixtures import TranscribeBundleFactory
+from tests.fake_ai_manager import FakeAIManager
 from tests.fake_audio_service import FakeAudioService
-from tests.fake_clients import FakeAudioClient, FakeChatClient
 from tests.fake_file_system import FakeFileSystemService
-from transcriber.ai_manager import AIManager
 from transcriber.audio_transcriber import AudioTranscriber
 from transcriber.config import TranscribeConfig
 from transcriber.constants import CUSTOM_CONTEXT_FILENAME
@@ -19,16 +18,12 @@ def audio_transcriber(
     fake_config: TranscribeConfig,
     fake_fs: FakeFileSystemService,
     fake_audio_service: FakeAudioService,
+    fake_ai_manager: FakeAIManager,
 ) -> AudioTranscriber:
     """AudioTranscriber with fake clients (no real API/FS access needed)."""
-    ai_manager = AIManager(
-        audio_client=FakeAudioClient(),
-        chat_client=FakeChatClient(),
-        config=fake_config,
-    )
     return AudioTranscriber(
         dry_run=True,
-        ai_manager=ai_manager,
+        ai_manager=fake_ai_manager,
         config=fake_config,
         fs_service=fake_fs,
         audio_service=fake_audio_service,

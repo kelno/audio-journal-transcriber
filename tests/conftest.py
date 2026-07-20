@@ -5,6 +5,7 @@ per doc:
 """
 
 from .bundle_fixtures import TranscribeBundleFactory, generic_bundle, generic_bundle_dir, transcribe_bundle_factory  # noqa: F401
+from .fake_ai_manager import FakeAIManager, fake_ai_manager  # noqa: F401
 from .fake_audio_service import FakeAudioService, fake_audio_service  # noqa: F401
 from .fake_config import fake_config  # noqa: F401
 from .fake_file_system import FakeFileSystemService, fake_fs  # noqa: F401

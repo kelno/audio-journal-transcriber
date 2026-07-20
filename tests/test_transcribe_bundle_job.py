@@ -3,10 +3,9 @@
 import pytest
 
 from tests.bundle_fixtures import TranscribeBundleFactory
+from tests.fake_ai_manager import FakeAIManager
 from tests.fake_audio_service import FakeAudioService
-from tests.fake_clients import FakeAudioClient, FakeChatClient
 from tests.fake_file_system import FakeFileSystemService
-from transcriber.ai_manager import AIManager
 from transcriber.config import TranscribeConfig
 from transcriber.constants import (
     CUSTOM_CONTEXT_FILENAME,
@@ -22,13 +21,9 @@ from transcriber.transcribe_bundle_job import (
 
 
 @pytest.fixture
-def fake_ai_manager(fake_config: TranscribeConfig) -> AIManager:
-    """Create an AIManager backed by fake clients (no real API calls)."""
-    return AIManager(
-        audio_client=FakeAudioClient(),
-        chat_client=FakeChatClient(),
-        config=fake_config,
-    )
+def fake_ai_manager() -> FakeAIManager:
+    """Create a fake AI manager (no real API calls)."""
+    return FakeAIManager()
 
 
 class TestCreateBundleJob:
@@ -39,7 +34,7 @@ class TestCreateBundleJob:
         fake_config: TranscribeConfig,
         fake_fs: FakeFileSystemService,
         fake_audio_service: FakeAudioService,
-        fake_ai_manager: AIManager,
+        fake_ai_manager: FakeAIManager,
     ) -> None:
         """A new bundle gets a seeded custom_context.md with the default header."""
         input_audio = fake_config.general.input_dir / "voice_memo.mp3"
@@ -65,7 +60,7 @@ class TestCreateBundleJob:
         fake_config: TranscribeConfig,
         fake_fs: FakeFileSystemService,
         fake_audio_service: FakeAudioService,
-        fake_ai_manager: AIManager,
+        fake_ai_manager: FakeAIManager,
     ) -> None:
         """An existing (user-provided) custom_context.md is left untouched."""
         input_audio = fake_config.general.input_dir / "voice_memo.mp3"
@@ -93,7 +88,7 @@ class TestCreateBundleJob:
         fake_config: TranscribeConfig,
         fake_fs: FakeFileSystemService,
         fake_audio_service: FakeAudioService,
-        fake_ai_manager: AIManager,
+        fake_ai_manager: FakeAIManager,
     ) -> None:
         """In dry-run mode no custom_context.md is written."""
         input_audio = fake_config.general.input_dir / "voice_memo.mp3"
@@ -116,7 +111,7 @@ class TestCreateBundleJob:
         fake_config: TranscribeConfig,
         fake_fs: FakeFileSystemService,
         fake_audio_service: FakeAudioService,
-        fake_ai_manager: AIManager,
+        fake_ai_manager: FakeAIManager,
     ) -> None:
         """An audio file shorter than the configured minimum is refused."""
         # Enable the minimum-length check via config.
@@ -164,11 +159,7 @@ class TestTranscriptionJob:
             audio_service=fake_audio_service,
         )
         # Fake audio client returns an empty/whitespace-only transcript.
-        ai_manager = AIManager(
-            audio_client=FakeAudioClient(response="   "),
-            chat_client=FakeChatClient(),
-            config=fake_config,
-        )
+        ai_manager = FakeAIManager(transcript="   ")
         job = TranscriptionJob(bundle, dry_run=False)
 
         with pytest.raises(EmptyTranscriptException):
@@ -182,7 +173,7 @@ class TestTranscriptionJob:
         fake_config: TranscribeConfig,
         fake_fs: FakeFileSystemService,
         fake_audio_service: FakeAudioService,
-        fake_ai_manager: AIManager,
+        fake_ai_manager: FakeAIManager,
         transcribe_bundle_factory: TranscribeBundleFactory,
     ) -> None:
         """SummaryJob writes summary_context_hash into metadata."""
@@ -210,7 +201,7 @@ class TestTranscriptionJob:
     def test_hash_reflects_user_provided_context(
         self,
         fake_config: TranscribeConfig,
-        fake_ai_manager: AIManager,
+        fake_ai_manager: FakeAIManager,
         transcribe_bundle_factory: TranscribeBundleFactory,
     ) -> None:
         """The persisted hash accounts for real custom_context content."""

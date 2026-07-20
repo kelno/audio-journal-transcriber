@@ -112,7 +112,7 @@ class AudioTranscriber:
                     logger.error(f"Merge blocked, bundle skipped (human action required): {e}")
                     break  # skip remaining jobs in this bundle
                 except Exception:  # pylint: disable=broad-exception-caught
-                    logger.exception(f"Error processing [{job}] (skipping any remaining jobs for this bundle).")
+                    logger.exception(f"Error processing {job} (skipping any remaining jobs for this bundle).")
                     if len(remaining_jobs_in_bundle) > 0:
                         unprocessed_bundles.append(remaining_jobs_in_bundle)
                     break  # skip remaining jobs in this bundle

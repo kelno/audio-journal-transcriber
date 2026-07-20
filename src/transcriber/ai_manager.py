@@ -1,18 +1,79 @@
+"""Abstract AI manager for dependency injection."""
+
+from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
+from typing import override
 
 from transcriber.clients.clients import AudioTranscriptionClient, ChatCompletionClient
 from transcriber.commands.command_registry import COMMAND_REGISTRY
 from transcriber.commands.command_type import CommandType
 from transcriber.config import TranscribeConfig
-from transcriber.exception import EmptyChatClientAnswerException, InvalidBundleNameAnswerException, UnexpectedChatClientAnswerException
+from transcriber.exception import (
+    EmptyChatClientAnswerException,
+    InvalidBundleNameAnswerException,
+    UnexpectedChatClientAnswerException,
+)
 from transcriber.logger import logger
 
 BUNDLE_NAME_MAX_LENGTH = 60  # arbitrary max length
 
 
+class AIManager(ABC):
+    """Abstract interface for AI model interactions (transcription, summarization)."""
+
+    @abstractmethod
+    def transcribe_audio(self, audio_path: Path) -> str:
+        """Transcribe an audio file and return the transcript text."""
+        ...
+
+    @abstractmethod
+    def query_chat_completion(self, prompt: str) -> str:
+        """Query the chat completion API with the given prompt.
+
+        Raises:
+            ValueError: When client returns an invalid answer.
+
+        """
+        ...
+
+    @abstractmethod
+    def get_ai_summary(
+        self,
+        transcript: str,
+        record_context: str | None = None,
+    ) -> str:
+        """Generate an AI summary from a transcript."""
+        ...
+
+    @abstractmethod
+    def get_bundle_name_summary(self, summary: str) -> str:
+        """Return a short AI generated name for a bundle.
+
+        Raises:
+            InvalidBundleNameAnswerException: When LLM returns an invalid bundle name.
+
+        """
+        ...
+
+    @abstractmethod
+    def interpret_command(self, command_string: str) -> CommandType:
+        """Interpret a user command and match it to a known command type.
+
+        Raises:
+            UnexpectedChatClientAnswerException: When the LLM returns an invalid or unparseable response.
+
+        """
+        ...
+
+    @abstractmethod
+    def extract_raw_commands(self, text: str, bundle_name: str) -> list[str]:
+        """Extract raw (natural language) commands from text."""
+        ...
+
+
 @dataclass
-class AIManager:
+class RealAIManager(AIManager):
     """Manages interactions with AI models for transcription and summarization."""
 
     audio_client: AudioTranscriptionClient
@@ -25,6 +86,7 @@ class AIManager:
         logger.debug(f"Audio configuration: {self.config.audio}")
         logger.debug(f"Text configuration: {self.config.text}")
 
+    @override
     def transcribe_audio(self, audio_path: Path) -> str:
         """Transcribe an audio file.
 
@@ -33,6 +95,7 @@ class AIManager:
         logger.debug(f"AIManager Transcribing: {audio_path}")
         return self.audio_client.transcribe(audio_path)
 
+    @override
     def query_chat_completion(self, prompt: str) -> str:
         """Query the chat completion API with the given prompt.
 
@@ -62,6 +125,7 @@ class AIManager:
 
         return response
 
+    @override
     def get_ai_summary(
         self,
         transcript: str,
@@ -123,6 +187,7 @@ class AIManager:
         logger.debug(f"get_ai_summary succeeded. Excerpt: {summary[:160]} [...]]")
         return summary
 
+    @override
     def get_bundle_name_summary(self, summary: str) -> str:
         """Return a short AI generated name for a bundle.
 
@@ -153,6 +218,7 @@ class AIManager:
 
         return bundle_name
 
+    @override
     def interpret_command(self, command_string: str) -> CommandType:
         """Interpret a user command and match it to a known command type.
 
@@ -162,7 +228,6 @@ class AIManager:
 
         Args:
             command_string: The raw command text to interpret.
-            ai_manager: AIManager instance for querying the LLM.
 
         Returns:
             The matched CommandType, or CommandType.UNKNOWN if no confident match.
@@ -215,6 +280,7 @@ class AIManager:
         logger.error(msg)
         raise UnexpectedChatClientAnswerException(msg)
 
+    @override
     def extract_raw_commands(self, text: str, bundle_name: str) -> list[str]:
         """Extract raw commands from text.
 
