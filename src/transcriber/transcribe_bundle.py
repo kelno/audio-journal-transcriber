@@ -607,9 +607,9 @@ class TranscribeBundle:
         assert self.commands is not None
         self.commands.write(self.get_bundle_dir(), self.fs_service)
 
-    def add_command_attempt(self, cmd_text: str) -> None:
+    def add_command_attempt(self, cmd_id: str) -> None:
         """Increment retry count by 1."""
-        cmd = self.assert_command(cmd_text)
+        cmd = self.assert_command(cmd_id)
         cmd.attempt_count = cmd.attempt_count + 1
 
         assert self.commands is not None

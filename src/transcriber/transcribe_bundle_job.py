@@ -435,7 +435,7 @@ class RunCommandsJob(TranscribeBundleJob):
                     f"{self.bundle}: Failed to process bundle command '{cmd.text}'",
                 )
                 self.bundle.set_last_error(cmd_id=cmd.id, error=str(e))
-                self.bundle.add_command_attempt(cmd_text=cmd.text)
+                self.bundle.add_command_attempt(cmd_id=cmd.id)
                 raise
 
     @staticmethod
