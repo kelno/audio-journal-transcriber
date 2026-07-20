@@ -10,6 +10,7 @@ import yaml
 
 from transcriber.commands.command import Command
 from transcriber.constants import COMMANDS_FILENAME
+from transcriber.exception import InvalidCommandFileException
 from transcriber.files.file_system import FileSystemService
 from transcriber.files.text_file import TextFile
 from transcriber.logger import logger
@@ -33,7 +34,10 @@ class CommandsFile(TextFile):
         """Parse YAML text and populate commands.
 
         If parsing fails, logs a warning and sets commands to empty list.
-        If command validation fails, raises TypeError.
+
+        Raises:
+            InvalidCommandFileException: Unexpected data format
+
         """
         try:
             commands_data = yaml.safe_load(self.text)
@@ -51,7 +55,7 @@ class CommandsFile(TextFile):
                 return
             elif not isinstance(commands_data, list):
                 msg = f"Expected top-level YAML list, got {type(commands_data).__name__}"
-                raise TypeError(msg)
+                raise InvalidCommandFileException(msg)
 
             self.commands = [Command.from_dict(cmd) for cmd in commands_data if isinstance(cmd, dict)]
         except yaml.YAMLError:

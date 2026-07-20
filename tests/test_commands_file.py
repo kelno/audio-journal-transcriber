@@ -13,6 +13,7 @@ from transcriber.commands.command import Command
 from transcriber.commands.command_registry import COMMAND_REGISTRY
 from transcriber.commands.command_type import CommandType
 from transcriber.constants import COMMANDS_FILENAME
+from transcriber.exception import InvalidCommandFileException
 from transcriber.files.commands_file import CommandsFile
 
 
@@ -72,7 +73,7 @@ class TestCommandCreation:
         assert cmd.executed_at is None
 
     def test_command_from_dict_invalid_text_type(self) -> None:
-        """Test that from_dict raises TypeError if text is not a string."""
+        """Test that from_dict raises pydantic ValidationError if text is not a string."""
         data = {
             "text": 123,
             "executed": False,
@@ -83,7 +84,7 @@ class TestCommandCreation:
             Command.from_dict(data)
 
     def test_command_from_dict_invalid_executed_type(self) -> None:
-        """Test that from_dict raises TypeError if executed is not a bool."""
+        """Test that from_dict raises pydantic ValidationError if executed is not a bool."""
         data = {"text": "play", "executed": "yay", "executed_at": None}
 
         with pytest.raises(ValidationError):
@@ -188,7 +189,7 @@ class TestCommandsFileSerialization:
 executed: false
 """
         # Should create empty commands list since root is not a list
-        with pytest.raises(TypeError, match="YAML list"):
+        with pytest.raises(InvalidCommandFileException, match="YAML list"):
             CommandsFile(text=invalid_yaml)
 
 

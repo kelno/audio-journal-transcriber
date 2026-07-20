@@ -48,3 +48,38 @@ class MergeBlockedException(AudioTranscriberException):
 @final
 class UnknownCommandException(AudioTranscriberException):
     """Command text couldn't be matched to a know command type."""
+
+
+@final
+class EmptyChatClientAnswerException(AudioTranscriberException):
+    """Chat client returned an empty answer."""
+
+
+@final
+class InvalidBundleNameAnswerException(AudioTranscriberException):
+    """Chat client returned an invalid bundle name."""
+
+
+@final
+class UnexpectedChatClientAnswerException(AudioTranscriberException):
+    """Chat client didn't return expected answer."""
+
+
+@final
+class InvalidMetadataFileException(AudioTranscriberException):
+    """Failed to create metadata from invalid file."""
+
+
+@final
+class InvalidSourceAudiosException(AudioTranscriberException):
+    """Failed to create bundle because of invalid source audios."""
+
+
+@final
+class FailedToExtractDateException(AudioTranscriberException):
+    """Failed to get a date from file names."""
+
+
+@final
+class InvalidCommandFileException(AudioTranscriberException):
+    """Failed to get a date from file names."""

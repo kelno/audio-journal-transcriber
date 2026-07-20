@@ -5,6 +5,7 @@ import pytest
 from transcriber.ai_manager import AIManager
 from transcriber.commands.command_interpreter import extract_raw_commands
 from transcriber.config import TranscribeConfig
+from transcriber.exception import EmptyChatClientAnswerException, InvalidBundleNameAnswerException
 
 from .fake_clients import (
     FakeAudioClient,
@@ -109,7 +110,7 @@ class TestAIManagerChatCompletion:
         )
 
         # Act & Assert
-        with pytest.raises(ValueError, match="Empty response"):
+        with pytest.raises(EmptyChatClientAnswerException, match="Empty response"):
             ai_manager.query_chat_completion("Test prompt")
 
 
@@ -259,7 +260,7 @@ class TestAIManagerBundleName:
         )
 
         # Act & Assert
-        with pytest.raises(ValueError, match="too long"):
+        with pytest.raises(InvalidBundleNameAnswerException, match="too long"):
             ai_manager.get_bundle_name_summary("summary")
 
     def test_get_bundle_name_summary_fails_on_api_error(

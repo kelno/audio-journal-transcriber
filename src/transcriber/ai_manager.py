@@ -3,6 +3,7 @@ from pathlib import Path
 
 from transcriber.clients.clients import AudioTranscriptionClient, ChatCompletionClient
 from transcriber.config import TranscribeConfig
+from transcriber.exception import EmptyChatClientAnswerException, InvalidBundleNameAnswerException
 from transcriber.logger import logger
 
 BUNDLE_NAME_MAX_LENGTH = 60  # arbitrary max length
@@ -55,7 +56,7 @@ class AIManager:
         if not response:
             msg = "Empty response from chat client"
             logger.error(msg)
-            raise ValueError(msg)
+            raise EmptyChatClientAnswerException(msg)
 
         return response
 
@@ -124,7 +125,7 @@ class AIManager:
         """Return a short AI generated name for a bundle.
 
         Raises:
-            ValueError: When LLM returns an invalid bundle name.
+            InvalidBundleNameAnswerException: When LLM returns an invalid bundle name.
             *: Pass through any exceptions from the OpenAI client.
 
         """
@@ -146,6 +147,6 @@ class AIManager:
         logger.debug(f"AI generated bundle name: {bundle_name}")
         if len(bundle_name) > BUNDLE_NAME_MAX_LENGTH:
             msg = f"get_bundle_name_summary: LLM returned a bundle name too long: {bundle_name}"
-            raise ValueError(msg)
+            raise InvalidBundleNameAnswerException(msg)
 
         return bundle_name

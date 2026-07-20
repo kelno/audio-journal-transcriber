@@ -6,6 +6,7 @@ Matches user commands to predefined command types using LLM-assisted matching.
 from transcriber.ai_manager import AIManager
 from transcriber.commands.command_registry import COMMAND_REGISTRY
 from transcriber.commands.command_type import CommandType
+from transcriber.exception import UnexpectedChatClientAnswerException
 from transcriber.logger import logger
 
 
@@ -24,7 +25,7 @@ def interpret_command(command_string: str, ai_manager: AIManager) -> CommandType
         The matched CommandType, or CommandType.UNKNOWN if no confident match.
 
     Raises:
-        ValueError: When the LLM returns an invalid or unparseable response.
+        UnexpectedChatClientAnswerException: When the LLM returns an invalid or unparseable response.
 
     """
     logger.debug(f"Interpreting command: {command_string}")
@@ -69,7 +70,7 @@ You are a command matcher in an automated pipeline. Your task is to match user c
     # Invalid response
     msg = f"LLM returned unexpected response: {response}"
     logger.error(msg)
-    raise ValueError(msg)
+    raise UnexpectedChatClientAnswerException(msg)
 
 
 def extract_raw_commands(text: str, bundle_name: str, ai_manager: AIManager) -> list[str]:

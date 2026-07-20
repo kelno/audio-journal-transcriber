@@ -16,7 +16,7 @@ from transcriber.constants import (
     SUMMARY_FILENAME,
     TRANSCRIPT_FILENAME,
 )
-from transcriber.exception import InvalidBundleException
+from transcriber.exception import FailedToExtractDateException, InvalidBundleException, InvalidSourceAudiosException
 from transcriber.files.commands_file import CommandsFile
 from transcriber.files.file_system import FileSystemService
 from transcriber.files.metadata import AudioFileMeta, MetadataFile
@@ -113,7 +113,7 @@ class TranscribeBundle:
             TranscribeBundle: The loaded bundle instance.
 
         Raises:
-            ValueError: If the bundle directory is invalid.
+            InvalidSourceAudiosException: If the bundle directory is invalid.
 
         """
         bundle_name = existing_dir.name
@@ -178,7 +178,7 @@ class TranscribeBundle:
         """Create a new TranscribeBundle from multiple audio files."""
         if not source_audios:
             msg = "Must provide at least one audio file"
-            raise ValueError(msg)
+            raise InvalidSourceAudiosException(msg)
 
         filenames = [f.name for f in source_audios]
         bundle_date = TranscribeBundle.get_date_for_filename(
@@ -246,9 +246,7 @@ class TranscribeBundle:
         # source of truth; we do not auto-rename, but surface the inconsistency.
         name_prefix = self.bundle_name[:10]
         try:
-            name_date = datetime.strptime(name_prefix, "%Y-%m-%d").replace(
-                tzinfo=self.config.general.timezone,
-            )
+            name_date = datetime.strptime(name_prefix, "%Y-%m-%d").replace(tzinfo=self.config.general.timezone)
         except ValueError:
             name_date = None
         if name_date is not None and name_date.date() != self.metadata.bundle_date.date():
@@ -313,7 +311,12 @@ class TranscribeBundle:
         audio_filename: str,
         config: TranscribeConfig,
     ) -> datetime:
-        """Try to extract date from filename first, or else from file modified date."""
+        """Try to extract date from filename first, or else from file modified date.
+
+        Raises:
+           FailedToExtractDateException
+
+        """
         tz = config.general.timezone
         date_from_filename = extract_date_from_recording_filename(audio_filename, tz)
         if date_from_filename:
@@ -329,7 +332,7 @@ class TranscribeBundle:
             return file_date
         else:
             msg = f"Could not find any date for file {audio_filename}"
-            raise ValueError(msg)
+            raise FailedToExtractDateException(msg)
 
     @staticmethod
     def generate_bundle_name_date_prefix(

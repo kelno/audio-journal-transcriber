@@ -5,6 +5,7 @@ import yaml
 from pydantic import BaseModel, Field
 
 from transcriber.constants import METADATA_FILENAME
+from transcriber.exception import InvalidMetadataFileException
 from transcriber.files.file_system import FileSystemService
 
 
@@ -73,7 +74,7 @@ class MetadataFile(Metadata):
             MetadataFile: The loaded metadata.
 
         Raises:
-            ValueError: If the metadata file has invalid format.
+            InvalidMetadataFileException: If the metadata file has invalid format.
 
         """
         text = fs_service.read_file(meta_file)
@@ -81,7 +82,7 @@ class MetadataFile(Metadata):
             data = yaml.safe_load(frontmatter)
         else:
             error_msg = f"Invalid metadata file {meta_file}, failed to find frontmatter"
-            raise ValueError(error_msg)
+            raise InvalidMetadataFileException(error_msg)
 
         return MetadataFile.model_validate(data)
 

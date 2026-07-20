@@ -18,7 +18,7 @@ from transcriber.constants import (
     SUMMARY_FILENAME,
     TRANSCRIPT_FILENAME,
 )
-from transcriber.exception import InvalidBundleException
+from transcriber.exception import InvalidBundleException, InvalidSourceAudiosException
 from transcriber.files.metadata import AudioFileMeta, MetadataFile
 from transcriber.files.text_file import CustomContextFile, TranscriptFile
 from transcriber.transcribe_bundle import TranscribeBundle
@@ -259,7 +259,7 @@ class TestTranscribeBundleFromAudioFiles:
         fake_audio_service: FakeAudioService,
     ) -> None:
         """Test that from_audio_files raises ValueError on empty list."""
-        with pytest.raises(ValueError, match="Must provide at least one audio file"):
+        with pytest.raises(InvalidSourceAudiosException, match="Must provide at least one audio file"):
             TranscribeBundle.from_audio_files(
                 source_audios=[],
                 config=fake_config,
