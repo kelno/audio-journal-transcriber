@@ -4,7 +4,6 @@ import pytest
 
 from tests.fake_clients import FakeAudioClient, FakeChatClient
 from transcriber.ai_manager import AIManager
-from transcriber.commands.command_interpreter import interpret_command
 from transcriber.config import TranscribeConfig
 from transcriber.exception import UnexpectedChatClientAnswerException
 
@@ -30,4 +29,4 @@ class TestInterpretCommand:
         ai_manager = _ai_manager_with_response("GIBBERISH", fake_config)
 
         with pytest.raises(UnexpectedChatClientAnswerException):
-            interpret_command("do the thing", ai_manager)
+            ai_manager.interpret_command("do the thing")

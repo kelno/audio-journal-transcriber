@@ -5,7 +5,6 @@ from pathlib import Path
 from typing import override
 
 from transcriber.commands.command import Command
-from transcriber.commands.command_interpreter import extract_raw_commands, interpret_command
 from transcriber.commands.command_registry import COMMAND_REGISTRY
 from transcriber.commands.command_type import CommandType
 from transcriber.constants import (
@@ -297,7 +296,7 @@ class GatherCommandsJob(TranscribeBundleJob):
 
         commands: list[str] = []
         try:
-            commands = extract_raw_commands(self.bundle.transcript.text, self.bundle.bundle_name, ai_manager)
+            commands = ai_manager.extract_raw_commands(self.bundle.transcript.text, self.bundle.bundle_name)
         except Exception:
             logger.error(f"{self}: Failed to extract commands: {traceback.format_exc()}")
             raise
@@ -376,7 +375,7 @@ class RunCommandsJob(TranscribeBundleJob):
             if cmd.matched_type is None:
                 # Should not happen under normal circumstances, but recover from
                 # inconsistent state if a command was marked executed without its type.
-                matched_type = interpret_command(cmd.text, ai_manager)
+                matched_type = ai_manager.interpret_command(cmd.text)
                 self.bundle.set_command_type(cmd.id, matched_type)
                 cmd.matched_type = matched_type
 
