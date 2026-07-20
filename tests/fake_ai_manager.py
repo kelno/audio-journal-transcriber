@@ -18,12 +18,18 @@ class FakeAIManager(AIManager):
     """
 
     # Canned responses (overridable per instance via the constructor).
+    # for transcribe_audio()
     transcript: str
+    # for query_chat_completion()
     chat_completion: str
+    # for get_ai_summary()
     summary: str
+    # for get_bundle_name_summary()
     bundle_name: str
-    command: CommandType
-    raw_commands: list[str]
+    # [query string, matched type] for interpret_command()
+    interpret_commands: dict[str, CommandType]
+    # [query string, list of answers] for extract_raw_commands()
+    raw_commands: dict[str, list[str]]
 
     def __init__(
         self,
@@ -31,8 +37,9 @@ class FakeAIManager(AIManager):
         chat_completion: str = "Test response",
         summary: str = "Test response",
         bundle_name: str = "Test response",
-        command: CommandType = CommandType.UNKNOWN,
-        raw_commands: list[str] | None = None,
+        # lambda constructor syntax to avoid mypy error
+        interpret_commands: dict[str, CommandType] | None = None,
+        raw_commands: dict[str, list[str]] | None = None,
     ) -> None:
         """Initialize the fake AI manager with canned responses.
 
@@ -41,8 +48,8 @@ class FakeAIManager(AIManager):
             chat_completion: Value returned by query_chat_completion().
             summary: Value returned by get_ai_summary().
             bundle_name: Value returned by get_bundle_name_summary().
-            command: Value returned by interpret_command().
-            raw_commands: Value returned by extract_raw_commands().
+            interpret_commands: Values returned by interpret_command().
+            raw_commands: Values returned by extract_raw_commands().
 
         """
         super().__init__()
@@ -50,8 +57,8 @@ class FakeAIManager(AIManager):
         self.chat_completion = chat_completion
         self.summary = summary
         self.bundle_name = bundle_name
-        self.command = command
-        self.raw_commands = raw_commands if raw_commands is not None else []
+        self.interpret_commands = {} if interpret_commands is None else interpret_commands
+        self.raw_commands = raw_commands if raw_commands is not None else {}
 
         # Track calls for verification in tests.
         self.transcribed_files: list[Path] = []
@@ -91,15 +98,24 @@ class FakeAIManager(AIManager):
 
     @override
     def interpret_command(self, command_string: str) -> CommandType:
-        """Return the canned command type, tracking the command string."""
+        """Return canned command types, tracking the command string.
+
+        Try to match with commands registered in interpret_commands, else returns UNKNOWN.
+        """
         self.interpreted_commands.append(command_string)
-        return self.command
+        if command_string in self.interpret_commands:
+            return self.interpret_commands[command_string]
+        else:
+            return CommandType.UNKNOWN
 
     @override
     def extract_raw_commands(self, text: str, bundle_name: str) -> list[str]:
         """Return the canned raw commands, tracking the inputs."""
         self.extracted_texts.append((text, bundle_name))
-        return self.raw_commands
+        if text in self.raw_commands:
+            return self.raw_commands[text]
+        else:
+            return []
 
 
 @pytest.fixture

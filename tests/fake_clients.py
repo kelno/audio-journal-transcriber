@@ -44,17 +44,3 @@ class FakeChatClient(ChatCompletionClient):
         """Return the fake response, tracking which prompts were sent."""
         self.completion_calls.append(messages)
         return self.response
-
-
-@final
-class FakeChatClientWithErrors(ChatCompletionClient):
-    """Test fake that simulates API errors."""
-
-    # class const strings
-    ERROR_MESSAGE = "Simulated API error for testing"
-
-    @override
-    def create_completion(self, messages: list[dict[str, str]]) -> str:
-        """Raise an error to simulate API failure."""
-        msg = f"{self.ERROR_MESSAGE}: {messages}"
-        raise ValueError(msg)

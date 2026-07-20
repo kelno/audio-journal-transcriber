@@ -68,7 +68,7 @@ class AIManager(ABC):
 
     @abstractmethod
     def extract_raw_commands(self, text: str, bundle_name: str) -> list[str]:
-        """Extract raw (natural language) commands from text."""
+        """Extract raw (natural language) commands from text. Not including command boundaries."""
         ...
 
 
@@ -282,7 +282,7 @@ class RealAIManager(AIManager):
 
     @override
     def extract_raw_commands(self, text: str, bundle_name: str) -> list[str]:
-        """Extract raw commands from text.
+        """Extract raw commands from text, not including command boundaries.
 
         'Raw' means fully natural language and no command matching yet.
         Delegates to the injected text_client instead of doing HTTP directly.

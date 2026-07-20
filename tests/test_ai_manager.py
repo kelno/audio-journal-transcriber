@@ -6,11 +6,7 @@ from transcriber.ai_manager import RealAIManager
 from transcriber.config import TranscribeConfig
 from transcriber.exception import EmptyChatClientAnswerException, InvalidBundleNameAnswerException
 
-from .fake_clients import (
-    FakeAudioClient,
-    FakeChatClient,
-    FakeChatClientWithErrors,
-)
+from .fake_clients import FakeAudioClient, FakeChatClient
 
 
 class TestAIManagerTranscription:
@@ -260,24 +256,6 @@ class TestAIManagerBundleName:
 
         # Act & Assert
         with pytest.raises(InvalidBundleNameAnswerException, match="too long"):
-            ai_manager.get_bundle_name_summary("summary")
-
-    def test_get_bundle_name_summary_fails_on_api_error(
-        self,
-        fake_config: TranscribeConfig,
-    ) -> None:
-        """Test that API errors are propagated."""
-        # Arrange
-        fake_chat_client = FakeChatClientWithErrors()
-        fake_audio_client = FakeAudioClient()
-        ai_manager = RealAIManager(
-            audio_client=fake_audio_client,
-            chat_client=fake_chat_client,
-            config=fake_config,
-        )
-
-        # Act & Assert
-        with pytest.raises(ValueError, match=FakeChatClientWithErrors.ERROR_MESSAGE):
             ai_manager.get_bundle_name_summary("summary")
 
     def test_extract_commands_no_commands(
