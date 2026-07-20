@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime  # noqa: TC003
-from typing import Any
+from typing import Any, override
 from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field, field_serializer
@@ -44,3 +44,8 @@ class Command(BaseModel):
     def from_dict(cls, data: dict[str, Any]) -> Command:
         """Create a Command from a dictionary (from YAML)."""
         return cls.model_validate(data)
+
+    @override
+    def __str__(self) -> str:
+        """Return a string representation of the job."""
+        return f"[{self.__class__.__name__}:{self.id}:{self.text}]"

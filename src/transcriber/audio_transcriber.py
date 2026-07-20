@@ -206,7 +206,7 @@ class AudioTranscriber:
         config: TranscribeConfig,
     ) -> BundleJobs:
         """Gather transcription jobs from this bundle. Jobs needs to be run in order."""
-        logger.debug(f"Gathering jobs for bundle: [{bundle}]")
+        logger.debug(f"Gathering jobs for bundle: {bundle}")
 
         jobs: list[TranscribeBundleJob] = []
         jobs.extend(self._gather_lifecycle_jobs(bundle, store_dir, dry_run))

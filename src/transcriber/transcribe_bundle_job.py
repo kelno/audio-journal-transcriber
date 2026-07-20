@@ -34,7 +34,7 @@ class TranscribeBundleJob(ABC):
     @override
     def __str__(self) -> str:
         """Return a string representation of the job."""
-        return f"{self.__class__.__name__}({self.bundle.bundle_name})"
+        return f"[{self.__class__.__name__}:{self.bundle.bundle_name}]"
 
 
 # Job list for a single bundle
