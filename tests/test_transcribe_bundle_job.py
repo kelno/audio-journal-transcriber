@@ -12,8 +12,13 @@ from transcriber.constants import (
     CUSTOM_CONTEXT_FILENAME,
     DEFAULT_CUSTOM_CONTEXT_CONTENT,
 )
+from transcriber.exception import EmptyTranscriptException, TooShortException
 from transcriber.transcribe_bundle import TranscribeBundle
-from transcriber.transcribe_bundle_job import CreateBundleJob, SummaryJob
+from transcriber.transcribe_bundle_job import (
+    CreateBundleJob,
+    SummaryJob,
+    TranscriptionJob,
+)
 
 
 @pytest.fixture
@@ -106,9 +111,71 @@ class TestCreateBundleJob:
 
         assert not fake_fs.file_exists(bundle.get_bundle_dir() / CUSTOM_CONTEXT_FILENAME)
 
+    def test_raises_too_short_exception(
+        self,
+        fake_config: TranscribeConfig,
+        fake_fs: FakeFileSystemService,
+        fake_audio_service: FakeAudioService,
+        fake_ai_manager: AIManager,
+    ) -> None:
+        """An audio file shorter than the configured minimum is refused."""
+        # Enable the minimum-length check via config.
+        fake_config.general.min_length_seconds = 10.0
+        input_audio = fake_config.general.input_dir / "voice_memo.mp3"
+        fake_fs.write_file(input_audio, "Audio")
+        # Duration below the threshold.
+        fake_audio_service.set_audio_duration(input_audio, 5.0)
 
-class TestSummaryJob:
-    """Tests for SummaryJob persisting the custom_context hash."""
+        bundle = TranscribeBundle.from_audio_file(
+            source_audio=input_audio,
+            config=fake_config,
+            fs_service=fake_fs,
+            audio_service=fake_audio_service,
+        )
+        job = CreateBundleJob(bundle, dry_run=False)
+
+        with pytest.raises(TooShortException) as exc_info:
+            job.run(fake_ai_manager, fake_config)
+
+        # The original source path is preserved on the exception for diagnostics.
+        assert exc_info.value.source_audio == input_audio
+        # The too-short file must not have been moved into the bundle.
+        assert not fake_fs.file_exists(bundle.get_bundle_dir() / "voice_memo.mp3")
+
+
+class TestTranscriptionJob:
+    """Tests for TranscriptionJob raising EmptyTranscriptException."""
+
+    def test_raises_on_empty_transcript(
+        self,
+        fake_config: TranscribeConfig,
+        fake_fs: FakeFileSystemService,
+        fake_audio_service: FakeAudioService,
+    ) -> None:
+        """A transcription that yields empty content aborts the job."""
+        input_audio = fake_config.general.input_dir / "voice_memo.mp3"
+        fake_fs.write_file(input_audio, "Audio")
+        fake_audio_service.set_audio_duration(input_audio, 20.0)
+
+        bundle = TranscribeBundle.from_audio_file(
+            source_audio=input_audio,
+            config=fake_config,
+            fs_service=fake_fs,
+            audio_service=fake_audio_service,
+        )
+        # Fake audio client returns an empty/whitespace-only transcript.
+        ai_manager = AIManager(
+            audio_client=FakeAudioClient(response="   "),
+            chat_client=FakeChatClient(),
+            config=fake_config,
+        )
+        job = TranscriptionJob(bundle, dry_run=False)
+
+        with pytest.raises(EmptyTranscriptException):
+            job.run(ai_manager, fake_config)
+
+        # No transcript file should have been written for an empty result.
+        assert bundle.transcript is None
 
     def test_persists_context_hash_after_summary(
         self,

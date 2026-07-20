@@ -6,13 +6,15 @@ import pytest
 from tests.bundle_fixtures import TranscribeBundleFactory
 from tests.fake_audio_service import FakeAudioService
 from tests.fake_file_system import FakeFileSystemService
-from transcriber.commands.command_handlers import handle_merge
+from transcriber.commands.command import Command
+from transcriber.commands.command_handlers import handle_merge, handle_unknown
 from transcriber.config import TranscribeConfig
 from transcriber.constants import MERGE_FAILED_FILENAME, MULTIPLE_TRANSCRIPTS_SEPARATOR
 from transcriber.exception import (
     AbortRemainingBundleJobsException,
     MergeBlockedException,
     NoPreviousBundleException,
+    UnknownCommandException,
 )
 from transcriber.transcribe_bundle import TranscribeBundle
 
@@ -773,3 +775,22 @@ class TestHandleMerge:
         merge_cmd = current_bundle.commands.commands[0]
         with pytest.raises(NoPreviousBundleException):
             handle_merge(current_bundle, fake_config, merge_cmd)
+
+
+class TestHandleUnknown:
+    """Tests for handle_unknown raising UnknownCommandException."""
+
+    def test_handle_unknown_raises(
+        self,
+        fake_config: TranscribeConfig,
+        transcribe_bundle_factory: TranscribeBundleFactory,
+    ) -> None:
+        """An unknown command type cannot be executed and raises."""
+        bundle = transcribe_bundle_factory(
+            bundle_name="2025-01-15_meeting",
+            audio_filename="meeting.mp3",
+        )
+        cmd = Command(text="do something weird")
+
+        with pytest.raises(UnknownCommandException):
+            handle_unknown(bundle, fake_config, cmd)

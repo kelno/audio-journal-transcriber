@@ -9,9 +9,6 @@ import pytest
 from tests.fake_audio_service import FakeAudioService
 from tests.fake_file_system import FakeFileSystemService
 from transcriber.config import TranscribeConfig
-from transcriber.constants import (
-    DEFAULT_CUSTOM_CONTEXT_CONTENT,
-)
 from transcriber.files.commands_file import CommandsFile
 from transcriber.files.metadata import AudioFileMeta, MetadataFile
 from transcriber.files.text_file import (
@@ -20,7 +17,6 @@ from transcriber.files.text_file import (
     TranscriptFile,
 )
 from transcriber.transcribe_bundle import TranscribeBundle
-from transcriber.utils import extract_date_from_recording_filename
 
 
 class TranscribeBundleFactory(Protocol):

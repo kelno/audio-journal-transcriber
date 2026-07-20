@@ -18,7 +18,7 @@ from transcriber.constants import (
     SUMMARY_FILENAME,
     TRANSCRIPT_FILENAME,
 )
-from transcriber.exception import InvalidBundleException, InvalidSourceAudiosException
+from transcriber.exception import FailedToExtractDateException, InvalidBundleException, InvalidSourceAudiosException
 from transcriber.files.metadata import AudioFileMeta, MetadataFile
 from transcriber.files.text_file import CustomContextFile, TranscriptFile
 from transcriber.transcribe_bundle import TranscribeBundle
@@ -352,6 +352,22 @@ class TestTranscribeBundleFromExistingDirectory:
                 config=fake_config,
                 fs_service=fake_fs,
                 audio_service=fake_audio_service,
+            )
+
+
+class TestGetDateForFilename:
+    """Tests for TranscribeBundle.get_date_for_filename raising FailedToExtractDateException."""
+
+    def test_raises_when_no_date_in_filename_and_no_path(
+        self,
+        fake_config: TranscribeConfig,
+    ) -> None:
+        """Without a date in the filename and no audio path, extraction fails."""
+        with pytest.raises(FailedToExtractDateException):
+            TranscribeBundle.get_date_for_filename(
+                audio_path=None,
+                audio_filename="weird_name.mp3",
+                config=fake_config,
             )
 
 
