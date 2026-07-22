@@ -14,6 +14,7 @@ from transcriber.constants import (
 from .ai_manager import AIManager
 from .config import TranscribeConfig
 from .exception import (
+    AbortForMergeTargetException,
     AbortRemainingBundleJobsException,
     EmptyTranscriptException,
     TooShortException,
@@ -441,6 +442,9 @@ class RunCommandsJob(TranscribeBundleJob):
 
             except AbortRemainingBundleJobsException:
                 logger.debug(f"{cmd} requested aborting remaining jobs for bundle {self.bundle}")
+                raise  # raise it further to the job execution loop
+            except AbortForMergeTargetException:
+                logger.debug(f"{cmd} finished a merge, re-processing target bundle for {self.bundle}")
                 raise  # raise it further to the job execution loop
             except (UnknownCommandException, Exception) as e:
                 # On error, stop processing remaining commands to avoid partial state.

@@ -14,6 +14,7 @@ from transcriber.constants import (
     SUMMARY_FILENAME,
 )
 from transcriber.exception import (
+    AbortForMergeTargetException,
     AbortRemainingBundleJobsException,
     MergeBlockedException,
     NoPreviousBundleException,
@@ -339,7 +340,7 @@ def handle_merge(source: TranscribeBundle, _config: TranscribeConfig, bundles_ca
 
     msg = f"Merged bundle {source} into {target}"
     logger.info(msg)
-    raise AbortRemainingBundleJobsException(msg)
+    raise AbortForMergeTargetException(target, msg)
 
 
 @command_handler

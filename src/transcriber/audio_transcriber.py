@@ -6,6 +6,7 @@ from transcriber.audio_service import AudioService, RealAudioService
 from transcriber.commands.command_registry import COMMAND_REGISTRY
 from transcriber.config import TranscribeConfig
 from transcriber.exception import (
+    AbortForMergeTargetException,
     AbortRemainingBundleJobsException,
     AudioTranscriberException,
     MergeBlockedException,
@@ -96,6 +97,31 @@ class AudioTranscriber:
         elif isinstance(e, AbortRemainingBundleJobsException):
             logger.debug(
                 f"Skipping remaining jobs for current bundle, requested by job {job}: {e}",
+            )
+            return False
+        elif isinstance(e, AbortForMergeTargetException):
+            logger.debug(f"Merge finished, re-processing target bundle: {e.bundle.bundle_name}")
+            # Drop the target's still-queued (stale) jobs.
+            # Re-gather fresh jobs from the merged target
+            existing = queue.pop(e.bundle, None)
+            requeue_count = (existing.requeue_count + 1) if existing is not None else 1
+            target_name = e.bundle.bundle_name
+            if requeue_count > MAX_REQUEUE_PER_BUNDLE:
+                logger.error(
+                    f"Bundle {target_name} re-queued too many times; stopping to avoid a loop.",
+                )
+                # Then we're done, at this point we've already removed any remaining jobs for the target
+                return True
+
+            # Recompute remaining jobs for target
+            queue[e.bundle] = BundleJobQueueEntry(
+                jobs=self.gather_bundle_jobs(
+                    e.bundle,
+                    self.config.general.store_dir,
+                    self.dry_run,
+                    config=self.config,
+                ),
+                requeue_count=requeue_count,
             )
             return False
         elif isinstance(e, MergeBlockedException):
