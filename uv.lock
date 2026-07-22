@@ -34,7 +34,7 @@ wheels = [
 
 [[package]]
 name = "audio-journal-transcriber"
-version = "0.5.1"
+version = "0.5.2"
 source = { editable = "." }
 dependencies = [
     { name = "audioop-lts" },
