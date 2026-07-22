@@ -32,6 +32,20 @@ from transcriber.utils import (
 
 from .logger import logger
 
+# A bundle's work queue: the jobs left to run for that bundle, plus how many
+# times it has been re-queued (used to break accidental merge loops).
+type BundleJobQueue = "dict[TranscribeBundle, BundleJobQueueEntry]"
+
+MAX_REQUEUE_PER_BUNDLE = 5
+
+
+@dataclass
+class BundleJobQueueEntry:
+    """One bundle's jobs plus its requeue counter."""
+
+    jobs: BundleJobs
+    requeue_count: int = 0
+
 
 @dataclass
 class AudioTranscriber:
@@ -69,6 +83,32 @@ class AudioTranscriber:
             f"{type(self).__name__} initialized with\nGeneral configuration: {self.config.general}",
         )
 
+    def _handle_process_jobs_exception(self, job: TranscribeBundleJob, e: Exception, queue: BundleJobQueue) -> bool:
+        """Returns wheter we are in an error case."""
+        if isinstance(e, TooShortException):
+            logger.warning(
+                f"Refusing to create bundle from too short audio file {e.source_audio}: {e}",
+            )
+            if self.config.general.remove_short_files and not self.dry_run:
+                logger.info(f"Removing too short audio file: {e.source_audio}")
+                e.source_audio.unlink()
+            return False
+        elif isinstance(e, AbortRemainingBundleJobsException):
+            logger.debug(
+                f"Skipping remaining jobs for current bundle, requested by job {job}: {e}",
+            )
+            return False
+        elif isinstance(e, MergeBlockedException):
+            # A previous merge into the target failed and left a marker. Stop
+            # processing this bundle and do NOT re-enqueue it, so the failed
+            # merge is not retried automatically until the marker is cleared.
+            # This requires human intervention.
+            logger.error(f"Merge blocked, bundle skipped (human action required): {e}")
+            return True
+        else:
+            logger.exception(f"Error processing {job} (skipping any remaining jobs for this bundle).")
+            return True
+
     def process_jobs(self, all_jobs_bundles: list[BundleJobs]) -> list[BundleJobs]:
         """Process audio files from the pending directory.
 
@@ -79,10 +119,20 @@ class AudioTranscriber:
             list[BundleJobs]: Remaining unprocessed bundle jobs.
 
         """
+        # Work queue keyed by bundle object
+        queue: BundleJobQueue = {
+            jobs_bundle[0].bundle: BundleJobQueueEntry(jobs=jobs_bundle) for jobs_bundle in all_jobs_bundles if jobs_bundle
+        }
+
         # Keep a cache of loaded bundles for the time of this function, to allow subroutines to interact with other bundles
         bundle_cache = {jobs[0].bundle for jobs in all_jobs_bundles}
-        unprocessed_bundles = list[BundleJobs]()
-        for jobs_bundle in all_jobs_bundles:
+        errored_bundles = list[BundleJobs]()
+        while queue:
+            # Process one bundle at a time; popitem() yields an arbitrary bundle.
+            _bundle_name, entry = queue.popitem()
+            jobs_bundle = entry.jobs
+            if not jobs_bundle:
+                continue
             remaining_jobs_in_bundle = jobs_bundle.copy()
             for job in jobs_bundle:
                 try:
@@ -94,33 +144,13 @@ class AudioTranscriber:
                     )
                     # Remove job from jobs bundle on successful execution
                     remaining_jobs_in_bundle.remove(job)
-                except TooShortException as e:
-                    logger.warning(
-                        f"Refused to create bundle from audio file {e.source_audio}: {e}",
-                    )
-                    if self.config.general.remove_short_files and not self.dry_run:
-                        logger.info(f"Removing too short audio file: {e.source_audio}")
-                        e.source_audio.unlink()
-                    break  # skip remaining jobs in this bundle
-                except AbortRemainingBundleJobsException as e:
-                    logger.debug(
-                        f"Skipping remaining jobs for current bundle, requested by job {job}: {e}",
-                    )
-                    break  # skip remaining jobs in this bundle
-                except MergeBlockedException as e:
-                    # A previous merge into the target failed and left a marker. Stop
-                    # processing this bundle and do NOT re-enqueue it, so the failed
-                    # merge is not retried automatically until the marker is cleared.
-                    # This requires human intervention.
-                    logger.error(f"Merge blocked, bundle skipped (human action required): {e}")
-                    break  # skip remaining jobs in this bundle
-                except Exception:  # pylint: disable=broad-exception-caught
-                    logger.exception(f"Error processing {job} (skipping any remaining jobs for this bundle).")
-                    if len(remaining_jobs_in_bundle) > 0:
-                        unprocessed_bundles.append(remaining_jobs_in_bundle)
+                except Exception as e:  # pylint: disable=broad-exception-caught
+                    errored = self._handle_process_jobs_exception(job, e, queue)
+                    if errored and len(remaining_jobs_in_bundle) > 0:
+                        errored_bundles.append(remaining_jobs_in_bundle)
                     break  # skip remaining jobs in this bundle
 
-        return unprocessed_bundles
+        return errored_bundles
 
     def log_section_header(self, message: str) -> None:
         """Log a section header with separators."""
@@ -319,23 +349,23 @@ class AudioTranscriber:
 
         self.log_section_header("Gathering Jobs")
         all_bundle_jobs = self.gather_jobs(input_dir)
-        unprocessed_bundles = list[BundleJobs]()
+        errored_bundles = list[BundleJobs]()
         if not all_bundle_jobs:
             logger.info("No jobs found for processing")
         else:
             total_jobs = sum(len(bundle_jobs) for bundle_jobs in all_bundle_jobs)
             logger.info(f"Found {total_jobs} pending jobs for {len(all_bundle_jobs)} bundles")
             self.log_section_header("Processing Jobs")
-            unprocessed_bundles = self.process_jobs(all_bundle_jobs)
+            errored_bundles = self.process_jobs(all_bundle_jobs)
 
         if not self.dry_run:
             remove_empty_subdirs(input_dir)
 
         self.log_section_header("Summary")
         logger.info("Transcription process finished.")
-        if len(unprocessed_bundles) > 0:
-            logger.info(f"{len(unprocessed_bundles)} bundle(s) were not fully processed.")
+        if len(errored_bundles) > 0:
+            logger.info(f"{len(errored_bundles)} bundle(s) were not fully processed.")
         else:
             logger.info("All bundles were processed successfully.")
 
-        return unprocessed_bundles
+        return errored_bundles
