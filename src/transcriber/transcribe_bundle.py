@@ -265,10 +265,10 @@ class TranscribeBundle:
         tz = config.general.timezone
 
         def get_sort_key(file_path: Path) -> tuple[int, datetime]:
-            # Try to extract date from filename
-            filename_date = extract_date_from_recording_filename(file_path.name, tz)
-            if filename_date:
-                return (0, filename_date)  # (0, date) - use filename date
+            # Try to extract date from filename, or from dirname
+            for filename in [file_path.name, file_path.parent.name]:
+                if filename_date := extract_date_from_recording_filename(filename, tz):
+                    return (0, filename_date)  # (0, date) - use filename date
 
             # Fallback to file modification time
             mod_date = get_file_modified_date(file_path, tz)
