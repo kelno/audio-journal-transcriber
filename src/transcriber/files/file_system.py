@@ -158,6 +158,22 @@ class FileSystemService(ABC):
         """
         ...
 
+    @abstractmethod
+    def get_mtime(self, path: Path) -> float:
+        """Get the modification time of a file or directory.
+
+        Args:
+            path: Path to the file or directory.
+
+        Returns:
+            float: The modification time as a Unix timestamp.
+
+        Raises:
+            OSError: When failing to get time.
+
+        """
+        ...
+
 
 class RealFileSystemService(FileSystemService):
     """Real file system operations."""
@@ -356,3 +372,19 @@ class RealFileSystemService(FileSystemService):
 
         """
         return list(path.glob("*"))
+
+    @override
+    def get_mtime(self, path: Path) -> float:
+        """Get the modification time of a file or directory.
+
+        Args:
+            path: Path to the file or directory.
+
+        Returns:
+            float: The modification time as a Unix timestamp.
+
+        Raises:
+            OSError: When failing to get time.
+
+        """
+        return path.stat().st_mtime

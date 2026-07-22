@@ -195,6 +195,25 @@ class FakeFileSystemService(FileSystemService):
             return self.operations
         return [op for op in self.operations if op[0] == operation_type]
 
+    @override
+    def get_mtime(self, path: Path) -> float:
+        """Get the modification time of a file or directory.
+
+        Currently just raises error since it's not supported by FakeFileSystemService.
+
+        Args:
+            path: Path to the file or directory.
+
+        Returns:
+            float: The modification time as a Unix timestamp.
+
+        Raises:
+            FileNotFoundError: If the path does not exist.
+
+        """
+        msg = "FakeFileSystemService does not support mtime."
+        raise OSError(msg)
+
 
 @pytest.fixture
 def fake_fs(fake_config: TranscribeConfig) -> FakeFileSystemService:

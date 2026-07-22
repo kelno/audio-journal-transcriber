@@ -361,6 +361,7 @@ class TestGetDateForFilename:
     def test_raises_when_no_date_in_filename_and_no_path(
         self,
         fake_config: TranscribeConfig,
+        fake_fs: FakeFileSystemService,
     ) -> None:
         """Without a date in the filename and no audio path, extraction fails."""
         with pytest.raises(FailedToExtractDateException):
@@ -368,6 +369,7 @@ class TestGetDateForFilename:
                 audio_path=None,
                 audio_filename="weird_name.mp3",
                 config=fake_config,
+                fs_service=fake_fs,
             )
 
 

@@ -4,6 +4,8 @@ from datetime import datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
+from transcriber.files.file_system import FileSystemService
+
 from .logger import logger
 
 
@@ -68,13 +70,13 @@ def file_is_in_directory_tree(file: Path, tree: Path) -> bool:
     return is_inside
 
 
-def get_file_modified_date(audio_path: Path, tz: ZoneInfo) -> datetime:
+def get_file_modified_date(audio_path: Path, tz: ZoneInfo, fs_service: FileSystemService) -> datetime:
     """Get the file's date from its last modified time (format: YYYY-MM-DD).
 
     Falls back to current date if modification time is unavailable.
     """
     try:
-        file_mtime = audio_path.stat().st_mtime
+        file_mtime = fs_service.get_mtime(audio_path)  # audio_path.stat().st_mtime
         file_date = datetime.fromtimestamp(file_mtime, tz=tz)
         # logger.debug(f"Using file last modified date: '{file_date}'")
         return file_date

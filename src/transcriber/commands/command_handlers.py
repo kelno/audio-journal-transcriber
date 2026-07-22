@@ -75,7 +75,8 @@ def _move_audio_to_bundle(source: TranscribeBundle, target: TranscribeBundle) ->
     target.source_audios.extend(moved_audio_paths)
     target.source_audios = TranscribeBundle.sort_audio_files_chronologically(
         target.source_audios,
-        source.config,
+        target.config,
+        target.fs_service,
     )
 
     # Build a mapping of final filenames to their metadata (with renamed targets).

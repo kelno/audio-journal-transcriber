@@ -123,7 +123,7 @@ class TranscribeBundle:
         )
 
         # Sort audio files chronologically
-        source_audios = cls.sort_audio_files_chronologically(source_audios, config)
+        source_audios = cls.sort_audio_files_chronologically(source_audios, config, fs_service)
 
         bundle = TranscribeBundle(
             bundle_name=bundle_name,
@@ -148,7 +148,12 @@ class TranscribeBundle:
         audio_service: AudioService,
     ) -> "TranscribeBundle":
         """Create a new TranscribeBundle instance from an audio file."""
-        bundle_date = TranscribeBundle.get_date_for_filename(source_audio, source_audio.name, config)
+        bundle_date = TranscribeBundle.get_date_for_filename(
+            source_audio,
+            source_audio.name,
+            config,
+            fs_service,
+        )
         metadata = MetadataFile(
             audio_files=[AudioFileMeta(filename=source_audio.name)],
             bundle_date=bundle_date,
@@ -185,6 +190,7 @@ class TranscribeBundle:
             source_audios[0],
             source_audios[0].name,
             config,
+            fs_service,
         )
         metadata = MetadataFile(
             audio_files=[AudioFileMeta(filename=name) for name in filenames],
@@ -260,6 +266,7 @@ class TranscribeBundle:
     def sort_audio_files_chronologically(
         audio_files: list[Path],
         config: TranscribeConfig,
+        fs_service: FileSystemService,
     ) -> list[Path]:
         """Sort audio files by extracted filename date, or fallback to modification time."""
         tz = config.general.timezone
@@ -271,7 +278,7 @@ class TranscribeBundle:
                     return (0, filename_date)  # (0, date) - use filename date
 
             # Fallback to file modification time
-            mod_date = get_file_modified_date(file_path, tz)
+            mod_date = get_file_modified_date(file_path, tz, fs_service)
             return (1, mod_date)  # (1, date) - use mod time (secondary sort)
 
         return sorted(audio_files, key=get_sort_key)
@@ -310,6 +317,7 @@ class TranscribeBundle:
         audio_path: Path | None,
         audio_filename: str,
         config: TranscribeConfig,
+        fs_service: FileSystemService,
     ) -> datetime:
         """Try to extract date from filename first, or else from file modified date.
 
@@ -325,7 +333,11 @@ class TranscribeBundle:
             )
             return date_from_filename
         elif audio_path:
-            file_date = get_file_modified_date(audio_path, tz)
+            file_date = get_file_modified_date(
+                audio_path=audio_path,
+                tz=tz,
+                fs_service=fs_service,
+            )
             logger.debug(
                 f"No date found in filename, using file modified date : '{file_date}'",
             )
@@ -388,7 +400,7 @@ class TranscribeBundle:
                 )
                 return False
 
-            file_date = get_file_modified_date(audio_path, tz)
+            file_date = get_file_modified_date(audio_path, tz, self.fs_service)
             file_days_since_current = get_days_since_time(file_date)
             file_days_since = min(file_days_since, file_days_since_current)
 
