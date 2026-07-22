@@ -7,11 +7,10 @@ from tests.bundle_fixtures import TranscribeBundleFactory
 from tests.fake_audio_service import FakeAudioService
 from tests.fake_file_system import FakeFileSystemService
 from transcriber.commands.command import Command
-from transcriber.commands.command_handlers import handle_merge, handle_unknown
+from transcriber.commands.command_handlers import AbortForMergeTargetException, handle_merge, handle_unknown
 from transcriber.config import TranscribeConfig
 from transcriber.constants import MERGE_FAILED_FILENAME, MULTIPLE_TRANSCRIPTS_SEPARATOR
 from transcriber.exception import (
-    AbortForMergeTargetException,
     MergeBlockedException,
     NoPreviousBundleException,
     UnknownCommandException,

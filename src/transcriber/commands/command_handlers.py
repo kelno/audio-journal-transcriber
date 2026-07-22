@@ -6,7 +6,7 @@ Contains the implementation logic for each command type.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, final
 
 from transcriber.constants import (
     MERGE_FAILED_FILENAME,
@@ -14,8 +14,8 @@ from transcriber.constants import (
     SUMMARY_FILENAME,
 )
 from transcriber.exception import (
-    AbortForMergeTargetException,
     AbortRemainingBundleJobsException,
+    AudioTranscriberException,
     MergeBlockedException,
     NoPreviousBundleException,
     UnknownCommandException,
@@ -242,6 +242,21 @@ def _write_fail_markers(source: TranscribeBundle, target: TranscribeBundle) -> N
     )
 
 
+@final
+class AbortForMergeTargetException(AudioTranscriberException):
+    """Abort remaining jobs for the current (source) bundle and re-process `bundle`.
+
+    Raised by a merge: the source bundle is deleted, so its remaining jobs must be
+    skipped, while the merge target's summary/name were invalidated and must be
+    regenerated within the same run. `bundle` is the (already merged and committed)
+    target bundle to re-gather and re-process.
+    """
+
+    def __init__(self, bundle: TranscribeBundle, message: str):
+        super().__init__(message)
+        self.bundle = bundle
+
+
 @command_handler
 def handle_merge(source: TranscribeBundle, _config: TranscribeConfig, bundles_cache: set[TranscribeBundle], merge_cmd: Command) -> None:
     """Merge the current recording with the previous one.
@@ -250,7 +265,7 @@ def handle_merge(source: TranscribeBundle, _config: TranscribeConfig, bundles_ca
         source: The transcribe bundle to operate on.
         config: The transcribe configuration.
         merge_cmd: The original command triggering the merge.
-        bundles_cache:
+        bundles_cache: Cache for all loaded bundles during this jobs run.
 
     Side effects / merge policy:
         - Audio, transcript, commands and transcript-model metadata are merged into
@@ -351,7 +366,7 @@ def handle_delete(bundle: TranscribeBundle, _config: TranscribeConfig, bundles_c
         bundle: The transcribe bundle to operate on.
         config: The transcribe configuration.
         cmd: The original command triggering this.
-        bundles_cache:
+        bundles_cache: Cache for all loaded bundles during this jobs run.
 
     """
     logger.debug(f"Running delete command for {bundle} (command text: {cmd.text})")
@@ -371,6 +386,7 @@ def handle_unknown(_bundle: TranscribeBundle, _config: TranscribeConfig, _bundle
         bundle: The transcribe bundle to operate on.
         config: The transcribe configuration.
         cmd: The original command triggering this.
+        bundles_cache: Cache for all loaded bundles during this jobs run.
 
     Raises:
         ValueError: Always raised as the command type is unknown.
@@ -388,6 +404,7 @@ def handle_ignore(_bundle: TranscribeBundle, _config: TranscribeConfig, _bundles
         bundle: The transcribe bundle to operate on.
         config: The transcribe configuration.
         cmd: The original command triggering this.
+        bundles_cache: Cache for all loaded bundles during this jobs run.
 
     """
     logger.debug(f"Command {cmd.text} is ignored.")

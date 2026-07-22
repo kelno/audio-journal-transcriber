@@ -17,7 +17,11 @@ from transcriber.constants import (
     SUMMARY_FILENAME,
     TRANSCRIPT_FILENAME,
 )
-from transcriber.exception import FailedToExtractDateException, InvalidBundleException, InvalidSourceAudiosException
+from transcriber.exception import (
+    FailedToExtractDateException,
+    InvalidBundleException,
+    InvalidSourceAudiosException,
+)
 from transcriber.files.commands_file import CommandsFile
 from transcriber.files.file_system import FileSystemService
 from transcriber.files.metadata import AudioFileMeta, MetadataFile

@@ -3,10 +3,10 @@ from pathlib import Path
 
 from transcriber.ai_manager import AIManager
 from transcriber.audio_service import AudioService, RealAudioService
+from transcriber.commands.command_handlers import AbortForMergeTargetException
 from transcriber.commands.command_registry import COMMAND_REGISTRY
 from transcriber.config import TranscribeConfig
 from transcriber.exception import (
-    AbortForMergeTargetException,
     AbortRemainingBundleJobsException,
     AudioTranscriberException,
     MergeBlockedException,

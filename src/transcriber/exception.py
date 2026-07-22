@@ -5,8 +5,6 @@ from typing import TYPE_CHECKING, final
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from transcriber.transcribe_bundle import TranscribeBundle
-
 
 class AudioTranscriberException(Exception):
     """Base exception for audio transcriber errors."""
@@ -40,21 +38,6 @@ class InvalidBundleException(AudioTranscriberException):
 @final
 class NoPreviousBundleException(AudioTranscriberException):
     """Failed to find a previous bundle for merge command."""
-
-
-@final
-class AbortForMergeTargetException(AudioTranscriberException):
-    """Abort remaining jobs for the current (source) bundle and re-process `bundle`.
-
-    Raised by a merge: the source bundle is deleted, so its remaining jobs must be
-    skipped, while the merge target's summary/name were invalidated and must be
-    regenerated within the same run. `bundle` is the (already merged and committed)
-    target bundle to re-gather and re-process.
-    """
-
-    def __init__(self, bundle: TranscribeBundle, message: str):
-        super().__init__(message)
-        self.bundle = bundle
 
 
 @final

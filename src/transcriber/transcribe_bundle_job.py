@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import override
 
 from transcriber.commands.command import Command
+from transcriber.commands.command_handlers import AbortForMergeTargetException
 from transcriber.commands.command_registry import COMMAND_REGISTRY
 from transcriber.commands.command_type import CommandType
 from transcriber.constants import (
@@ -14,7 +15,6 @@ from transcriber.constants import (
 from .ai_manager import AIManager
 from .config import TranscribeConfig
 from .exception import (
-    AbortForMergeTargetException,
     AbortRemainingBundleJobsException,
     EmptyTranscriptException,
     TooShortException,

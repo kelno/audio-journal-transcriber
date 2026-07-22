@@ -1,7 +1,6 @@
 """Tests for AudioTranscriber summary scheduling (context-change regeneration)."""
 
 from datetime import datetime, timedelta
-from typing import cast
 
 from tests.bundle_fixtures import TranscribeBundleFactory
 from tests.fake_ai_manager import FakeAIManager
