@@ -32,12 +32,13 @@ FROM python:3.14-slim-trixie
 
 ENV PATH="/app/.venv/bin:$PATH"
 
-# Install ffmpeg and any minimal dependencies
+# Install ffmpeg and any minimal dependencies. (Improve me: It has a lot of unecessary stuff for our purpose and bloats the image size)
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
         ffmpeg \
         ca-certificates \
-        && rm -rf /var/lib/apt/lists/*
+        && rm -rf /var/lib/apt/lists/* \
+    && ffmpeg -version
 
 WORKDIR /app
 RUN mkdir -p /app \

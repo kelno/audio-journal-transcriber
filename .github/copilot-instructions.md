@@ -30,3 +30,4 @@
 - We use "uv" instead of directly pip. For example use "uv run pytest" instead of trying to activate the venv using other scripts.
 - Check linter issues with both `uv run basedpyright <file>` and `uv run ruff check --fix <file>`
 - When generating examples, don't assume workspace environment but personal usage.
+- If you encounter error "tool input was not fully received", a common cause is that you didn't "cd" properly.
