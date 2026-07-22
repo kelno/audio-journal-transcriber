@@ -321,7 +321,7 @@ class RealFileSystemService(FileSystemService):
 
         """
         destination.parent.mkdir(parents=True, exist_ok=True)
-        source.rename(destination)
+        shutil.move(str(source), str(destination))
 
     @override
     def create_directory(self, path: Path) -> None:
@@ -342,7 +342,7 @@ class RealFileSystemService(FileSystemService):
             to_path: Destination directory path.
 
         """
-        from_path.rename(to_path)
+        shutil.move(str(from_path), str(to_path))
 
     @override
     def list_directory(self, path: Path) -> list[Path]:
