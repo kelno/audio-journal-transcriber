@@ -1,3 +1,4 @@
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from hashlib import sha256
@@ -52,6 +53,10 @@ class TranscribeBundle:
     @override
     def __str__(self) -> str:
         return f"[Bundle:{self.bundle_name}]"
+
+    @override
+    def __hash__(self):
+        return hash(id(self))
 
     @staticmethod
     def _load_bundle_files(
@@ -431,7 +436,7 @@ class TranscribeBundle:
     def find_previous_bundle(
         cls,
         current_bundle: "TranscribeBundle",
-        bundles: list["TranscribeBundle"],
+        bundles: Iterable["TranscribeBundle"],
         max_hours: float | None = None,
     ) -> "TranscribeBundle | None":
         """Find the most recent bundle before the current bundle within a time window.

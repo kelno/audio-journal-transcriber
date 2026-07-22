@@ -12,7 +12,7 @@ if TYPE_CHECKING:
 
 # Signature shared by every command handler: (bundle, config, command_text) -> None.
 # Defined here rather than in command_handlers to avoid a circular import cycle.
-CommandHandler = Callable[["TranscribeBundle", "TranscribeConfig", "Command"], None]
+CommandHandler = Callable[["TranscribeBundle", "TranscribeConfig", "set[TranscribeBundle]", "Command"], None]
 
 
 @dataclass

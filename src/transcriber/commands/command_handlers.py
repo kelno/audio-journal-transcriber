@@ -242,13 +242,14 @@ def _write_fail_markers(source: TranscribeBundle, target: TranscribeBundle) -> N
 
 
 @command_handler
-def handle_merge(source: TranscribeBundle, _config: TranscribeConfig, merge_cmd: Command) -> None:
+def handle_merge(source: TranscribeBundle, _config: TranscribeConfig, bundles_cache: set[TranscribeBundle], merge_cmd: Command) -> None:
     """Merge the current recording with the previous one.
 
     Args:
         source: The transcribe bundle to operate on.
         config: The transcribe configuration.
         merge_cmd: The original command triggering the merge.
+        bundles_cache:
 
     Side effects / merge policy:
         - Audio, transcript, commands and transcript-model metadata are merged into
@@ -266,17 +267,7 @@ def handle_merge(source: TranscribeBundle, _config: TranscribeConfig, merge_cmd:
     """
     logger.info(f"Running merge command for {source} (command text: {merge_cmd.text})")
 
-    store_dir = source.config.general.store_dir
-    bundles = TranscribeBundle.gather_existing_bundles(
-        store_dir=store_dir,
-        dry_run=False,
-        cleanup_bundle=False,
-        config=source.config,
-        fs_service=source.fs_service,
-        audio_service=source.audio_service,
-    )
-
-    target = TranscribeBundle.find_previous_bundle(source, bundles)
+    target = TranscribeBundle.find_previous_bundle(source, bundles_cache)
     if target is None:
         msg = "No previous bundle found to merge with"
         raise NoPreviousBundleException(msg)
@@ -335,6 +326,7 @@ def handle_merge(source: TranscribeBundle, _config: TranscribeConfig, merge_cmd:
 
         # Source removed only after the merge is fully committed to the target.
         source.fs_service.delete_directory(source_bundle_dir)
+        bundles_cache.remove(source)
     except Exception:
         logger.exception(
             f"Merge of {source.bundle_name} into {target.bundle_name} failed; "
@@ -351,25 +343,27 @@ def handle_merge(source: TranscribeBundle, _config: TranscribeConfig, merge_cmd:
 
 
 @command_handler
-def handle_delete(bundle: TranscribeBundle, _config: TranscribeConfig, cmd: Command) -> None:
+def handle_delete(bundle: TranscribeBundle, _config: TranscribeConfig, bundles_cache: set[TranscribeBundle], cmd: Command) -> None:
     """Delete the current recording.
 
     Args:
         bundle: The transcribe bundle to operate on.
         config: The transcribe configuration.
         cmd: The original command triggering this.
+        bundles_cache:
 
     """
     logger.debug(f"Running delete command for {bundle} (command text: {cmd.text})")
     bundle.set_command_executed(cmd.id)
     bundle.fs_service.delete_directory(bundle.get_bundle_dir())
+    bundles_cache.remove(bundle)
 
     msg = "Skip remaining jobs after delete command"
     raise AbortRemainingBundleJobsException(msg)
 
 
 @command_handler
-def handle_unknown(_bundle: TranscribeBundle, _config: TranscribeConfig, cmd: Command) -> None:
+def handle_unknown(_bundle: TranscribeBundle, _config: TranscribeConfig, _bundles_cache: set[TranscribeBundle], cmd: Command) -> None:
     """Handle unknown command type.
 
     Args:
@@ -386,7 +380,7 @@ def handle_unknown(_bundle: TranscribeBundle, _config: TranscribeConfig, cmd: Co
 
 
 @command_handler
-def handle_ignore(_bundle: TranscribeBundle, _config: TranscribeConfig, cmd: Command) -> None:
+def handle_ignore(_bundle: TranscribeBundle, _config: TranscribeConfig, _bundles_cache: set[TranscribeBundle], cmd: Command) -> None:
     """Handle ignore command type.
 
     Args:

@@ -13,7 +13,12 @@ from transcriber.constants import (
 
 from .ai_manager import AIManager
 from .config import TranscribeConfig
-from .exception import AbortRemainingBundleJobsException, EmptyTranscriptException, TooShortException, UnknownCommandException
+from .exception import (
+    AbortRemainingBundleJobsException,
+    EmptyTranscriptException,
+    TooShortException,
+    UnknownCommandException,
+)
 from .files.metadata import AudioFileMeta
 from .logger import logger
 from .transcribe_bundle import TranscribeBundle
@@ -27,7 +32,7 @@ class TranscribeBundleJob(ABC):
     dry_run: bool
 
     @abstractmethod
-    def run(self, ai_manager: AIManager, config: TranscribeConfig) -> None:
+    def run(self, ai_manager: AIManager, config: TranscribeConfig, bundle_cache: set[TranscribeBundle]) -> None:
         """Perform the job's main work."""
 
     @override
@@ -49,6 +54,7 @@ class CreateBundleJob(TranscribeBundleJob):
         self,
         ai_manager: AIManager,
         config: TranscribeConfig,
+        bundle_cache: set[TranscribeBundle],
     ) -> None:
         """Move all audio files into the bundle directory.
 
@@ -132,6 +138,7 @@ class TranscriptionJob(TranscribeBundleJob):
         self,
         ai_manager: AIManager,
         config: TranscribeConfig,
+        bundle_cache: set[TranscribeBundle],
     ) -> None:
         """Main function.
 
@@ -187,6 +194,7 @@ class SummaryJob(TranscribeBundleJob):
         self,
         ai_manager: AIManager,
         config: TranscribeConfig,
+        bundle_cache: set[TranscribeBundle],
     ) -> None:
         """Main function.
 
@@ -229,6 +237,7 @@ class BundleNameJob(TranscribeBundleJob):
         self,
         ai_manager: AIManager,
         config: TranscribeConfig,
+        bundle_cache: set[TranscribeBundle],
     ) -> None:
         """Main function."""
         logger.info(f"{self.bundle}: Generating bundle name")
@@ -258,6 +267,7 @@ class DeleteAudioFileJob(TranscribeBundleJob):
         self,
         ai_manager: AIManager,
         config: TranscribeConfig,
+        bundle_cache: set[TranscribeBundle],
     ) -> None:
         """Main function."""
         if not self.bundle.source_audios:
@@ -284,6 +294,7 @@ class GatherCommandsJob(TranscribeBundleJob):
         self,
         ai_manager: AIManager,
         config: TranscribeConfig,
+        bundle_cache: set[TranscribeBundle],
     ) -> None:
         """Main function."""
         logger.debug(f"Gathering commands for {self.bundle}")
@@ -320,6 +331,7 @@ class RunCommandsJob(TranscribeBundleJob):
         self,
         ai_manager: AIManager,
         config: TranscribeConfig,
+        bundle_cache: set[TranscribeBundle],
     ) -> None:
         """Execute pending commands for the bundle.
 
@@ -358,7 +370,7 @@ class RunCommandsJob(TranscribeBundleJob):
         # Keep this local until a more complex command ordering system is actually needed.
         pending_commands.sort(key=lambda cmd: self._command_priority(cmd.matched_type))
 
-        self._execute_commands(pending_commands, config)
+        self._execute_commands(pending_commands, config, bundle_cache)
 
     def _prepare_commands(
         self,
@@ -387,6 +399,7 @@ class RunCommandsJob(TranscribeBundleJob):
         self,
         pending_commands: list[Command],
         config: TranscribeConfig,
+        bundle_cache: set[TranscribeBundle],
     ) -> None:
         """Execute commands while avoiding duplicate command types.
 
@@ -421,7 +434,7 @@ class RunCommandsJob(TranscribeBundleJob):
                 logger.info(f"Executing {matched_type.value} command for bundle {self.bundle}")
 
                 handler = COMMAND_REGISTRY[matched_type].handler
-                handler(self.bundle, config, cmd)
+                handler(self.bundle, config, bundle_cache, cmd)
 
                 self.bundle.set_command_executed(cmd.id)
                 seen_executed_types.add(matched_type)

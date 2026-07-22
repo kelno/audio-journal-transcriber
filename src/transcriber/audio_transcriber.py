@@ -79,6 +79,8 @@ class AudioTranscriber:
             list[BundleJobs]: Remaining unprocessed bundle jobs.
 
         """
+        # Keep a cache of loaded bundles for the time of this function, to allow subroutines to interact with other bundles
+        bundle_cache = {jobs[0].bundle for jobs in all_jobs_bundles}
         unprocessed_bundles = list[BundleJobs]()
         for jobs_bundle in all_jobs_bundles:
             remaining_jobs_in_bundle = jobs_bundle.copy()
@@ -88,6 +90,7 @@ class AudioTranscriber:
                     job.run(
                         ai_manager=self.ai_manager,
                         config=self.config,
+                        bundle_cache=bundle_cache,
                     )
                     # Remove job from jobs bundle on successful execution
                     remaining_jobs_in_bundle.remove(job)
