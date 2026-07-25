@@ -264,7 +264,7 @@ class RealAIManager(AIManager):
 
     **Your Response:**"""
 
-        response = self.query_chat_completion(prompt).strip().upper()
+        response = self.query_chat_completion(prompt).strip(chars="\"'` ").upper()
         logger.debug(f"interpret_command answered {response}")
         # Try to match the response to a CommandType
         for cmd_type in CommandType:
