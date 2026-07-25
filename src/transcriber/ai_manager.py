@@ -245,24 +245,28 @@ class RealAIManager(AIManager):
         )
 
         prompt = f"""
-    You are a command matcher in an automated pipeline. Your task is to match user commands to predefined command types.
+  You are a command matcher in an automated pipeline, you act as an API. Your task is to match a natural language user command to a predefined command type.
 
-    **Available Commands:**
-    {command_descriptions}
+  **Available Commands:**
+  {command_descriptions}
 
-    **Matching Instructions:**
-    1. Only match a command if you are VERY CONFIDENT it maps to one of the available commands.
-    2. Consider both the exact wording and semantic meaning.
-    3. The commands can be given in any language, not only english.
-    4. If the command is ambiguous or doesn't clearly match any known command, respond with exactly: "UNKNOWN"
-    5. Your response first line must be ONLY the command type in uppercase (e.g., "MERGE", "DELETE", ...) with no other text.
-    6. Your response second line should be empty. The third line should contain a short explanation of your choice.
-    7. Lines are seperated by the regular \n
+  **Matching Instructions:**
+  - Only match a command if you are VERY CONFIDENT it maps to one of the available commands.
+  - Consider both the exact wording and semantic meaning.
+  - The commands can be given in any language, not only english.
+  - If the command is ambiguous or doesn't clearly match any known command, use the UNKNOWN
+  command type.
 
-    **User Command:**
-    {command_string}
+  **Response format:**
+  - First line: The command type (e.g., "MERGE", "DELETE", ...), only the string with no other text or quotes, in uppercase.
+  - Second line: Always empty
+  - Third line: A short explanation of your choice, regular case.
+  Lines are seperated by the regular unix line return \n (backslash n).
 
-    **Your Response:**"""
+  **User Command:**
+  {command_string}
+
+  **API-like Response:**"""
 
         response = self.query_chat_completion(prompt).strip(chars="\"'` ").upper()
         logger.debug(f"interpret_command answered {response}")
