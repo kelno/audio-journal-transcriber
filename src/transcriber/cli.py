@@ -1,12 +1,11 @@
 import argparse
-import sys
+import signal
 
 from transcriber.ai_manager import RealAIManager
 from transcriber.audio_transcriber import AudioTranscriber
 from transcriber.clients.openai_clients import OpenAIAudioClient, OpenAIChatClient
 from transcriber.config import TranscribeConfig
-from transcriber.daemon import run_daemon_mode
-from transcriber.exception import AudioTranscriberException
+from transcriber.daemon import TranscriptionDaemon
 from transcriber.logger import configure_logger, logger
 
 
@@ -42,7 +41,7 @@ def main() -> None:
 
     dry_run = args.dry_run
     debug = args.debug
-    daemon = args.daemon
+    daemon_mode = args.daemon
     one_bundle = args.one
 
     configure_logger(debug)
@@ -67,10 +66,15 @@ def main() -> None:
         config=config,
         only_one_bundle=one_bundle,
     )
-    try:
-        unprocessed = transcriber.run()
-        if daemon:
-            run_daemon_mode(transcriber, unprocessed, config)
-    except AudioTranscriberException:
-        logger.exception("AudioTranscriber failed with exception")
-        sys.exit(1)
+    unprocessed = transcriber.run()
+    if daemon_mode:
+        daemon = TranscriptionDaemon(transcriber, unprocessed, config)
+
+        def shutdown(_signum: int, _frame: object) -> None:
+            logger.info("Shutdown signal received")
+            daemon.stop()
+
+        signal.signal(signal.SIGTERM, shutdown)
+        signal.signal(signal.SIGINT, shutdown)
+
+        daemon.run()
