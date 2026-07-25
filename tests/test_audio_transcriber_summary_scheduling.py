@@ -142,14 +142,10 @@ class TestMergeRequeue:
         post_merge_summary = "New summary from merged transcripts"
         fake_transcriber.ai_manager.summary = post_merge_summary
 
-        store_dir = fake_transcriber.config.general.store_dir
-        target_jobs = fake_transcriber.gather_bundle_jobs(target, store_dir, False, fake_transcriber.config)
-        source_jobs = fake_transcriber.gather_bundle_jobs(source, store_dir, False, fake_transcriber.config)
+        bundle_cache: set[TranscribeBundle] = {source, target}
+        jobs = fake_transcriber.gather_jobs(bundle_cache)
 
-        assert target.fs_service == fake_fs
-        errored = fake_transcriber.process_jobs([target_jobs, source_jobs])
-
-        # target = TranscribeBundle.from_existing_directory(?)
+        errored = fake_transcriber.process_jobs(jobs, bundle_cache)
 
         # The merge + regeneration completed in one pass: nothing left unprocessed.
         assert errored == []

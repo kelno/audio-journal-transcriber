@@ -475,9 +475,9 @@ class TranscribeBundle:
         config: TranscribeConfig,
         fs_service: FileSystemService,
         audio_service: AudioService,
-    ) -> list["TranscribeBundle"]:
+    ) -> set["TranscribeBundle"]:
         """Find and load all bundles from output_dir."""
-        bundles: list[TranscribeBundle] = []
+        bundles: set[TranscribeBundle] = set()
         for dir_path in fs_service.list_directory(store_dir):
             # Exclude if the directory starts with an underscore or is an hidden file
             if dir_path.name.startswith("_") or dir_path.name.startswith("."):
@@ -492,7 +492,7 @@ class TranscribeBundle:
                     )
                     if cleanup_bundle:
                         bundle.cleanup_inconsistencies(dry_run)
-                    bundles.append(bundle)
+                    bundles.add(bundle)
                 except InvalidBundleException:
                     logger.exception(f"Skipping invalid transcribe bundle {dir_path}")
                 except Exception:

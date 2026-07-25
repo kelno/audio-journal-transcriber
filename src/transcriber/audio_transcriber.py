@@ -135,11 +135,12 @@ class AudioTranscriber:
             logger.exception(f"Error processing {job} (skipping any remaining jobs for this bundle).")
             return True
 
-    def process_jobs(self, all_jobs_bundles: list[BundleJobs]) -> list[BundleJobs]:
+    def process_jobs(self, all_jobs_bundles: list[BundleJobs], bundle_cache: set[TranscribeBundle]) -> list[BundleJobs]:
         """Process audio files from the pending directory.
 
         Args:
             all_jobs_bundles: List of bundle jobs to process.
+            bundle_cache: Set of TranscribeBundle instances for job execution.
 
         Returns:
             list[BundleJobs]: Remaining unprocessed bundle jobs.
@@ -150,8 +151,6 @@ class AudioTranscriber:
             jobs_bundle[0].bundle: BundleJobQueueEntry(jobs=jobs_bundle) for jobs_bundle in all_jobs_bundles if jobs_bundle
         }
 
-        # Keep a cache of loaded bundles for the time of this function, to allow subroutines to interact with other bundles
-        bundle_cache = {jobs[0].bundle for jobs in all_jobs_bundles}
         errored_bundles = list[BundleJobs]()
         while queue:
             # Process one bundle at a time; popitem() yields an arbitrary bundle.
@@ -193,9 +192,9 @@ class AudioTranscriber:
             msg = f"ffmpeg is not available in path: {input_dir}"
             raise AudioTranscriberException(msg)
 
-    def gather_pending_audio_files(self, input_dir: Path) -> list[TranscribeBundle]:
+    def gather_pending_audio_files(self, input_dir: Path) -> set[TranscribeBundle]:
         """Import audio files from the input directory as TranscriptBundle instances."""
-        bundles: list[TranscribeBundle] = []
+        bundles: set[TranscribeBundle] = set()
 
         for path in input_dir.rglob("*"):
             if path.is_file() and is_handled_audio_file(path.suffix):
@@ -206,46 +205,64 @@ class AudioTranscriber:
                     fs_service=self.fs_service,
                     audio_service=self.audio_service,
                 )
-                bundles.append(bundle)
+                bundles.add(bundle)
 
         logger.debug(f"Imported {len(bundles)} audio files as bundles")
         return bundles
 
-    def gather_jobs(self, input_dir: Path) -> list[BundleJobs]:
-        """Find audio files in the given directory and its subdirectories.
+    def gather_bundles(self, input_dir: Path, store_dir: Path) -> set[TranscribeBundle]:
+        """Gather all bundles to process from input and store directories.
 
-        Returns a BundleJobs for each audio file found in pending directory,
-        and for each bundle found in the managed store directory.
+        Combines newly discovered audio files from the input directory with
+        existing bundles from the managed store directory. This provides a
+        complete set of bundles for the current transcription run.
+
+        Args:
+            input_dir: Directory containing new audio files to process.
+            store_dir: Directory containing existing bundle metadata.
+
+        Returns:
+            Set of TranscribeBundle instances ready for job generation.
+
         """
-        if not self.fs_service.directory_exists(input_dir):
-            msg = f"Input directory does not exist: {input_dir}"
-            raise FileNotFoundError(msg)
-
-        logger.debug(f"Looking for pending jobs in {input_dir}")
-
         logger.info(f"Gathering audio files from input directory: {input_dir}")
         bundles = self.gather_pending_audio_files(input_dir)
-        store_dir = self.config.general.store_dir
+
         logger.info(f"Gathering bundles from managed store directory: {store_dir}")
-        bundles.extend(
-            TranscribeBundle.gather_existing_bundles(
-                store_dir=store_dir,
-                dry_run=self.dry_run,
-                cleanup_bundle=True,
-                config=self.config,
-                fs_service=self.fs_service,  # type: ignore[arg-type]
-                audio_service=self.audio_service,
-            ),
+        bundles |= TranscribeBundle.gather_existing_bundles(
+            store_dir=store_dir,
+            dry_run=self.dry_run,
+            cleanup_bundle=True,
+            config=self.config,
+            fs_service=self.fs_service,  # type: ignore[arg-type]
+            audio_service=self.audio_service,
         )
+        return bundles
+
+    def gather_jobs(self, bundle_cache: set[TranscribeBundle]) -> list[BundleJobs]:
+        """Generate the job queue for processing all bundles.
+
+        Creates a list of BundleJobs, one per bundle, containing all the
+        tasks needed to complete transcription for each bundle. When
+        only_one_bundle mode is enabled, returns only the first bundle's jobs.
+
+        Args:
+            bundle_cache: Set of TranscribeBundle instances to generate jobs for.
+
+        Returns:
+            List of BundleJobs ready to be processed.
+
+        """
+        logger.debug(f"Gathering jobs from {len(bundle_cache)} bundles")
 
         # one BundleJobs per bundle
         jobs: list[BundleJobs] = [
             bundle_jobs
-            for bundle in bundles
+            for bundle in bundle_cache
             if (
                 bundle_jobs := self.gather_bundle_jobs(
                     bundle,
-                    store_dir,
+                    self.config.general.store_dir,
                     self.dry_run,
                     config=self.config,
                 )
@@ -373,8 +390,12 @@ class AudioTranscriber:
         # Create store_dir if needed
         self.fs_service.ensure_directory_exists(store_dir)
 
+        # Loading existing bundles
+        # Keep a cache of loaded bundles for the time of this run.
+        bundle_cache = self.gather_bundles(input_dir, store_dir)
+
         self.log_section_header("Gathering Jobs")
-        all_bundle_jobs = self.gather_jobs(input_dir)
+        all_bundle_jobs = self.gather_jobs(bundle_cache)
         errored_bundles = list[BundleJobs]()
         if not all_bundle_jobs:
             logger.info("No jobs found for processing")
@@ -382,7 +403,7 @@ class AudioTranscriber:
             total_jobs = sum(len(bundle_jobs) for bundle_jobs in all_bundle_jobs)
             logger.info(f"Found {total_jobs} pending jobs for {len(all_bundle_jobs)} bundles")
             self.log_section_header("Processing Jobs")
-            errored_bundles = self.process_jobs(all_bundle_jobs)
+            errored_bundles = self.process_jobs(all_bundle_jobs, bundle_cache)
 
         if not self.dry_run:
             remove_empty_subdirs(input_dir)

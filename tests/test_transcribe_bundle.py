@@ -704,7 +704,7 @@ class TestGatherExistingBundles:
 
         # at this point we have 1 valid bundle (generic_bundle) and 1 invalid one
         assert len(bundles) == 1
-        assert bundles[0].bundle_name == generic_bundle.bundle_name
+        assert bundles.pop().bundle_name == generic_bundle.bundle_name
 
     def test_find_previous_bundle_returns_most_recent_prior_bundle(
         self,
