@@ -258,9 +258,10 @@ class RealAIManager(AIManager):
   command type.
 
   **Response format:**
-  - First line: The command type (e.g., "MERGE", "DELETE", ...), only the string with no other text or quotes, in uppercase.
+  - First line: The command type (e.g., "MERGE", "DELETE", ...), only the string with no other text, in uppercase.
   - Second line: Always empty
   - Third line: A short explanation of your choice, regular case.
+  - Do not include any other text or delimiters or special formatting in the response
   Lines are seperated by the regular unix line return \n (backslash n).
 
   **User Command:**
@@ -272,12 +273,8 @@ class RealAIManager(AIManager):
         logger.debug(f"interpret_command answered {response}")
         # Try to match the response to a CommandType
         for cmd_type in CommandType:
-            if response.split("\n")[0] == cmd_type.value.upper():
+            if response.split("\n")[0].upper() == cmd_type.value.upper():
                 return cmd_type
-
-        # If no match and response is "UNKNOWN", return UNKNOWN
-        if response == "UNKNOWN":
-            return CommandType.UNKNOWN
 
         # Invalid response
         msg = f"LLM returned unexpected response: {response}"
@@ -294,26 +291,86 @@ class RealAIManager(AIManager):
         logger.debug(f"AIManager Extracting commands for {bundle_name}")
         commands: list[str] = []
         prompt = f"""
-        You are part of an automated pipeline that transcribes personal audio recordings and summarizes them.
-        Your task: You act as a function to extract vocal commands given by the user in the following transcripts.
-        Return format:
-            - One command per line, separated by unix newlines
-            - If no commands are found, return the exact 4 characters string "none"
-            - Do not include any other text or delimiters or special formatting in the response
-        Vocal commands are defined as follows:
-            - It starts when the user says "start command"
-            - It ends with "stop command" or "validate command"
-            - A user can also say "cancel command", in this case just ignore the command
-            - Words can be translated + or be out of order. "fin commande" is valid, as well as "command stop"
-            - The command is whatever the user says between those two (so not including those boundaries), without any extra processing
-            - If the command is more than one sentence, something is wrong in the transcript and the command should be skipped.
+You're part of an automated pipeline that transcribes personal audio recordings.
 
+Your task is NOT to interpret the transcript.
+Your task is ONLY to extract text delimited by spoken boundary phrases.
 
-        Transcript: {text}
+# Definitions
+
+A command starts immediately after a spoken start boundary.
+
+A command ends immediately before a spoken end boundary.
+
+Start boundaries include equivalent phrases in any language, for example:
+- start command
+- begin command
+- début commande
+- commence commande
+
+End or cancellation boundaries include equivalent phrases in any language, for example:
+- stop command
+- validate command
+- fin commande
+- valide commande
+- cancel command
+- annule commande
+
+# Rules
+
+- Extract the text exactly as spoken between the start and end boundaries.
+- Do NOT include the boundary phrases themselves.
+- Do NOT reword, summarize, translate, correct, or interpret the extracted text.
+- The extracted text does NOT need to be a valid instruction. Any text between the boundaries is considered a command.
+- If a cancellation boundary is encountered before an end boundary, discard the current command.
+- If another start boundary is encountered before an end boundary, discard the current command.
+- If the extracted text clearly contains multiple unrelated utterances or multiple complete sentences, discard it. Minor transcription errors or missing punctuation should not by themselves cause the command to be discarded.
+- Ignore unmatched start or end boundaries.
+
+# Output format
+
+- Output one extracted command per line.
+- Separate commands using Unix newlines (`\n`).
+- If no valid commands are found, output exactly:
+none
+- Do not output any other text.
+
+# Examples
+
+Transcript:
+"... début commande ouvre le garage fin commande ..."
+Output:
+ouvre le garage
+
+Transcript:
+"... start command continue previous recording stop command ..."
+Output:
+continue previous recording
+
+Transcript:
+"... début commande suite de l'enregistrement précédent fin commande ..."
+Output:
+suite de l'enregistrement précédent
+
+Transcript:
+"... début commande open the door annule commande ..."
+Output:
+none
+
+Transcript:
+"... start command first command stop command ... start command second command validate command ..."
+Output:
+first command
+second command
+
+Transcript:
+{text}
+
+Output:
         """
         response = self.query_chat_completion(prompt)
         lines = response.splitlines()
-        if len(lines) == 1 and lines[0] == "none":
+        if len(lines) == 1 and lines[0].lower() == "none":
             return []
 
         commands = [line.strip() for line in lines if line.strip() != ""]

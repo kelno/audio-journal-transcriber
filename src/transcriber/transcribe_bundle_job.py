@@ -309,6 +309,8 @@ class GatherCommandsJob(TranscribeBundleJob):
         commands: list[str] = []
         try:
             commands = ai_manager.extract_raw_commands(self.bundle.transcript.text, self.bundle.bundle_name)
+            logger.debug(f"{self.bundle}: Extracted raw commands: {commands}")
+
         except Exception:
             logger.error(f"{self}: Failed to extract commands: {traceback.format_exc()}")
             raise
