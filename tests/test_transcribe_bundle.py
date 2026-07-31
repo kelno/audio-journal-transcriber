@@ -8,6 +8,7 @@ import pytest
 
 from tests.bundle_fixtures import TranscribeBundleFactory
 from tests.fake_audio_service import FakeAudioService
+from transcriber.bundle_id import new_bundle_id
 from transcriber.commands.command_type import CommandType
 from transcriber.config import TranscribeConfig
 from transcriber.constants import (
@@ -204,6 +205,29 @@ class TestTranscribeBundleFromAudioFile:
 
         assert bundle.fs_service is fake_fs
 
+    def test_new_bundles_receive_distinct_persistent_ids(
+        self,
+        fake_config: TranscribeConfig,
+        fake_fs: FakeFileSystemService,
+        fake_audio_service: FakeAudioService,
+    ) -> None:
+        """Every newly discovered recording starts as a distinct bundle entity."""
+        first = TranscribeBundle.from_audio_file(
+            source_audio=Path("/input/2025-01-15_first.mp3"),
+            config=fake_config,
+            fs_service=fake_fs,
+            audio_service=fake_audio_service,
+        )
+        second = TranscribeBundle.from_audio_file(
+            source_audio=Path("/input/2025-01-15_second.mp3"),
+            config=fake_config,
+            fs_service=fake_fs,
+            audio_service=fake_audio_service,
+        )
+
+        assert first.bundle_id != second.bundle_id
+        assert len(first.bundle_id) == 32
+
 
 class TestTranscribeBundleFromAudioFiles:
     """Tests for creating bundles from multiple audio files."""
@@ -299,6 +323,49 @@ class TestTranscribeBundleFromExistingDirectory:
         assert bundle.transcript is not None
         assert isinstance(bundle.transcript, TranscriptFile)
 
+    def test_from_existing_directory_preserves_bundle_id(
+        self,
+        fake_config: TranscribeConfig,
+        fake_fs: FakeFileSystemService,
+        fake_audio_service: FakeAudioService,
+        generic_bundle: TranscribeBundle,
+    ) -> None:
+        """Reloading a saved bundle keeps its logical identity."""
+        reloaded = TranscribeBundle.from_existing_directory(
+            existing_dir=generic_bundle.get_bundle_dir(),
+            config=fake_config,
+            fs_service=fake_fs,
+            audio_service=fake_audio_service,
+        )
+
+        assert reloaded.bundle_id == generic_bundle.bundle_id
+
+    def test_instances_loaded_from_the_same_bundle_share_identity(
+        self,
+        fake_config: TranscribeConfig,
+        fake_fs: FakeFileSystemService,
+        fake_audio_service: FakeAudioService,
+        generic_bundle: TranscribeBundle,
+    ) -> None:
+        """Entity equality and hashing use the persisted ID, not object identity."""
+        first = TranscribeBundle.from_existing_directory(
+            generic_bundle.get_bundle_dir(),
+            fake_config,
+            fake_fs,
+            fake_audio_service,
+        )
+        second = TranscribeBundle.from_existing_directory(
+            generic_bundle.get_bundle_dir(),
+            fake_config,
+            fake_fs,
+            fake_audio_service,
+        )
+
+        assert first is not second
+        assert first == second
+        assert hash(first) == hash(second)
+        assert len({first, second}) == 1
+
     @pytest.mark.usefixtures("generic_bundle")
     def test_from_existing_directory_raises_on_missing_metadata(
         self,
@@ -330,6 +397,7 @@ class TestTranscribeBundleFromExistingDirectory:
         # overwrite metadata file with wrong data
         metadata_yaml = (
             "---\n"
+            "bundle_id: 0123456789abcdef0123456789abcdef\n"
             "audio_files:\n"
             "- transcript_model_used: []\n"  # missing required 'filename'
             "transcript_model_used: null\n"
@@ -468,6 +536,7 @@ class TestTranscribeBundleWriteOperations:
         bundle = TranscribeBundle(
             bundle_name=generic_bundle_dir.name,
             metadata=MetadataFile(
+                bundle_id=new_bundle_id(),
                 audio_files=[],
                 bundle_date=datetime.now(fake_config.general.timezone),
             ),
@@ -657,6 +726,7 @@ class TestTranscribeBundleRenaming:
         bundle = TranscribeBundle(
             bundle_name="2025-01-15_meeting",
             metadata=MetadataFile(
+                bundle_id=new_bundle_id(),
                 audio_files=[AudioFileMeta(filename="meeting.mp3")],
                 bundle_date=datetime.now(fake_config.general.timezone),
             ),
@@ -922,6 +992,7 @@ class TestTranscribeBundleIntegration:
         # Create initial metadata with one file
         metadata_yaml = (
             "---\n"
+            "bundle_id: 0123456789abcdef0123456789abcdef\n"
             "bundle_date: 2025-01-15 00:00:00+02:00\n"
             "audio_files:\n"
             "- filename: part1.mp3\n"

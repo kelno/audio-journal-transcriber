@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import override
 
 from transcriber.audio_service import AudioService
+from transcriber.bundle_id import BundleId, new_bundle_id
 from transcriber.commands.command import Command
 from transcriber.commands.command_type import CommandType
 from transcriber.config import TranscribeConfig
@@ -40,7 +41,7 @@ from transcriber.utils import (
 )
 
 
-@dataclass
+@dataclass(eq=False)
 class TranscribeBundle:
     fs_service: FileSystemService
     audio_service: AudioService
@@ -54,13 +55,40 @@ class TranscribeBundle:
     commands: CommandsFile | None = None
     custom_context: CustomContextFile | None = None
 
-    @override
-    def __str__(self) -> str:
-        return f"[Bundle:{self.bundle_name}]"
+    @property
+    def bundle_id(self) -> BundleId:
+        """Return the bundle's immutable, persisted logical identity."""
+        return self.metadata.bundle_id
 
     @override
-    def __hash__(self):
-        return hash(id(self))
+    def __str__(self) -> str:
+        return f"[Bundle:{self.bundle_id[:8]}:{self.bundle_name}]"
+
+    @override
+    def __eq__(self, other: object) -> bool:
+        """Compare bundle entities by persistent ID.
+
+        Args:
+            other: Object to compare with this bundle.
+
+        Returns:
+            Whether both objects represent the same bundle entity, or
+            ``NotImplemented`` for another object type.
+
+        """
+        if not isinstance(other, TranscribeBundle):
+            return NotImplemented
+        return self.bundle_id == other.bundle_id
+
+    @override
+    def __hash__(self) -> int:
+        """Return a stable in-process hash derived from the persistent ID.
+
+        Returns:
+            Hash value suitable for dictionaries and sets.
+
+        """
+        return hash(self.bundle_id)
 
     @staticmethod
     def _load_bundle_files(
@@ -158,7 +186,18 @@ class TranscribeBundle:
         fs_service: FileSystemService,
         audio_service: AudioService,
     ) -> "TranscribeBundle":
-        """Create a new TranscribeBundle instance from an audio file."""
+        """Create a new bundle with a persistent ID from one audio file.
+
+        Args:
+            source_audio: Pending audio file represented by the new bundle.
+            config: Application configuration used for dates and storage.
+            fs_service: Filesystem implementation used to inspect the audio.
+            audio_service: Audio implementation attached to the bundle.
+
+        Returns:
+            A new, not-yet-persisted bundle entity.
+
+        """
         bundle_date = TranscribeBundle.get_date_for_filename(
             source_audio,
             source_audio.name,
@@ -166,6 +205,7 @@ class TranscribeBundle:
             fs_service,
         )
         metadata = MetadataFile(
+            bundle_id=new_bundle_id(),
             audio_files=[AudioFileMeta(filename=source_audio.name)],
             bundle_date=bundle_date,
         )
@@ -191,7 +231,22 @@ class TranscribeBundle:
         audio_service: AudioService,
         bundle_name: str | None = None,
     ) -> "TranscribeBundle":
-        """Create a new TranscribeBundle from multiple audio files."""
+        """Create a new bundle with a persistent ID from multiple audio files.
+
+        Args:
+            source_audios: Pending audio files represented by the new bundle.
+            config: Application configuration used for dates and storage.
+            fs_service: Filesystem implementation used to inspect the audio.
+            audio_service: Audio implementation attached to the bundle.
+            bundle_name: Optional initial human-readable directory name.
+
+        Returns:
+            A new, not-yet-persisted bundle entity.
+
+        Raises:
+            InvalidSourceAudiosException: If no source audio files are provided.
+
+        """
         if not source_audios:
             raise InvalidSourceAudiosException(
                 source_files=source_audios,
@@ -206,6 +261,7 @@ class TranscribeBundle:
             fs_service,
         )
         metadata = MetadataFile(
+            bundle_id=new_bundle_id(),
             audio_files=[AudioFileMeta(filename=name) for name in filenames],
             bundle_date=bundle_date,
         )
@@ -452,6 +508,15 @@ class TranscribeBundle:
         """Find the most recent bundle before the current bundle within a time window.
 
         IO heavy if many bundles exist, as it will check all bundle dates.
+
+        Args:
+            current_bundle: Bundle whose preceding neighbor is requested.
+            bundles: Candidate bundles to search, potentially including current.
+            max_hours: Optional maximum time gap, otherwise read from config.
+
+        Returns:
+            The closest eligible prior bundle, or ``None`` when none qualifies.
+
         """
         if max_hours is None:
             max_hours = current_bundle.config.general.merge_max_hours
@@ -459,8 +524,8 @@ class TranscribeBundle:
         current_bundle_date = current_bundle.get_bundle_date()
         previous_candidates = [
             bundle
-            for bundle in bundles
-            if bundle.bundle_name != current_bundle.bundle_name and bundle.get_bundle_date() < current_bundle_date
+            for bundle in bundles  # comment for format
+            if bundle.bundle_id != current_bundle.bundle_id and bundle.get_bundle_date() < current_bundle_date
         ]
 
         if not previous_candidates:

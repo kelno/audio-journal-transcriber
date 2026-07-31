@@ -8,6 +8,7 @@ import pytest
 
 from tests.fake_audio_service import FakeAudioService
 from tests.fake_file_system import FakeFileSystemService
+from transcriber.bundle_id import BundleId, new_bundle_id
 from transcriber.config import TranscribeConfig
 from transcriber.files.commands_file import CommandsFile
 from transcriber.files.metadata import AudioFileMeta, MetadataFile
@@ -33,8 +34,28 @@ class TranscribeBundleFactory(Protocol):
         keep_forever: bool = False,
         config: TranscribeConfig | None = None,
         custom_context: str | None = None,
+        bundle_id: BundleId | None = None,
     ) -> TranscribeBundle:
-        """Factory callable returning a `TranscribeBundle` for tests."""
+        """Create a persisted test bundle with optional explicit identity.
+
+        Args:
+            bundle_name: Human-readable bundle directory name.
+            audio_filename: Source audio filename stored in the bundle.
+            bundle_date: Canonical bundle date, defaulting to the current time.
+            transcript_text: Optional transcript content.
+            summary_text: Optional summary content.
+            commands: Optional raw command strings.
+            commands_executed: Whether supplied commands start as executed.
+            transcript_model_used: Optional model name or ordered model names.
+            keep_forever: Whether source audio is exempt from deletion.
+            config: Optional configuration overriding the fixture default.
+            custom_context: Optional recording-specific summary context.
+            bundle_id: Optional persistent ID, primarily for duplicate-ID tests.
+
+        Returns:
+            The created test bundle.
+
+        """
         ...
 
 
@@ -58,7 +79,28 @@ def transcribe_bundle_factory(
         keep_forever: bool = False,
         config: TranscribeConfig | None = None,
         custom_context: str | None = None,
+        bundle_id: BundleId | None = None,
     ) -> TranscribeBundle:
+        """Implement the test bundle factory protocol.
+
+        Args:
+            bundle_name: Human-readable bundle directory name.
+            audio_filename: Source audio filename stored in the bundle.
+            bundle_date: Canonical bundle date, defaulting to the current time.
+            transcript_text: Optional transcript content.
+            summary_text: Optional summary content.
+            commands: Optional raw command strings.
+            commands_executed: Whether supplied commands start as executed.
+            transcript_model_used: Optional model name or ordered model names.
+            keep_forever: Whether source audio is exempt from deletion.
+            config: Optional configuration overriding the fixture default.
+            custom_context: Optional recording-specific summary context.
+            bundle_id: Optional persistent ID, primarily for duplicate-ID tests.
+
+        Returns:
+            The created and persisted test bundle.
+
+        """
         config = config or fake_config
         bundle_dir = config.general.store_dir / bundle_name
         fake_fs.create_directory(bundle_dir)
@@ -68,6 +110,7 @@ def transcribe_bundle_factory(
         bundle = TranscribeBundle(
             bundle_name=bundle_dir.name,
             metadata=MetadataFile(
+                bundle_id=bundle_id or new_bundle_id(),
                 audio_files=[AudioFileMeta(filename=audio_filename)],
                 bundle_date=bundle_date or datetime.now(config.general.timezone),
             ),

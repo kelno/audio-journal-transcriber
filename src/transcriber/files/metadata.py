@@ -4,6 +4,7 @@ from pathlib import Path
 import yaml
 from pydantic import BaseModel, Field
 
+from transcriber.bundle_id import BundleId
 from transcriber.constants import METADATA_FILENAME
 from transcriber.exception import InvalidMetadataFileException
 from transcriber.files.file_system import FileSystemService
@@ -27,6 +28,8 @@ class Metadata(BaseModel):
     We use pydantic BaseModel to ensure validity as data loaded from the file could be bad.
     """
 
+    # Bundle identity. It is assigned once at creation and never changes after that.
+    bundle_id: BundleId = Field(frozen=True)
     audio_files: list[AudioFileMeta] = Field(default_factory=list)
     # Canonical date of the bundle (precise datetime up to seconds).
     # Computed once at creation from the first audio file's timestamp.
