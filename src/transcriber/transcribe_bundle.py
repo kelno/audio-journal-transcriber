@@ -519,6 +519,36 @@ class TranscribeBundle:
         """Get the bundle directory path."""
         return self.config.general.store_dir / self.bundle_name
 
+    def _get_available_bundle_name(self, preferred_name: str, owned_dir: Path | None) -> str:
+        """Return a readable, collision-free directory name for this bundle.
+
+        Args:
+            preferred_name: Human-readable directory name to use when available.
+            owned_dir: Existing directory already owned by this bundle, if any.
+
+        Returns:
+            The preferred name or an ID-suffixed alternative.
+
+        Raises:
+            FileExistsError: If both candidate directory names already exist.
+
+        """
+        preferred_dir = self.config.general.store_dir / preferred_name
+        if preferred_dir == owned_dir or not self.fs_service.directory_exists(preferred_dir):
+            return preferred_name
+
+        unique_name = f"{preferred_name} ~{self.bundle_id[:8]}"
+        unique_dir = self.config.general.store_dir / unique_name
+        if unique_dir == owned_dir or not self.fs_service.directory_exists(unique_dir):
+            return unique_name
+
+        msg = f"Bundle directory already exists: {unique_dir}"
+        raise FileExistsError(msg)
+
+    def ensure_unique_bundle_name(self) -> None:
+        """Disambiguate a new bundle's initial directory name when necessary."""
+        self.bundle_name = self._get_available_bundle_name(self.bundle_name, owned_dir=None)
+
     def get_bundle_audio_paths(self) -> list[Path]:
         """Get all audio file paths within the bundle dir."""
         bundle_dir = self.get_bundle_dir()
@@ -676,17 +706,28 @@ class TranscribeBundle:
         self,
         bundle_name_summary: str,
     ) -> None:
-        """Set bundle name and rename the directory."""
-        bundle_path_from = self.config.general.store_dir / self.bundle_name
+        """Set bundle name and rename the directory.
+
+        Args:
+            bundle_name_summary: Human-readable name generated from the summary.
+
+        Raises:
+            FileNotFoundError: If the bundle's current directory is missing.
+            FileExistsError: If no collision-free destination is available.
+
+        """
+        bundle_path_from = self.get_bundle_dir()
         if not self.fs_service.directory_exists(bundle_path_from):
             msg = f"Bundle directory {bundle_path_from} not found"
             raise FileNotFoundError(msg)
 
         prefix = self.generate_bundle_name_date_prefix(self.metadata.bundle_date)
-        new_bundle_name = f"{prefix} {bundle_name_summary}"
-
+        base_bundle_name = f"{prefix} {bundle_name_summary}"
+        new_bundle_name = self._get_available_bundle_name(base_bundle_name, owned_dir=bundle_path_from)
         bundle_path_to = self.config.general.store_dir / new_bundle_name
-        self.fs_service.rename_directory(bundle_path_from, bundle_path_to)
+
+        if bundle_path_to != bundle_path_from:
+            self.fs_service.rename_directory(bundle_path_from, bundle_path_to)
         self.bundle_name = new_bundle_name
 
         self.metadata.bundle_name_generated = True

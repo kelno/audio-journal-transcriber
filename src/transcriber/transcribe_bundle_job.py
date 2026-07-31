@@ -59,6 +59,11 @@ class CreateBundleJob(TranscribeBundleJob):
     ) -> None:
         """Move all audio files into the bundle directory.
 
+        Args:
+            ai_manager: AI operations supplied through the shared job interface.
+            config: Configuration controlling audio validation and storage.
+            bundle_cache: Loaded bundles indexed by persistent ID.
+
         Raises:
             FileNotFoundError: If bundle has no audio files set.
 
@@ -66,6 +71,8 @@ class CreateBundleJob(TranscribeBundleJob):
         if not self.bundle.source_audios:
             error_msg = "Bundle has no audio files set"
             raise FileNotFoundError(error_msg)
+
+        self.bundle.ensure_unique_bundle_name()
 
         final_audio_paths = self.bundle.get_bundle_audio_paths()
         files_to_move: list[tuple[Path, Path]] = []

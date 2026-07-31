@@ -596,6 +596,8 @@ class TestTranscribeBundleRenaming:
         new_name_summary = "Q4 Planning Session"
         new_path = store_dir / "2025-01-15 Q4 Planning Session"
 
+        original_id = generic_bundle.bundle_id
+
         # Rename the bundle
         generic_bundle.set_and_write_bundle_name(new_name_summary)
 
@@ -613,6 +615,37 @@ class TestTranscribeBundleRenaming:
 
         # Check metadata was marked as generated
         assert generic_bundle.metadata.bundle_name_generated is True
+        assert generic_bundle.bundle_id == original_id
+
+    def test_set_and_write_bundle_name_is_a_noop_for_the_current_name(
+        self,
+        fake_fs: FakeFileSystemService,
+        generic_bundle: TranscribeBundle,
+    ) -> None:
+        """Regenerating the same name does not ask the filesystem to move it."""
+        generic_bundle.set_and_write_bundle_name("Planning Session")
+        rename_count = len(fake_fs.get_operations("rename"))
+
+        generic_bundle.set_and_write_bundle_name("Planning Session")
+
+        assert len(fake_fs.get_operations("rename")) == rename_count
+        assert generic_bundle.metadata.bundle_name_generated is True
+
+    def test_set_and_write_bundle_name_uses_id_suffix_on_collision(
+        self,
+        fake_config: TranscribeConfig,
+        fake_fs: FakeFileSystemService,
+        generic_bundle: TranscribeBundle,
+    ) -> None:
+        """Two bundles may share a display name without sharing a directory."""
+        prefix = generic_bundle.generate_bundle_name_date_prefix(generic_bundle.metadata.bundle_date)
+        desired_name = f"{prefix} Planning Session"
+        fake_fs.create_directory(fake_config.general.store_dir / desired_name)
+
+        generic_bundle.set_and_write_bundle_name("Planning Session")
+
+        assert generic_bundle.bundle_name == f"{desired_name} ~{generic_bundle.bundle_id[:8]}"
+        assert fake_fs.directory_exists(generic_bundle.get_bundle_dir())
 
     def test_set_and_write_bundle_name_raises_on_missing_directory(
         self,
