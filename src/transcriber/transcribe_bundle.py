@@ -19,6 +19,7 @@ from transcriber.constants import (
     TRANSCRIPT_FILENAME,
 )
 from transcriber.exception import (
+    DuplicateBundleIdException,
     FailedToExtractDateException,
     InvalidBundleException,
     InvalidSourceAudiosException,
@@ -39,6 +40,8 @@ from transcriber.utils import (
     get_days_since_time,
     get_file_modified_date,
 )
+
+type BundleCache = dict[BundleId, "TranscribeBundle"]
 
 
 @dataclass(eq=False)
@@ -550,9 +553,25 @@ class TranscribeBundle:
         config: TranscribeConfig,
         fs_service: FileSystemService,
         audio_service: AudioService,
-    ) -> set["TranscribeBundle"]:
-        """Find and load all bundles from output_dir."""
-        bundles: set[TranscribeBundle] = set()
+    ) -> BundleCache:
+        """Find and load all bundles from the managed store.
+
+        Args:
+            store_dir: Directory containing persisted bundle directories.
+            dry_run: Whether cleanup should avoid filesystem mutations.
+            cleanup_bundle: Whether to repair known inconsistencies after load.
+            config: Application configuration used to interpret each bundle.
+            fs_service: Filesystem implementation used for discovery and loading.
+            audio_service: Audio implementation attached to loaded bundles.
+
+        Returns:
+            Valid bundles indexed by their persistent IDs.
+
+        Raises:
+            DuplicateBundleIdException: If two directories contain the same ID.
+
+        """
+        bundles: BundleCache = {}
         for dir_path in fs_service.list_directory(store_dir):
             # Exclude if the directory starts with an underscore or is an hidden file
             if dir_path.name.startswith("_") or dir_path.name.startswith("."):
@@ -567,11 +586,18 @@ class TranscribeBundle:
                     )
                     if cleanup_bundle:
                         bundle.cleanup_inconsistencies(dry_run)
-                    bundles.add(bundle)
                 except InvalidBundleException:
                     logger.exception(f"Skipping invalid transcribe bundle {dir_path}")
                 except Exception:
                     logger.exception(f"Unexpected exception met while gathering bundle {dir_path}")
+                else:
+                    if existing := bundles.get(bundle.bundle_id):
+                        raise DuplicateBundleIdException(
+                            bundle_id=bundle.bundle_id,
+                            first_path=existing.get_bundle_dir(),
+                            second_path=bundle.get_bundle_dir(),
+                        )
+                    bundles[bundle.bundle_id] = bundle
 
         logger.debug(f"Found {len(bundles)} existing bundles")
         return bundles

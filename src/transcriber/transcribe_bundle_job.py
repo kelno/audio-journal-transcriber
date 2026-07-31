@@ -22,7 +22,7 @@ from .exception import (
 )
 from .files.metadata import AudioFileMeta
 from .logger import logger
-from .transcribe_bundle import TranscribeBundle
+from .transcribe_bundle import BundleCache, TranscribeBundle
 
 
 @dataclass
@@ -33,8 +33,15 @@ class TranscribeBundleJob(ABC):
     dry_run: bool
 
     @abstractmethod
-    def run(self, ai_manager: AIManager, config: TranscribeConfig, bundle_cache: set[TranscribeBundle]) -> None:
-        """Perform the job's main work."""
+    def run(self, ai_manager: AIManager, config: TranscribeConfig, bundle_cache: BundleCache) -> None:
+        """Perform the job's main work.
+
+        Args:
+            ai_manager: AI operations available to the job.
+            config: Application configuration for the current run.
+            bundle_cache: Loaded bundles indexed by persistent ID.
+
+        """
 
     @override
     def __str__(self) -> str:
@@ -55,7 +62,7 @@ class CreateBundleJob(TranscribeBundleJob):
         self,
         ai_manager: AIManager,
         config: TranscribeConfig,
-        bundle_cache: set[TranscribeBundle],
+        bundle_cache: BundleCache,
     ) -> None:
         """Move all audio files into the bundle directory.
 
@@ -146,9 +153,14 @@ class TranscriptionJob(TranscribeBundleJob):
         self,
         ai_manager: AIManager,
         config: TranscribeConfig,
-        bundle_cache: set[TranscribeBundle],
+        bundle_cache: BundleCache,
     ) -> None:
         """Main function.
+
+        Args:
+            ai_manager: AI operations used to transcribe source audio.
+            config: Application configuration for the current run.
+            bundle_cache: Loaded bundles indexed by persistent ID.
 
         Raises:
             FileNotFoundError: If bundle has no audio files set.
@@ -201,9 +213,14 @@ class SummaryJob(TranscribeBundleJob):
         self,
         ai_manager: AIManager,
         config: TranscribeConfig,
-        bundle_cache: set[TranscribeBundle],
+        bundle_cache: BundleCache,
     ) -> None:
         """Main function.
+
+        Args:
+            ai_manager: AI operations used to generate the summary.
+            config: Application configuration for the current run.
+            bundle_cache: Loaded bundles indexed by persistent ID.
 
         Raises:
             ValueError: If transcript is not available for summarization.
@@ -244,9 +261,16 @@ class BundleNameJob(TranscribeBundleJob):
         self,
         ai_manager: AIManager,
         config: TranscribeConfig,
-        bundle_cache: set[TranscribeBundle],
+        bundle_cache: BundleCache,
     ) -> None:
-        """Main function."""
+        """Generate and persist a human-readable bundle name.
+
+        Args:
+            ai_manager: AI operations used to generate the name.
+            config: Application configuration for the current run.
+            bundle_cache: Loaded bundles indexed by persistent ID.
+
+        """
         logger.info(f"{self.bundle}: Generating bundle name")
         if self.dry_run:
             return
@@ -274,9 +298,16 @@ class DeleteAudioFileJob(TranscribeBundleJob):
         self,
         ai_manager: AIManager,
         config: TranscribeConfig,
-        bundle_cache: set[TranscribeBundle],
+        bundle_cache: BundleCache,
     ) -> None:
-        """Main function."""
+        """Delete eligible source audio files.
+
+        Args:
+            ai_manager: AI operations supplied through the shared job interface.
+            config: Application configuration for the current run.
+            bundle_cache: Loaded bundles indexed by persistent ID.
+
+        """
         if not self.bundle.source_audios:
             msg = f"{self}: Bundle has no audio files set"
             raise FileNotFoundError(msg)
@@ -301,9 +332,16 @@ class GatherCommandsJob(TranscribeBundleJob):
         self,
         ai_manager: AIManager,
         config: TranscribeConfig,
-        bundle_cache: set[TranscribeBundle],
+        bundle_cache: BundleCache,
     ) -> None:
-        """Main function."""
+        """Extract and persist raw commands from the transcript.
+
+        Args:
+            ai_manager: AI operations used to extract commands.
+            config: Application configuration for the current run.
+            bundle_cache: Loaded bundles indexed by persistent ID.
+
+        """
         logger.debug(f"Gathering commands for {self.bundle}")
         if self.dry_run:
             return
@@ -340,12 +378,17 @@ class RunCommandsJob(TranscribeBundleJob):
         self,
         ai_manager: AIManager,
         config: TranscribeConfig,
-        bundle_cache: set[TranscribeBundle],
+        bundle_cache: BundleCache,
     ) -> None:
         """Execute pending commands for the bundle.
 
         Processes commands in priority order, ensuring each command type is executed
         only once per bundle. Handles command execution, error recovery, and retry logic.
+
+        Args:
+            ai_manager: AI operations used while interpreting commands.
+            config: Application configuration for command handlers.
+            bundle_cache: Loaded bundles indexed by persistent ID.
 
         Raises:
             AbortRemainingBundleJobsException: If a command requests aborting remaining jobs.
@@ -408,11 +451,17 @@ class RunCommandsJob(TranscribeBundleJob):
         self,
         pending_commands: list[Command],
         config: TranscribeConfig,
-        bundle_cache: set[TranscribeBundle],
+        bundle_cache: BundleCache,
     ) -> None:
         """Execute commands while avoiding duplicate command types.
 
         A bundle only ever has one effective command execution per command type, even across multiple job runs.
+
+        Args:
+            pending_commands: Commands that still require execution.
+            config: Application configuration passed to command handlers.
+            bundle_cache: Loaded bundles indexed by persistent ID.
+
         """
         assert self.bundle.commands
         seen_executed_types: set[CommandType] = {

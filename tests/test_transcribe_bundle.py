@@ -19,7 +19,12 @@ from transcriber.constants import (
     SUMMARY_FILENAME,
     TRANSCRIPT_FILENAME,
 )
-from transcriber.exception import FailedToExtractDateException, InvalidBundleException, InvalidSourceAudiosException
+from transcriber.exception import (
+    DuplicateBundleIdException,
+    FailedToExtractDateException,
+    InvalidBundleException,
+    InvalidSourceAudiosException,
+)
 from transcriber.files.metadata import AudioFileMeta, MetadataFile
 from transcriber.files.text_file import CustomContextFile, TranscriptFile
 from transcriber.transcribe_bundle import TranscribeBundle
@@ -773,7 +778,8 @@ class TestGatherExistingBundles:
         )
 
         assert len(bundles) == 2
-        assert {b.bundle_name for b in bundles} == {
+        assert set(bundles) == {bundle.bundle_id for bundle in bundles.values()}
+        assert {b.bundle_name for b in bundles.values()} == {
             "2025-01-15_meeting1",
             "2025-01-15_meeting2",
         }
@@ -804,7 +810,37 @@ class TestGatherExistingBundles:
 
         # at this point we have 1 valid bundle (generic_bundle) and 1 invalid one
         assert len(bundles) == 1
-        assert bundles.pop().bundle_name == generic_bundle.bundle_name
+        assert next(iter(bundles.values())).bundle_name == generic_bundle.bundle_name
+
+    def test_gather_existing_bundles_rejects_duplicate_ids(
+        self,
+        fake_config: TranscribeConfig,
+        fake_fs: FakeFileSystemService,
+        fake_audio_service: FakeAudioService,
+        transcribe_bundle_factory: TranscribeBundleFactory,
+    ) -> None:
+        """Copied bundle metadata cannot silently overwrite a cache entry."""
+        duplicate_id = new_bundle_id()
+        transcribe_bundle_factory(
+            bundle_name="2025-01-15_first",
+            audio_filename="first.mp3",
+            bundle_id=duplicate_id,
+        )
+        transcribe_bundle_factory(
+            bundle_name="2025-01-15_second",
+            audio_filename="second.mp3",
+            bundle_id=duplicate_id,
+        )
+
+        with pytest.raises(DuplicateBundleIdException, match=duplicate_id):
+            TranscribeBundle.gather_existing_bundles(
+                store_dir=fake_config.general.store_dir,
+                dry_run=False,
+                cleanup_bundle=False,
+                config=fake_config,
+                fs_service=fake_fs,
+                audio_service=fake_audio_service,
+            )
 
     def test_find_previous_bundle_returns_most_recent_prior_bundle(
         self,

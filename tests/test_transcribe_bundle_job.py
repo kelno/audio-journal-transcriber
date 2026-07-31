@@ -48,7 +48,7 @@ class TestCreateBundleJob:
             audio_service=fake_audio_service,
         )
         job = CreateBundleJob(bundle, dry_run=False)
-        job.run(fake_ai_manager, fake_config, {bundle})
+        job.run(fake_ai_manager, fake_config, {bundle.bundle_id: bundle})
 
         bundle_dir = bundle.get_bundle_dir()
         assert fake_fs.file_exists(bundle_dir / CUSTOM_CONTEXT_FILENAME)
@@ -104,7 +104,7 @@ class TestCreateBundleJob:
             audio_service=fake_audio_service,
         )
         job = CreateBundleJob(bundle, dry_run=True)
-        job.run(fake_ai_manager, fake_config, {bundle})
+        job.run(fake_ai_manager, fake_config, {bundle.bundle_id: bundle})
 
         assert not fake_fs.file_exists(bundle.get_bundle_dir() / CUSTOM_CONTEXT_FILENAME)
 
@@ -132,7 +132,7 @@ class TestCreateBundleJob:
         job = CreateBundleJob(bundle, dry_run=False)
 
         with pytest.raises(TooShortException) as exc_info:
-            job.run(fake_ai_manager, fake_config, {bundle})
+            job.run(fake_ai_manager, fake_config, {bundle.bundle_id: bundle})
 
         # The original source path is preserved on the exception for diagnostics.
         assert exc_info.value.source_audio == input_audio
@@ -165,7 +165,7 @@ class TestTranscriptionJob:
         job = TranscriptionJob(bundle, dry_run=False)
 
         with pytest.raises(EmptyTranscriptException):
-            job.run(ai_manager, fake_config, {bundle})
+            job.run(ai_manager, fake_config, {bundle.bundle_id: bundle})
 
         # No transcript file should have been written for an empty result.
         assert bundle.transcript is None
@@ -188,7 +188,7 @@ class TestTranscriptionJob:
         assert bundle.metadata.summary_context_hash is not None
 
         job = SummaryJob(bundle, dry_run=False)
-        job.run(fake_ai_manager, fake_config, {bundle})
+        job.run(fake_ai_manager, fake_config, {bundle.bundle_id: bundle})
 
         assert bundle.metadata.summary_context_hash == bundle.compute_context_hash()
         # And it was persisted to disk.
@@ -214,7 +214,7 @@ class TestTranscriptionJob:
             custom_context="This recording was recorded with a potato in my mouth.\n",
         )
         job = SummaryJob(bundle, dry_run=False)
-        job.run(fake_ai_manager, fake_config, {bundle})
+        job.run(fake_ai_manager, fake_config, {bundle.bundle_id: bundle})
 
         # The hash must match the effective context (which now includes the
         # user-provided line), not the empty/default context.

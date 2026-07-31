@@ -141,7 +141,10 @@ class TestMergeRequeue:
         post_merge_summary = "New summary from merged transcripts"
         fake_transcriber.ai_manager.summary = post_merge_summary
 
-        bundle_cache: set[TranscribeBundle] = {source, target}
+        bundle_cache = {
+            source.bundle_id: source,
+            target.bundle_id: target,
+        }
         jobs = fake_transcriber.gather_jobs(bundle_cache)
 
         errored = fake_transcriber.process_jobs(jobs, bundle_cache)

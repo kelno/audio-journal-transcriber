@@ -18,6 +18,19 @@ from transcriber.exception import (
 from transcriber.transcribe_bundle import TranscribeBundle
 
 
+def _bundle_cache(*bundles: TranscribeBundle) -> dict[str, TranscribeBundle]:
+    """Index test bundles by their persistent IDs.
+
+    Args:
+        *bundles: Bundle instances to include in the test cache.
+
+    Returns:
+        A cache keyed by each bundle's persistent ID.
+
+    """
+    return {bundle.bundle_id: bundle for bundle in bundles}
+
+
 class TestHandleMerge:
     def test_handle_merge_dedupes_commands_with_same_id(
         self,
@@ -38,7 +51,7 @@ class TestHandleMerge:
             commands=["shared", "only current"],
         )
 
-        bundle_cache = {current_bundle, previous_bundle}
+        bundle_cache = _bundle_cache(current_bundle, previous_bundle)
         # Simulate a copy/pasted bundle: the "shared" command carries the same id
         # in both bundles, while the distinct commands keep their own ids.
         assert previous_bundle.commands
@@ -51,11 +64,15 @@ class TestHandleMerge:
 
         previous_bundle_dir = previous_bundle.get_bundle_dir()
         current_bundle_dir = current_bundle.get_bundle_dir()
+        target_id = previous_bundle.bundle_id
+        source_id = current_bundle.bundle_id
 
         with pytest.raises(AbortForMergeTargetException):
             handle_merge(current_bundle, fake_config, bundle_cache, shared_cmd)
 
         assert not fake_fs.directory_exists(current_bundle_dir)
+        assert target_id in bundle_cache
+        assert source_id not in bundle_cache
 
         merged_bundle = TranscribeBundle.from_existing_directory(
             existing_dir=previous_bundle_dir,
@@ -68,6 +85,7 @@ class TestHandleMerge:
         assert merged_bundle.commands is not None
         commands = merged_bundle.commands.commands
         assert len(commands) == 3
+        assert merged_bundle.bundle_id == target_id
         assert [cmd.text for cmd in commands] == ["shared", "only previous", "only current"]
         assert sum(1 for cmd in commands if cmd.id == shared_id) == 1
 
@@ -115,7 +133,7 @@ class TestHandleMerge:
         )
         # Mark only second command as executed
         assert current_bundle.commands
-        bundle_cache = {current_bundle, previous_bundle}
+        bundle_cache = _bundle_cache(current_bundle, previous_bundle)
         merge_cmd = current_bundle.commands.commands[0]
         assert merge_cmd.executed is False  # our merge command, starts at false
         current_bundle.commands.commands[1].executed = True
@@ -204,7 +222,7 @@ class TestHandleMerge:
             commands=["merge"],
         )
         assert current_bundle.commands
-        bundle_cache = {current_bundle, previous_bundle}
+        bundle_cache = _bundle_cache(current_bundle, previous_bundle)
 
         with pytest.raises(AbortForMergeTargetException):
             handle_merge(current_bundle, fake_config, bundle_cache, current_bundle.commands.commands[0])
@@ -230,7 +248,7 @@ class TestHandleMerge:
         )
         assert third_bundle.commands
         third_bundle_dir = third_bundle.get_bundle_dir()
-        bundle_cache.add(third_bundle)
+        bundle_cache[third_bundle.bundle_id] = third_bundle
 
         with pytest.raises(AbortForMergeTargetException):
             handle_merge(third_bundle, fake_config, bundle_cache, third_bundle.commands.commands[0])
@@ -268,7 +286,7 @@ class TestHandleMerge:
             custom_context=current_context,
         )
         assert current_bundle.commands
-        bundle_cache = {current_bundle, previous_bundle}
+        bundle_cache = _bundle_cache(current_bundle, previous_bundle)
         previous_bundle_dir = previous_bundle.get_bundle_dir()
         current_bundle_dir = current_bundle.get_bundle_dir()
 
@@ -313,7 +331,7 @@ class TestHandleMerge:
             commands=["merge"],
         )
         assert current_bundle.commands
-        bundle_cache = {current_bundle, previous_bundle}
+        bundle_cache = _bundle_cache(current_bundle, previous_bundle)
 
         previous_bundle_dir = previous_bundle.get_bundle_dir()
 
@@ -352,7 +370,7 @@ class TestHandleMerge:
             commands=["merge"],
         )
         assert current_bundle.commands
-        bundle_cache = {current_bundle, previous_bundle}
+        bundle_cache = _bundle_cache(current_bundle, previous_bundle)
 
         previous_bundle_dir = previous_bundle.get_bundle_dir()
         current_bundle_dir = current_bundle.get_bundle_dir()
@@ -394,7 +412,7 @@ class TestHandleMerge:
             commands=["merge"],
         )
         assert current_bundle.commands
-        bundle_cache = {current_bundle, previous_bundle}
+        bundle_cache = _bundle_cache(current_bundle, previous_bundle)
 
         previous_bundle_dir = previous_bundle.get_bundle_dir()
         current_bundle_dir = current_bundle.get_bundle_dir()
@@ -434,7 +452,7 @@ class TestHandleMerge:
             commands=["merge"],
         )
         assert current_bundle.commands
-        bundle_cache = {current_bundle, previous_bundle}
+        bundle_cache = _bundle_cache(current_bundle, previous_bundle)
 
         previous_bundle_dir = previous_bundle.get_bundle_dir()
         current_bundle_dir = current_bundle.get_bundle_dir()
@@ -471,7 +489,7 @@ class TestHandleMerge:
             commands=["merge", "do something"],
         )
         assert current_bundle.commands
-        bundle_cache = {current_bundle, previous_bundle}
+        bundle_cache = _bundle_cache(current_bundle, previous_bundle)
 
         previous_bundle_dir = previous_bundle.get_bundle_dir()
         current_bundle_dir = current_bundle.get_bundle_dir()
@@ -520,7 +538,7 @@ class TestHandleMerge:
             commands=["merge", "other"],
         )
         assert current_bundle.commands
-        bundle_cache = {current_bundle, previous_bundle}
+        bundle_cache = _bundle_cache(current_bundle, previous_bundle)
         previous_bundle_dir = previous_bundle.get_bundle_dir()
 
         with pytest.raises(AbortForMergeTargetException):
@@ -553,7 +571,7 @@ class TestHandleMerge:
             commands=["merge"],
         )
         assert current_bundle.commands
-        bundle_cache = {current_bundle, previous_bundle}
+        bundle_cache = _bundle_cache(current_bundle, previous_bundle)
         previous_bundle_dir = previous_bundle.get_bundle_dir()
 
         with pytest.raises(AbortForMergeTargetException):
@@ -581,7 +599,7 @@ class TestHandleMerge:
             commands=["merge"],
         )
         assert current_bundle.commands
-        bundle_cache = {current_bundle, previous_bundle}
+        bundle_cache = _bundle_cache(current_bundle, previous_bundle)
 
         previous_bundle_dir = previous_bundle.get_bundle_dir()
         current_bundle_dir = current_bundle.get_bundle_dir()
@@ -661,7 +679,7 @@ class TestHandleMerge:
             "Merge of 2025-01-15_meeting into 2025-01-15_previous did not complete.\n",
         )
 
-        bundle_cache = {current_bundle, previous_bundle}
+        bundle_cache = _bundle_cache(current_bundle, previous_bundle)
 
         # The original source retrying into the failed target is blocked.
         with pytest.raises(MergeBlockedException):
@@ -714,7 +732,12 @@ class TestHandleMerge:
         previous_bundle_dir = previous_bundle.get_bundle_dir()
 
         with pytest.raises(AbortForMergeTargetException):
-            handle_merge(current_bundle, fake_config, {current_bundle, previous_bundle}, current_bundle.commands.commands[0])
+            handle_merge(
+                current_bundle,
+                fake_config,
+                _bundle_cache(current_bundle, previous_bundle),
+                current_bundle.commands.commands[0],
+            )
 
         merged_bundle = TranscribeBundle.from_existing_directory(
             existing_dir=previous_bundle_dir,
@@ -755,7 +778,7 @@ class TestHandleMerge:
 
         merge_cmd = current_bundle.commands.commands[0]
         with pytest.raises(NoPreviousBundleException):
-            handle_merge(current_bundle, fake_config, {current_bundle}, merge_cmd)
+            handle_merge(current_bundle, fake_config, _bundle_cache(current_bundle), merge_cmd)
 
     def test_handle_merge_fails_without_previous_bundle(
         self,
@@ -772,7 +795,7 @@ class TestHandleMerge:
         assert current_bundle.commands
         merge_cmd = current_bundle.commands.commands[0]
         with pytest.raises(NoPreviousBundleException):
-            handle_merge(current_bundle, fake_config, {current_bundle}, merge_cmd)
+            handle_merge(current_bundle, fake_config, _bundle_cache(current_bundle), merge_cmd)
 
 
 class TestHandleUnknown:
@@ -791,4 +814,4 @@ class TestHandleUnknown:
         cmd = Command(text="do something weird")
 
         with pytest.raises(UnknownCommandException):
-            handle_unknown(bundle, fake_config, {bundle}, cmd)
+            handle_unknown(bundle, fake_config, {bundle.bundle_id: bundle}, cmd)

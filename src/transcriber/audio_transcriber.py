@@ -14,7 +14,7 @@ from transcriber.exception import (
 )
 from transcriber.files.file_system import FileSystemService, RealFileSystemService
 from transcriber.globals import is_handled_audio_file
-from transcriber.transcribe_bundle import TranscribeBundle
+from transcriber.transcribe_bundle import BundleCache, TranscribeBundle
 from transcriber.transcribe_bundle_job import (
     BundleJobs,
     BundleNameJob,
@@ -35,7 +35,7 @@ from .logger import logger
 
 # A bundle's work queue: the jobs left to run for that bundle, plus how many
 # times it has been re-queued (used to break accidental merge loops).
-type BundleJobQueue = "dict[TranscribeBundle, BundleJobQueueEntry]"
+type BundleJobQueue = "dict[str, BundleJobQueueEntry]"
 
 MAX_REQUEUE_PER_BUNDLE = 5
 
@@ -85,7 +85,17 @@ class AudioTranscriber:
         )
 
     def _handle_process_jobs_exception(self, job: TranscribeBundleJob, e: Exception, queue: BundleJobQueue) -> bool:
-        """Returns wheter we are in an error case."""
+        """Handle a job exception and update the ID-keyed work queue.
+
+        Args:
+            job: Job whose execution raised the exception.
+            e: Exception raised by the job.
+            queue: Remaining jobs indexed by persistent bundle ID.
+
+        Returns:
+            Whether the exception represents an error for reporting purposes.
+
+        """
         if isinstance(e, TooShortException):
             logger.warning(
                 f"Refusing to create bundle from too short audio file {e.source_audio}: {e}",
@@ -103,7 +113,7 @@ class AudioTranscriber:
             logger.debug(f"Merge finished, re-processing target bundle: {e.bundle.bundle_name}")
             # Drop the target's still-queued (stale) jobs.
             # Re-gather fresh jobs from the merged target
-            existing = queue.pop(e.bundle, None)
+            existing = queue.pop(e.bundle.bundle_id, None)
             requeue_count = (existing.requeue_count + 1) if existing is not None else 1
             target_name = e.bundle.bundle_name
             if requeue_count > MAX_REQUEUE_PER_BUNDLE:
@@ -114,7 +124,7 @@ class AudioTranscriber:
                 return True
 
             # Recompute remaining jobs for target
-            queue[e.bundle] = BundleJobQueueEntry(
+            queue[e.bundle.bundle_id] = BundleJobQueueEntry(
                 jobs=self.gather_bundle_jobs(
                     e.bundle,
                     self.config.general.store_dir,
@@ -135,26 +145,26 @@ class AudioTranscriber:
             logger.exception(f"Error processing {job} (skipping any remaining jobs for this bundle).")
             return True
 
-    def process_jobs(self, all_jobs_bundles: list[BundleJobs], bundle_cache: set[TranscribeBundle]) -> list[BundleJobs]:
+    def process_jobs(self, all_jobs_bundles: list[BundleJobs], bundle_cache: BundleCache) -> list[BundleJobs]:
         """Process audio files from the pending directory.
 
         Args:
             all_jobs_bundles: List of bundle jobs to process.
-            bundle_cache: Set of TranscribeBundle instances for job execution.
+            bundle_cache: Bundles indexed by persistent ID for job execution.
 
         Returns:
             list[BundleJobs]: Remaining unprocessed bundle jobs.
 
         """
-        # Work queue keyed by bundle object
+        # Stable IDs keep queue entries addressable while bundle names change.
         queue: BundleJobQueue = {
-            jobs_bundle[0].bundle: BundleJobQueueEntry(jobs=jobs_bundle) for jobs_bundle in all_jobs_bundles if jobs_bundle
+            jobs_bundle[0].bundle.bundle_id: BundleJobQueueEntry(jobs=jobs_bundle) for jobs_bundle in all_jobs_bundles if jobs_bundle
         }
 
         errored_bundles = list[BundleJobs]()
         while queue:
             # Process one bundle at a time; popitem() yields an arbitrary bundle.
-            _bundle_name, entry = queue.popitem()
+            _bundle_id, entry = queue.popitem()
             jobs_bundle = entry.jobs
             if not jobs_bundle:
                 continue
@@ -192,9 +202,17 @@ class AudioTranscriber:
             msg = f"ffmpeg is not available in path: {input_dir}"
             raise AudioTranscriberException(msg)
 
-    def gather_pending_audio_files(self, input_dir: Path) -> set[TranscribeBundle]:
-        """Import audio files from the input directory as TranscriptBundle instances."""
-        bundles: set[TranscribeBundle] = set()
+    def gather_pending_audio_files(self, input_dir: Path) -> BundleCache:
+        """Import audio files from the input directory as TranscriptBundle instances.
+
+        Args:
+            input_dir: Directory tree to scan for pending audio files.
+
+        Returns:
+            Newly discovered bundles indexed by persistent ID.
+
+        """
+        bundles: BundleCache = {}
 
         for path in input_dir.rglob("*"):
             if path.is_file() and is_handled_audio_file(path.suffix):
@@ -205,12 +223,12 @@ class AudioTranscriber:
                     fs_service=self.fs_service,
                     audio_service=self.audio_service,
                 )
-                bundles.add(bundle)
+                bundles[bundle.bundle_id] = bundle
 
         logger.debug(f"Imported {len(bundles)} audio files as bundles")
         return bundles
 
-    def gather_bundles(self, input_dir: Path, store_dir: Path) -> set[TranscribeBundle]:
+    def gather_bundles(self, input_dir: Path, store_dir: Path) -> BundleCache:
         """Gather all bundles to process from input and store directories.
 
         Combines newly discovered audio files from the input directory with
@@ -222,24 +240,26 @@ class AudioTranscriber:
             store_dir: Directory containing existing bundle metadata.
 
         Returns:
-            Set of TranscribeBundle instances ready for job generation.
+            Bundles indexed by persistent ID, ready for job generation.
 
         """
         logger.info(f"Gathering audio files from input directory: {input_dir}")
         bundles = self.gather_pending_audio_files(input_dir)
 
         logger.info(f"Gathering bundles from managed store directory: {store_dir}")
-        bundles |= TranscribeBundle.gather_existing_bundles(
-            store_dir=store_dir,
-            dry_run=self.dry_run,
-            cleanup_bundle=True,
-            config=self.config,
-            fs_service=self.fs_service,  # type: ignore[arg-type]
-            audio_service=self.audio_service,
+        bundles.update(
+            TranscribeBundle.gather_existing_bundles(
+                store_dir=store_dir,
+                dry_run=self.dry_run,
+                cleanup_bundle=True,
+                config=self.config,
+                fs_service=self.fs_service,
+                audio_service=self.audio_service,
+            ),
         )
         return bundles
 
-    def gather_jobs(self, bundle_cache: set[TranscribeBundle]) -> list[BundleJobs]:
+    def gather_jobs(self, bundle_cache: BundleCache) -> list[BundleJobs]:
         """Generate the job queue for processing all bundles.
 
         Creates a list of BundleJobs, one per bundle, containing all the
@@ -247,7 +267,7 @@ class AudioTranscriber:
         only_one_bundle mode is enabled, returns only the first bundle's jobs.
 
         Args:
-            bundle_cache: Set of TranscribeBundle instances to generate jobs for.
+            bundle_cache: Bundles indexed by persistent ID to generate jobs for.
 
         Returns:
             List of BundleJobs ready to be processed.
@@ -258,7 +278,7 @@ class AudioTranscriber:
         # one BundleJobs per bundle
         jobs: list[BundleJobs] = [
             bundle_jobs
-            for bundle in bundle_cache
+            for bundle in bundle_cache.values()
             if (
                 bundle_jobs := self.gather_bundle_jobs(
                     bundle,

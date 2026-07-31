@@ -23,7 +23,7 @@ from transcriber.exception import (
 from transcriber.files.metadata import AudioFileMeta
 from transcriber.files.text_file import CustomContextFile, TranscriptFile
 from transcriber.logger import logger
-from transcriber.transcribe_bundle import TranscribeBundle
+from transcriber.transcribe_bundle import BundleCache, TranscribeBundle
 
 if TYPE_CHECKING:
     from transcriber.commands.command import Command
@@ -258,14 +258,14 @@ class AbortForMergeTargetException(AudioTranscriberException):
 
 
 @command_handler
-def handle_merge(source: TranscribeBundle, _config: TranscribeConfig, bundles_cache: set[TranscribeBundle], merge_cmd: Command) -> None:
+def handle_merge(source: TranscribeBundle, _config: TranscribeConfig, bundles_cache: BundleCache, merge_cmd: Command) -> None:
     """Merge the current recording with the previous one.
 
     Args:
         source: The transcribe bundle to operate on.
-        config: The transcribe configuration.
+        _config: The transcribe configuration, unused by this handler.
         merge_cmd: The original command triggering the merge.
-        bundles_cache: Cache for all loaded bundles during this jobs run.
+        bundles_cache: Loaded bundles indexed by persistent ID.
 
     Side effects / merge policy:
         - Audio, transcript, commands and transcript-model metadata are merged into
@@ -283,7 +283,7 @@ def handle_merge(source: TranscribeBundle, _config: TranscribeConfig, bundles_ca
     """
     logger.info(f"Running merge command for {source} (command text: {merge_cmd.text})")
 
-    target = TranscribeBundle.find_previous_bundle(source, bundles_cache)
+    target = TranscribeBundle.find_previous_bundle(source, bundles_cache.values())
     if target is None:
         raise NoPreviousBundleException(
             target_bundle=source.bundle_name,
@@ -345,7 +345,7 @@ def handle_merge(source: TranscribeBundle, _config: TranscribeConfig, bundles_ca
 
         # Source removed only after the merge is fully committed to the target.
         source.fs_service.delete_directory(source_bundle_dir)
-        bundles_cache.remove(source)
+        bundles_cache.pop(source.bundle_id)
     except Exception:
         logger.exception(
             f"Merge of {source.bundle_name} into {target.bundle_name} failed; "
@@ -362,34 +362,34 @@ def handle_merge(source: TranscribeBundle, _config: TranscribeConfig, bundles_ca
 
 
 @command_handler
-def handle_delete(bundle: TranscribeBundle, _config: TranscribeConfig, bundles_cache: set[TranscribeBundle], cmd: Command) -> None:
+def handle_delete(bundle: TranscribeBundle, _config: TranscribeConfig, bundles_cache: BundleCache, cmd: Command) -> None:
     """Delete the current recording.
 
     Args:
         bundle: The transcribe bundle to operate on.
-        config: The transcribe configuration.
+        _config: The transcribe configuration, unused by this handler.
         cmd: The original command triggering this.
-        bundles_cache: Cache for all loaded bundles during this jobs run.
+        bundles_cache: Loaded bundles indexed by persistent ID.
 
     """
     logger.debug(f"Running delete command for {bundle} (command text: {cmd.text})")
     bundle.set_command_executed(cmd.id)
     bundle.fs_service.delete_directory(bundle.get_bundle_dir())
-    bundles_cache.remove(bundle)
+    bundles_cache.pop(bundle.bundle_id)
 
     msg = "Skip remaining jobs after delete command"
     raise AbortRemainingBundleJobsException(msg)
 
 
 @command_handler
-def handle_unknown(_bundle: TranscribeBundle, _config: TranscribeConfig, _bundles_cache: set[TranscribeBundle], cmd: Command) -> None:
+def handle_unknown(_bundle: TranscribeBundle, _config: TranscribeConfig, _bundles_cache: BundleCache, cmd: Command) -> None:
     """Handle unknown command type.
 
     Args:
-        bundle: The transcribe bundle to operate on.
-        config: The transcribe configuration.
+        _bundle: The transcribe bundle, unused by this handler.
+        _config: The transcribe configuration, unused by this handler.
         cmd: The original command triggering this.
-        bundles_cache: Cache for all loaded bundles during this jobs run.
+        _bundles_cache: Loaded bundles indexed by persistent ID, unused here.
 
     Raises:
         ValueError: Always raised as the command type is unknown.
@@ -400,14 +400,14 @@ def handle_unknown(_bundle: TranscribeBundle, _config: TranscribeConfig, _bundle
 
 
 @command_handler
-def handle_ignore(_bundle: TranscribeBundle, _config: TranscribeConfig, _bundles_cache: set[TranscribeBundle], cmd: Command) -> None:
+def handle_ignore(_bundle: TranscribeBundle, _config: TranscribeConfig, _bundles_cache: BundleCache, cmd: Command) -> None:
     """Handle ignore command type.
 
     Args:
-        bundle: The transcribe bundle to operate on.
-        config: The transcribe configuration.
+        _bundle: The transcribe bundle, unused by this handler.
+        _config: The transcribe configuration, unused by this handler.
         cmd: The original command triggering this.
-        bundles_cache: Cache for all loaded bundles during this jobs run.
+        _bundles_cache: Loaded bundles indexed by persistent ID, unused here.
 
     """
     logger.debug(f"Command {cmd.text} is ignored.")

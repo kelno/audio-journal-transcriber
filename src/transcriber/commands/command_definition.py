@@ -8,11 +8,11 @@ if TYPE_CHECKING:
     from transcriber.commands.command import Command
     from transcriber.commands.command_type import CommandType
     from transcriber.config import TranscribeConfig
-    from transcriber.transcribe_bundle import TranscribeBundle
+    from transcriber.transcribe_bundle import BundleCache, TranscribeBundle
 
 # Signature shared by every command handler: (bundle, config, command_text) -> None.
 # Defined here rather than in command_handlers to avoid a circular import cycle.
-CommandHandler = Callable[["TranscribeBundle", "TranscribeConfig", "set[TranscribeBundle]", "Command"], None]
+CommandHandler = Callable[["TranscribeBundle", "TranscribeConfig", "BundleCache", "Command"], None]
 
 
 @dataclass

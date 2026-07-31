@@ -55,6 +55,25 @@ class InvalidBundleException(AudioTranscriberException):
 
 
 @final
+class DuplicateBundleIdException(AudioTranscriberException):
+    """Two stored bundle directories claim the same persistent identity."""
+
+    def __init__(self, bundle_id: str, first_path: Path, second_path: Path):
+        """Describe the conflicting identifier and both bundle directories.
+
+        Args:
+            bundle_id: Persistent identifier claimed by both bundles.
+            first_path: Directory of the first bundle encountered.
+            second_path: Directory of the conflicting bundle.
+
+        """
+        super().__init__(f"Duplicate bundle_id {bundle_id}: {first_path} and {second_path}")
+        self.bundle_id = bundle_id
+        self.first_path = first_path
+        self.second_path = second_path
+
+
+@final
 class NoPreviousBundleException(AudioTranscriberException):
     """Failed to find a previous bundle for merge command."""
 
