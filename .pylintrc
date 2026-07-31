@@ -452,7 +452,11 @@ disable=raw-checker-failed,
         logging-fstring-interpolation,
         missing-function-docstring,
         missing-class-docstring,
-        missing-module-docstring
+        missing-module-docstring,
+        reportImportCycles
+
+# disabled reportImportCycles here because basedpyright author insists on never using TYPE_CHECKING
+# as a valid practice, so the linter doesn't make a difference between actual cycle and type-check only cycles.
 
 # Enable the message, report, category or checker with the given id(s). You can
 # either give multiple identifier separated by comma (,) or put this option

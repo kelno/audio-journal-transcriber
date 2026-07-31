@@ -160,8 +160,7 @@ class TranscriptionJob(TranscribeBundleJob):
                 logger.debug(f"Transcribing {audio_path}")
                 transcript_content = ai_manager.transcribe_audio(audio_path)
                 if transcript_content.strip() == "":
-                    error_msg = f"{self}: Transcription of {audio_path} resulted in empty transcript"
-                    raise EmptyTranscriptException(error_msg)
+                    raise EmptyTranscriptException(source_audio=audio_path, context=f"{self}: Transcription resulted in empty transcript")
                 transcripts.append(transcript_content)
 
             # Concatenate all transcripts

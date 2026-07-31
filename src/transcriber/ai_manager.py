@@ -213,8 +213,11 @@ class RealAIManager(AIManager):
 
         logger.debug(f"AI generated bundle name: {bundle_name}")
         if len(bundle_name) > BUNDLE_NAME_MAX_LENGTH:
-            msg = f"get_bundle_name_summary: LLM returned a bundle name too long: {bundle_name}"
-            raise InvalidBundleNameAnswerException(msg)
+            raise InvalidBundleNameAnswerException(
+                invalid_name=bundle_name,
+                reason=f"length {len(bundle_name)} > {BUNDLE_NAME_MAX_LENGTH}",
+                context="get_bundle_name_summary: LLM returned a bundle name too long",
+            )
 
         return bundle_name
 
@@ -277,9 +280,12 @@ class RealAIManager(AIManager):
                 return cmd_type
 
         # Invalid response
-        msg = f"LLM returned unexpected response: {response}"
-        logger.error(msg)
-        raise UnexpectedChatClientAnswerException(msg)
+        logger.error(f"LLM returned unexpected response: {response}")
+        raise UnexpectedChatClientAnswerException(
+            expected_type="known command type",
+            actual_answer=response,
+            context="LLM returned unexpected response",
+        )
 
     @override
     def extract_raw_commands(self, text: str, bundle_name: str) -> list[str]:

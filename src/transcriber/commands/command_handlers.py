@@ -285,8 +285,11 @@ def handle_merge(source: TranscribeBundle, _config: TranscribeConfig, bundles_ca
 
     target = TranscribeBundle.find_previous_bundle(source, bundles_cache)
     if target is None:
-        msg = "No previous bundle found to merge with"
-        raise NoPreviousBundleException(msg)
+        raise NoPreviousBundleException(
+            target_bundle=source.bundle_name,
+            search_pattern="previous bundles",
+            context="No previous bundle found to merge with",
+        )
 
     # The merge target is chosen purely by recency within the merge window, not by
     # explicit user intent. Surface the chosen target prominently (with the time

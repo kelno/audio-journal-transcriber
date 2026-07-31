@@ -24,6 +24,7 @@ class CommandsFile(TextFile):
     """Represents gathered audio commands in the transcript."""
 
     commands: list[Command] = field(default_factory=list)
+    file_path: Path | None = None
 
     def __post_init__(self) -> None:
         """Parse YAML text into commands if text is provided."""
@@ -54,8 +55,10 @@ class CommandsFile(TextFile):
                 ]
                 return
             elif not isinstance(commands_data, list):
-                msg = f"Expected top-level YAML list, got {type(commands_data).__name__}"
-                raise InvalidCommandFileException(msg)
+                raise InvalidCommandFileException(
+                    command_file=self.file_path or Path("unknown"),
+                    error=f"Expected top-level YAML list, got {type(commands_data).__name__}",
+                )
 
             self.commands = [Command.from_dict(cmd) for cmd in commands_data if isinstance(cmd, dict)]
         except yaml.YAMLError:
@@ -99,7 +102,7 @@ class CommandsFile(TextFile):
 
         """
         text_content = fs_service.read_file(file_path)
-        return cls(text=text_content)
+        return cls(text=text_content, file_path=file_path)
 
     @classmethod
     def from_command_list(cls, command_texts: list[str]) -> "CommandsFile":

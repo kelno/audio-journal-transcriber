@@ -81,8 +81,10 @@ class MetadataFile(Metadata):
         if frontmatter := cls._extract_frontmatter(text):
             data = yaml.safe_load(frontmatter)
         else:
-            error_msg = f"Invalid metadata file {meta_file}, failed to find frontmatter"
-            raise InvalidMetadataFileException(error_msg)
+            raise InvalidMetadataFileException(
+                metadata_file=meta_file,
+                error="failed to find frontmatter",
+            )
 
         return MetadataFile.model_validate(data)
 

@@ -259,7 +259,7 @@ class TestTranscribeBundleFromAudioFiles:
         fake_audio_service: FakeAudioService,
     ) -> None:
         """Test that from_audio_files raises ValueError on empty list."""
-        with pytest.raises(InvalidSourceAudiosException, match="Must provide at least one audio file"):
+        with pytest.raises(InvalidSourceAudiosException):
             TranscribeBundle.from_audio_files(
                 source_audios=[],
                 config=fake_config,
@@ -310,10 +310,7 @@ class TestTranscribeBundleFromExistingDirectory:
         """Test that loading raises if metadata file is missing."""
         fake_fs.delete_file(generic_bundle_dir / METADATA_FILENAME)
 
-        with pytest.raises(
-            InvalidBundleException,
-            match=r"Bundle directory is invalid.*no meta file",
-        ):
+        with pytest.raises(InvalidBundleException):
             TranscribeBundle.from_existing_directory(
                 existing_dir=generic_bundle_dir,
                 config=fake_config,

@@ -77,8 +77,10 @@ class TranscribeBundle:
         """Load audio paths and text files from bundle directory."""
         meta_file_path = existing_dir / METADATA_FILENAME
         if not fs_service.file_exists(meta_file_path):
-            error_msg = f"Bundle directory is invalid (no meta file): {existing_dir}"
-            raise InvalidBundleException(error_msg)
+            raise InvalidBundleException(
+                bundle_path=existing_dir,
+                reason="no meta file",
+            )
 
         metadata = MetadataFile.from_file(meta_file_path, fs_service)
 
@@ -191,8 +193,10 @@ class TranscribeBundle:
     ) -> "TranscribeBundle":
         """Create a new TranscribeBundle from multiple audio files."""
         if not source_audios:
-            msg = "Must provide at least one audio file"
-            raise InvalidSourceAudiosException(msg)
+            raise InvalidSourceAudiosException(
+                source_files=source_audios,
+                reason="no audio files provided",
+            )
 
         filenames = [f.name for f in source_audios]
         bundle_date = TranscribeBundle.get_date_for_filename(
@@ -352,8 +356,10 @@ class TranscribeBundle:
             )
             return file_date
         else:
-            msg = f"Could not find any date for file {audio_filename}"
-            raise FailedToExtractDateException(msg)
+            raise FailedToExtractDateException(
+                filenames=[audio_filename],
+                error="could not find any date",
+            )
 
     @staticmethod
     def generate_bundle_name_date_prefix(

@@ -10,7 +10,6 @@
 
 - Keep a single source of truth. Avoid duplicated logic, constants, or configuration values.
 - Avoid hardcoded values. Prefer configuration, environment variables, constants, or appropriate abstractions.
-- Choose solutions based on the problem, not implementation convenience.
 - Add meaningful comments that explain intent, non-obvious decisions, or constraints. Avoid comments describing changes.
 
 ## Iteration & Collaboration
