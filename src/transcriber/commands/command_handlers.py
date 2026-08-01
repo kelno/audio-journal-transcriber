@@ -379,6 +379,7 @@ def handle_delete(bundle: TranscribeBundle, _config: TranscribeConfig, bundles_c
     bundle.set_command_executed(cmd.id)
     bundle.fs_service.delete_directory(bundle.get_bundle_dir())
     bundles_cache.pop(bundle.bundle_id)
+    logger.info(f"Removed bundle {bundle} (command text: {cmd.text})")
 
     msg = "Skip remaining jobs after delete command"
     raise AbortRemainingBundleJobsException(msg)
