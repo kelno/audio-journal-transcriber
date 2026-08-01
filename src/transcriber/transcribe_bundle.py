@@ -25,6 +25,7 @@ from transcriber.exception import (
     InvalidBundleException,
     InvalidSourceAudiosException,
 )
+from transcriber.filename_timestamp import extract_date_from_recording_filename
 from transcriber.files.commands_file import CommandsFile
 from transcriber.files.file_system import FileSystemService
 from transcriber.files.metadata import AudioFileMeta, MetadataFile
@@ -36,7 +37,6 @@ from transcriber.files.text_file import (
 from transcriber.globals import is_handled_audio_file
 from transcriber.logger import logger
 from transcriber.utils import (
-    extract_date_from_recording_filename,
     file_is_in_directory_tree,
     get_days_since_time,
     get_file_modified_date,

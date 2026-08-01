@@ -79,14 +79,27 @@ store/
 
 ### Recording dates
 
-The transcriber recognizes timestamps at the beginning of filenames in these forms:
+The transcriber recognizes unambiguous, year-first dates and timestamps anywhere in
+a filename. Dates may be compact or use `-`, `_`, or `.` separators. Times may be
+compact or use `:`, `-`, `_`, or `.` separators, and may include seconds.
 
 ```text
 Recording 20260801143000.m4a
+Recording_20260801_143000.m4a
 2026-08-01_recording.m4a
+meeting_2026-08-01_14-30-00.m4a
+Voice 002_W_20230102_213412.m4a
+2026-08-01T14:30:00Z_interview.m4a
+GMT20260801-143000_call.mp3
 ```
 
-The `Recording YYYYMMDDHHMMSS` form carries a date and time. The `YYYY-MM-DD` form carries a date only. If no supported prefix is found, the file modification time is used.
+Supported timestamps always put the year first. Date-only values are interpreted at
+midnight in the configured time zone. A timestamp without an explicit time zone uses
+the configured time zone; `Z` and `GMT` explicitly indicate UTC. Ambiguous
+locale-dependent dates such as `08-01-2026` are intentionally not inferred.
+
+If the filename contains conflicting timestamps, no valid timestamp, or no supported
+format, the file modification time is used.
 
 The generated bundle directory name combines the recording date with a short summary-derived or user-provided title.
 

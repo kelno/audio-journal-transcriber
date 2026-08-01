@@ -1,5 +1,4 @@
 import os
-import re
 from datetime import datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -25,40 +24,6 @@ def remove_empty_subdirs(directory: Path) -> None:
 
     except OSError:
         logger.exception(f"Error while removing empty directory {directory}")
-
-
-# regex pattern to match Obsidian recording filenames like "Recording YYYYMMDDHHMMSS"
-DATE_RE_PATTERN_OBSIDIAN_RECORDING = re.compile(
-    r"^Recording (\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})",
-)
-# regex pattern to match filenames starting with "YYYY-MM-DD_", regular pattern of mine
-DATE_RE_PATTERN_SPLIT = re.compile(r"^(\d{4})-(\d{2})-(\d{2})[_ ]")
-
-
-def extract_date_from_recording_filename(
-    filename: str,
-    tz: ZoneInfo,
-) -> datetime | None:
-    """Try to extract a date from the audio filename."""
-    m = DATE_RE_PATTERN_OBSIDIAN_RECORDING.match(filename)
-    if not m:
-        # Try another one
-        m = DATE_RE_PATTERN_SPLIT.match(filename)
-        if not m:
-            return None
-
-    try:
-        values = [
-            int(m.group(i)) if i <= (m.lastindex or 0) else 0
-            for i in range(1, 7)  # (comment for format)
-        ]
-
-        year, month, day, hour, minute, second = values
-
-        return datetime(year, month, day, hour, minute, second, tzinfo=tz)
-    except ValueError:
-        logger.warning(f"Filename {filename} contains an invalid date: {m.groups()}")
-        return None
 
 
 def file_is_in_directory_tree(file: Path, tree: Path) -> bool:
