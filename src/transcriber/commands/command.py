@@ -15,8 +15,8 @@ class Command(BaseModel):
     """Represents a single command with execution state.
 
     A command is a verbal command gathered from the transcription.
-    Commands are interpreted to a CommandType, and only one per type can be executed for a bundle.
-    (Commands might later need to support "arguments", such as a command to give the bundle a title.)
+    Commands are interpreted to a CommandType with structured arguments. Their
+    execution frequency is controlled by the matched type's execution policy.
     """
 
     model_config = ConfigDict(validate_assignment=True)  # pyright: ignore[reportUnannotatedClassAttribute]

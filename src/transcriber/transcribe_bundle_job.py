@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import override
 
 from transcriber.commands.command import Command
+from transcriber.commands.command_execution_policy import CommandExecutionPolicy
 from transcriber.commands.command_handlers import AbortForMergeTargetException
 from transcriber.commands.command_registry import COMMAND_REGISTRY
 from transcriber.commands.command_type import CommandType
@@ -417,6 +418,7 @@ class RunCommandsJob(TranscribeBundleJob):
 
         commands = self.bundle.commands.commands
         pending_commands = self._prepare_commands(ai_manager, commands)
+        pending_commands = self._apply_execution_policies(pending_commands)
 
         # Commands with side effects that invalidate the rest of the bundle should run first.
         # Keep this local until a more complex command ordering system is actually needed.
@@ -447,6 +449,32 @@ class RunCommandsJob(TranscribeBundleJob):
 
         return pending_commands
 
+    def _apply_execution_policies(self, pending_commands: list[Command]) -> list[Command]:
+        """Apply each command type's policy and return the selected commands."""
+        latest_by_type: dict[CommandType, Command] = {}
+        for command in pending_commands:
+            matched_type = command.matched_type
+            assert matched_type is not None
+            definition = COMMAND_REGISTRY[matched_type]
+            if definition.execution_policy is CommandExecutionPolicy.LATEST_PENDING:
+                latest_by_type[matched_type] = command
+
+        selected_commands: list[Command] = []
+        for command in pending_commands:
+            matched_type = command.matched_type
+            assert matched_type is not None
+            latest = latest_by_type.get(matched_type)
+            if latest is not None and command.id != latest.id:
+                logger.info(
+                    f"Skipping superseded {matched_type.value} command: {command.text}",
+                )
+                self.bundle.set_command_executed(command.id)
+                continue
+
+            selected_commands.append(command)
+
+        return selected_commands
+
     def _execute_commands(
         self,
         pending_commands: list[Command],
@@ -472,8 +500,12 @@ class RunCommandsJob(TranscribeBundleJob):
             try:
                 matched_type = cmd.matched_type
                 assert matched_type is not None
+                definition = COMMAND_REGISTRY[matched_type]
 
-                if matched_type in seen_executed_types:
+                if (
+                    definition.execution_policy is CommandExecutionPolicy.ONCE_PER_BUNDLE
+                    and matched_type in seen_executed_types
+                ):
                     logger.info(
                         f"Skipping duplicate {matched_type.value} command: {cmd.text}",
                     )
@@ -482,7 +514,7 @@ class RunCommandsJob(TranscribeBundleJob):
                     self.bundle.set_command_executed(cmd.id)
                     continue
 
-                max_attemps = COMMAND_REGISTRY[matched_type].max_attempts
+                max_attemps = definition.max_attempts
                 if cmd.attempt_count >= max_attemps:
                     logger.debug(
                         f"{self.bundle}: Skipping command {cmd.text} as max attempt count ({max_attemps}) has been reached",
@@ -491,7 +523,7 @@ class RunCommandsJob(TranscribeBundleJob):
 
                 logger.info(f"Executing {matched_type.value} command for bundle {self.bundle}")
 
-                handler = COMMAND_REGISTRY[matched_type].handler
+                handler = definition.handler
                 handler(self.bundle, config, bundle_cache, cmd)
 
                 self.bundle.set_command_executed(cmd.id)
