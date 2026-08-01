@@ -6,6 +6,7 @@ from tests.bundle_fixtures import TranscribeBundleFactory
 from tests.fake_ai_manager import FakeAIManager
 from tests.fake_file_system import FakeFileSystemService
 from transcriber.audio_transcriber import AudioTranscriber
+from transcriber.commands.command_interpretation import CommandInterpretation
 from transcriber.commands.command_type import CommandType
 from transcriber.constants import CUSTOM_CONTEXT_FILENAME, SUMMARY_FILENAME
 from transcriber.files.text_file import CustomContextFile
@@ -137,7 +138,9 @@ class TestMergeRequeue:
         # prepare ai manager canned answers
         fake_transcriber.ai_manager = fake_ai_manager
         fake_transcriber.ai_manager.raw_commands[source_transcript] = [source_raw_merge_cmd]
-        fake_transcriber.ai_manager.interpret_commands[source_raw_merge_cmd] = CommandType.MERGE
+        fake_transcriber.ai_manager.interpret_commands[source_raw_merge_cmd] = CommandInterpretation(
+            command_type=CommandType.MERGE,
+        )
         post_merge_summary = "New summary from merged transcripts"
         fake_transcriber.ai_manager.summary = post_merge_summary
 

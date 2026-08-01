@@ -6,6 +6,7 @@ from typing import override
 import pytest
 
 from transcriber.ai_manager import AIManager
+from transcriber.commands.command_interpretation import CommandInterpretation
 from transcriber.commands.command_type import CommandType
 
 
@@ -27,7 +28,7 @@ class FakeAIManager(AIManager):
     # for get_bundle_name_summary()
     bundle_name: str
     # [query string, matched type] for interpret_command()
-    interpret_commands: dict[str, CommandType]
+    interpret_commands: dict[str, CommandInterpretation]
     # [query string, list of answers] for extract_raw_commands()
     raw_commands: dict[str, list[str]]
 
@@ -38,7 +39,7 @@ class FakeAIManager(AIManager):
         summary: str = "Test response",
         bundle_name: str = "Test response",
         # lambda constructor syntax to avoid mypy error
-        interpret_commands: dict[str, CommandType] | None = None,
+        interpret_commands: dict[str, CommandInterpretation] | None = None,
         raw_commands: dict[str, list[str]] | None = None,
     ) -> None:
         """Initialize the fake AI manager with canned responses.
@@ -97,8 +98,8 @@ class FakeAIManager(AIManager):
         return self.bundle_name
 
     @override
-    def interpret_command(self, command_string: str) -> CommandType:
-        """Return canned command types, tracking the command string.
+    def interpret_command(self, command_string: str) -> CommandInterpretation:
+        """Return canned command interpretations, tracking the command string.
 
         Try to match with commands registered in interpret_commands, else returns UNKNOWN.
         """
@@ -106,7 +107,7 @@ class FakeAIManager(AIManager):
         if command_string in self.interpret_commands:
             return self.interpret_commands[command_string]
         else:
-            return CommandType.UNKNOWN
+            return CommandInterpretation(command_type=CommandType.UNKNOWN)
 
     @override
     def extract_raw_commands(self, text: str, bundle_name: str) -> list[str]:

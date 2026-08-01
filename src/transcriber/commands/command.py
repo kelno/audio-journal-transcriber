@@ -9,6 +9,7 @@ from uuid import uuid4
 from pydantic import BaseModel, ConfigDict, Field, field_serializer
 
 from transcriber.commands import command_type  # noqa: TC001
+from transcriber.commands.command_interpretation import CommandArguments
 
 
 class Command(BaseModel):
@@ -26,6 +27,7 @@ class Command(BaseModel):
     executed: bool = False
     executed_at: datetime | None = None
     matched_type: command_type.CommandType | None = None
+    arguments: CommandArguments = Field(default_factory=CommandArguments)
     last_error: str | None = None  # Error string to help with debugging
     attempt_count: int = Field(default=0, ge=0)  # we stop trying if reaching the max retries for that command type
 
@@ -33,6 +35,11 @@ class Command(BaseModel):
     def serialize_executed_at(self, value: datetime | None) -> str | None:
         """Dump the date string with seconds (such as 2026-05-29T10:30:00+00:00)."""
         return value.isoformat(timespec="seconds") if value else None
+
+    @field_serializer("arguments")
+    def serialize_arguments(self, value: CommandArguments) -> dict[str, object]:
+        """Serialize only arguments that have an extracted value."""
+        return value.model_dump(mode="json", exclude_none=True)
 
     def to_dict(self) -> dict[str, Any]:
         """Convert command to dictionary for YAML serialization."""

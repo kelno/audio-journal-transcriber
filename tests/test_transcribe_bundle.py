@@ -9,6 +9,7 @@ import pytest
 from tests.bundle_fixtures import TranscribeBundleFactory
 from tests.fake_audio_service import FakeAudioService
 from transcriber.bundle_id import new_bundle_id
+from transcriber.commands.command_interpretation import CommandArguments, CommandInterpretation
 from transcriber.commands.command_type import CommandType
 from transcriber.config import TranscribeConfig
 from transcriber.constants import (
@@ -25,6 +26,7 @@ from transcriber.exception import (
     InvalidBundleException,
     InvalidSourceAudiosException,
 )
+from transcriber.files.commands_file import CommandsFile
 from transcriber.files.metadata import AudioFileMeta, MetadataFile
 from transcriber.files.text_file import CustomContextFile, TranscriptFile
 from transcriber.transcribe_bundle import TranscribeBundle
@@ -504,25 +506,38 @@ class TestTranscribeBundleWriteOperations:
         # Check file was written
         assert fake_fs.file_exists(generic_bundle_dir / COMMANDS_FILENAME)
 
-    def test_set_command_type_and_executed(
+    def test_set_command_interpretation_and_executed(
         self,
         generic_bundle: TranscribeBundle,
+        fake_fs: FakeFileSystemService,
     ) -> None:
-        """Test set_command_type and set_command_executed."""
+        """Test atomic interpretation persistence and command execution state."""
         command_one = "do the thing"
         command_two = "do the other thing"
         generic_bundle.set_and_write_commands([command_one, command_two])
         assert generic_bundle.commands
         cmd_one_id = generic_bundle.commands.commands[0].id
-        generic_bundle.set_command_type(cmd_one_id, CommandType.MERGE)
+        interpretation = CommandInterpretation(
+            command_type=CommandType.MERGE,
+            arguments=CommandArguments(title="Planning session"),
+        )
+        generic_bundle.set_command_interpretation(cmd_one_id, interpretation)
 
         assert generic_bundle.commands
         assert generic_bundle.commands.commands[0].matched_type == CommandType.MERGE
+        assert generic_bundle.commands.commands[0].arguments.title == "Planning session"
         assert generic_bundle.commands.commands[1].matched_type is None
         assert not generic_bundle.commands.commands[0].executed
         assert not generic_bundle.commands.commands[1].executed
         assert generic_bundle.commands.commands[0].executed_at is None
         assert generic_bundle.commands.commands[1].executed_at is None
+
+        persisted_commands = CommandsFile.from_file(
+            generic_bundle.get_bundle_dir() / COMMANDS_FILENAME,
+            fake_fs,
+        )
+        assert persisted_commands.commands[0].matched_type is CommandType.MERGE
+        assert persisted_commands.commands[0].arguments.title == "Planning session"
 
         generic_bundle.set_command_executed(cmd_one_id)
         assert generic_bundle.commands.commands[0].executed

@@ -8,6 +8,7 @@ from tests.bundle_fixtures import TranscribeBundleFactory
 from tests.fake_ai_manager import FakeAIManager
 from transcriber.commands.command import Command
 from transcriber.commands.command_execution_policy import CommandExecutionPolicy
+from transcriber.commands.command_interpretation import CommandInterpretation
 from transcriber.commands.command_registry import COMMAND_REGISTRY
 from transcriber.commands.command_type import CommandType
 from transcriber.config import TranscribeConfig
@@ -35,7 +36,7 @@ def _set_all_command_types(bundle: TranscribeBundle, command_type: CommandType) 
     """Persist one matched type for every command in a test bundle."""
     assert bundle.commands is not None
     for command in bundle.commands.commands:
-        bundle.set_command_type(command.id, command_type)
+        bundle.set_command_interpretation(command.id, CommandInterpretation(command_type=command_type))
 
 
 class TestCommandExecutionPolicy:

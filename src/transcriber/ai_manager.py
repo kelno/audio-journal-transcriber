@@ -1,13 +1,14 @@
 """Abstract AI manager for dependency injection."""
 
+import json
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
 from typing import override
 
 from transcriber.clients.clients import AudioTranscriptionClient, ChatCompletionClient
+from transcriber.commands.command_interpretation import CommandInterpretation
 from transcriber.commands.command_registry import COMMAND_REGISTRY
-from transcriber.commands.command_type import CommandType
 from transcriber.config import TranscribeConfig
 from transcriber.exception import (
     EmptyChatClientAnswerException,
@@ -17,6 +18,20 @@ from transcriber.exception import (
 from transcriber.logger import logger
 
 BUNDLE_NAME_MAX_LENGTH = 60  # arbitrary max length
+
+
+def _unwrap_json_code_fence(response: str) -> str:
+    """Remove one optional Markdown JSON fence from a model response."""
+    stripped_response = response.strip()
+    lines = stripped_response.splitlines()
+    if len(lines) < 3 or lines[-1].strip() != "```":
+        return stripped_response
+
+    opening_fence = lines[0].strip().lower()
+    if opening_fence not in {"```", "```json"}:
+        return stripped_response
+
+    return "\n".join(lines[1:-1]).strip()
 
 
 class AIManager(ABC):
@@ -57,8 +72,8 @@ class AIManager(ABC):
         ...
 
     @abstractmethod
-    def interpret_command(self, command_string: str) -> CommandType:
-        """Interpret a user command and match it to a known command type.
+    def interpret_command(self, command_string: str) -> CommandInterpretation:
+        """Interpret a user command into a known type and structured arguments.
 
         Raises:
             UnexpectedChatClientAnswerException: When the LLM returns an invalid or unparseable response.
@@ -222,8 +237,8 @@ class RealAIManager(AIManager):
         return bundle_name
 
     @override
-    def interpret_command(self, command_string: str) -> CommandType:
-        """Interpret a user command and match it to a known command type.
+    def interpret_command(self, command_string: str) -> CommandInterpretation:
+        """Interpret a user command into a known type and structured arguments.
 
         Uses the LLM to semantically match the command string to one of the
         registered command types. Only matches with high confidence; returns
@@ -233,7 +248,7 @@ class RealAIManager(AIManager):
             command_string: The raw command text to interpret.
 
         Returns:
-            The matched CommandType, or CommandType.UNKNOWN if no confident match.
+            The matched command type and any arguments extracted for its handler.
 
         Raises:
             UnexpectedChatClientAnswerException: When the LLM returns an invalid or unparseable response.
@@ -261,31 +276,29 @@ class RealAIManager(AIManager):
   command type.
 
   **Response format:**
-  - First line: The command type (e.g., "MERGE", "DELETE", ...), only the string with no other text, in uppercase.
-  - Second line: Always empty
-  - Third line: A short explanation of your choice, regular case.
-  - Do not include any other text or delimiters or special formatting in the response
-  Lines are seperated by the regular unix line return \n (backslash n).
+  - Return exactly one JSON object with no markdown or surrounding explanation.
+  - "command_type" must be the lowercase command value (for example, "merge").
+  - "arguments" must be a JSON object. All currently available commands use an empty object.
+  - Example: {{"command_type": "merge", "arguments": {{}}}}
 
   **User Command:**
   {command_string}
 
   **API-like Response:**"""
 
-        response = self.query_chat_completion(prompt).strip("\"'` ").upper()
-        logger.debug(f"interpret_command answered {response}")
-        # Try to match the response to a CommandType
-        for cmd_type in CommandType:
-            if response.split("\n")[0].upper() == cmd_type.value.upper():
-                return cmd_type
-
-        # Invalid response
-        logger.error(f"LLM returned unexpected response: {response}")
-        raise UnexpectedChatClientAnswerException(
-            expected_type="known command type",
-            actual_answer=response,
-            context="LLM returned unexpected response",
-        )
+        raw_response = self.query_chat_completion(prompt)
+        response = _unwrap_json_code_fence(raw_response)
+        logger.debug(f"interpret_command answered {raw_response}")
+        try:
+            response_data: object = json.loads(response)
+            return CommandInterpretation.model_validate(response_data)
+        except (json.JSONDecodeError, ValueError) as error:
+            logger.error(f"LLM returned unexpected response: {raw_response}")
+            raise UnexpectedChatClientAnswerException(
+                expected_type="structured command interpretation",
+                actual_answer=raw_response,
+                context=str(error),
+            ) from error
 
     @override
     def extract_raw_commands(self, text: str, bundle_name: str) -> list[str]:

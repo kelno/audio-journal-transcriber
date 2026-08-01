@@ -10,6 +10,7 @@ from pydantic import ValidationError
 from tests.bundle_fixtures import TranscribeBundleFactory
 from tests.fake_file_system import FakeFileSystemService
 from transcriber.commands.command import Command
+from transcriber.commands.command_interpretation import CommandArguments
 from transcriber.commands.command_registry import COMMAND_REGISTRY
 from transcriber.commands.command_type import CommandType
 from transcriber.constants import COMMANDS_FILENAME
@@ -49,6 +50,7 @@ class TestCommandCreation:
         assert cmd_dict["text"] == "stop"
         assert cmd_dict["executed"] is True
         assert cmd_dict["executed_at"] == "2026-05-29T10:30:00+00:00"
+        assert cmd_dict["arguments"] == {}
 
     def test_command_from_dict(self) -> None:
         """Test creating command from dictionary."""
@@ -64,13 +66,25 @@ class TestCommandCreation:
         assert cmd.executed_at == datetime(2026, 5, 29, 10, 30, 0, tzinfo=UTC)
 
     def test_command_from_dict_without_execution_time(self) -> None:
-        """Test creating command from dictionary without execution time."""
+        """Legacy command data without arguments loads with empty arguments."""
         data = {"text": "pause", "executed": False, "executed_at": None}
         cmd = Command.from_dict(data)
 
         assert cmd.text == "pause"
         assert cmd.executed is False
         assert cmd.executed_at is None
+        assert cmd.arguments == CommandArguments()
+
+    def test_command_arguments_round_trip(self) -> None:
+        """Structured arguments survive command serialization."""
+        command = Command(
+            text="set the title",
+            arguments=CommandArguments(title="Planning session"),
+        )
+
+        loaded = Command.from_dict(command.to_dict())
+
+        assert loaded.arguments.title == "Planning session"
 
     def test_command_from_dict_invalid_text_type(self) -> None:
         """Test that from_dict raises pydantic ValidationError if text is not a string."""

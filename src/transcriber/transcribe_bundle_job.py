@@ -441,9 +441,8 @@ class RunCommandsJob(TranscribeBundleJob):
             if cmd.matched_type is None:
                 # Should not happen under normal circumstances, but recover from
                 # inconsistent state if a command was marked executed without its type.
-                matched_type = ai_manager.interpret_command(cmd.text)
-                self.bundle.set_command_type(cmd.id, matched_type)
-                cmd.matched_type = matched_type
+                interpretation = ai_manager.interpret_command(cmd.text)
+                self.bundle.set_command_interpretation(cmd.id, interpretation)
 
             pending_commands.append(cmd)
 

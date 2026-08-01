@@ -8,7 +8,7 @@ from typing import override
 from transcriber.audio_service import AudioService
 from transcriber.bundle_id import BundleId, new_bundle_id
 from transcriber.commands.command import Command
-from transcriber.commands.command_type import CommandType
+from transcriber.commands.command_interpretation import CommandInterpretation
 from transcriber.config import TranscribeConfig
 from transcriber.constants import (
     COMMANDS_FILENAME,
@@ -716,10 +716,11 @@ class TranscribeBundle:
         msg = f"Failed to find command {cmd_id} in bundle {self}"
         raise ValueError(msg)
 
-    def set_command_type(self, cmd_id: str, matched_type: CommandType) -> None:
-        """Mark a raw command with it's matched type."""
+    def set_command_interpretation(self, cmd_id: str, interpretation: CommandInterpretation) -> None:
+        """Persist a command's matched type and extracted arguments together."""
         cmd = self.assert_command(cmd_id)
-        cmd.matched_type = matched_type
+        cmd.matched_type = interpretation.command_type
+        cmd.arguments = interpretation.arguments.model_copy(deep=True)
 
         assert self.commands is not None
         self.commands.write(self.get_bundle_dir(), self.fs_service)
