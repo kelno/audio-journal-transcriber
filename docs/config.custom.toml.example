@@ -1,0 +1,34 @@
+[general]
+# Directory tree scanned for new recordings. It must already exist.
+input_dir = "/path/to/audio-inbox"
+# Managed output directory. It can be browsed with any Markdown reader, including Obsidian.
+store_dir = "/path/to/audio-journal"
+# Reject recordings shorter than this duration. Use 0 to disable.
+min_length_seconds = 10.0
+# Remove recordings rejected by the minimum-duration check.
+remove_short_files = true
+# Remove audio from successfully transcribed bundles after this many days. Use 0 to retain it.
+delete_source_audio_after_days = 0
+# Maximum gap when merging into the previous bundle. Use 0 to disable merging.
+merge_max_hours = 12.0
+# IANA timezone used to interpret recording dates.
+timezone = "Europe/Brussels"
+# Move deleted bundles under <store_dir>/_deleted where supported.
+safe_delete = true
+
+[text]
+# Generate structured summaries and automatic directory titles.
+summary_enabled = true
+# OpenAI-compatible chat-completions service.
+api_base_url = "https://your-chat-service.example/v1"
+api_key = "replace-me"
+model = "your-chat-model"
+# Optional context applied to every recording. Per-recording context belongs in custom_context.md.
+extra_context = "These are personal voice notes."
+
+[audio]
+# OpenAI-compatible audio transcription service.
+api_base_url = "https://your-transcription-service.example/v1"
+api_key = "replace-me"
+model = "your-transcription-model"
+stream = true

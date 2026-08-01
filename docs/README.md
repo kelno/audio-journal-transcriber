@@ -1,121 +1,133 @@
-Audio transcription and summary script for my personal Obsidian Vault. 
+# Audio Journal Transcriber
 
-# Requirements
-Requires `uv` package manager.  
-Requires `ffmpeg` in path.
+Turn personal voice recordings into organized Markdown records.
 
-# Installation
+Audio Journal Transcriber is a self-hosted, filesystem-first pipeline. It watches an input directory, creates a dated bundle for each recording, and transcribes the audio through an OpenAI-compatible transcription API. It can also use an OpenAI-compatible chat API to detect spoken commands and optionally generate structured summaries and readable titles.
+
+A bundle is a self-contained directory that keeps a recording together with its transcript, optional summary and user-provided context, and the state needed to process it over time. Bundles can be browsed with any tool that reads Markdown; storing them in an Obsidian vault is one convenient option.
+
+## How it works
+
+1. The transcriber scans an input directory recursively for recognized recording files.
+2. Each new recording is moved into a dated bundle in the managed store directory.
+3. The audio is sent to the configured transcription API and saved as `transcript.md`.
+4. The transcript is inspected for spoken commands, such as merging with the previous recording or assigning a title.
+5. When summaries are enabled, a chat model creates `summary.md` and a short directory title.
+6. In daemon mode, the input directory remains watched and failed work is retried automatically.
+
+## Features
+
+- Run once or continuously as a filesystem-watching daemon.
+- Discover `.mp3`, `.wav`, `.m4a`, `.flac`, `.ogg`, `.aac`, `.mkv`, and `.mp4` recordings. Processing also depends on FFmpeg being able to inspect the file and the configured transcription service accepting its format.
+- Use separately configurable OpenAI-compatible APIs and models for transcription and text processing.
+- Produce plain Markdown transcripts and structured summaries with topics, a narrative summary, and action items.
+- Keep the recording and its generated files together in a persistent bundle, with metadata and command state for later processing.
+- Generate chronological, readable directory names from the recording date and summary.
+- Optionally add your own recording-specific context in `custom_context.md`; changing that context triggers summary regeneration.
+- Use spoken commands to merge recordings, delete a recording, or assign a persistent manual title.
+- Resume incomplete bundles and retry failures with increasing delays in daemon mode.
+- Filter recordings by duration and optionally remove processed source audio after a retention period.
+- Preview processing without modifying bundles with `--dry-run`.
+- Move user-deleted bundles to a recoverable `_deleted` directory with safe deletion.
+
+## Requirements
+
+- Python 3.13 or newer.
+- [uv](https://docs.astral.sh/uv/) for dependency and environment management.
+- [FFmpeg](https://ffmpeg.org/) available on `PATH`.
+
+## Quick start
+
+Install the project dependencies from the repository root:
 
 ```bash
 uv sync
 ```
 
-# Configuration
+Copy the example configuration to the working directory:
 
-The application can be configured via config files or env variables. 
-Most configuration values must be provided, see `config.default.toml` to check which ones are set by default.  
-
-Configuration will be merged in the order of priority:  
-- Environment variables (prefixed with `TRANSCRIBER_`)
-- `config.custom.toml`: From working directory, overrides specific values.
-- `config.default.toml`: From this repository. Provides base values. 
-
-For example you can create a `config.custom.toml` with only the keys you want to change:  
-
-```toml
-[text]
-api_key = "sk-xxxx"
-
-[audio]
-api_base_url = "http://localhost:8000/v1"
-stream = true
+```bash
+cp docs/config.custom.toml.example config.custom.toml
 ```
 
-## Environment variables format
+Edit `config.custom.toml` with your directories, API endpoints, credentials, and model names. Ensure that the configured input directory already exists, then process all pending recordings:
 
-Some examples:
-```
-TRANSCRIBER_GENERAL__DELETE_SOURCE_AUDIO_AFTER_DAYS=30
-TRANSCRIBER_TEXT__API_KEY=sk-xxxx
+```bash
+uv run transcriber
 ```
 
+See [Configuration](configuration.md) for every setting and environment-variable equivalents.
 
-# CLI usage
+## Bundle output
 
-See usage with:  
+A processed recording produces a directory similar to:
+
+```text
+store/
+└── 2026-08-01 14.30 Unexpected fox encounter/
+    ├── Recording 20260801143000.m4a
+    ├── transcript.md
+    ├── summary.md
+    ├── custom_context.md
+    ├── _commands.md
+    └── _metadata.md
+```
+
+`transcript.md`, `summary.md`, and `custom_context.md` are intended to remain readable and editable. Files prefixed with `_` hold application state and should normally be left to the transcriber.
+
+`custom_context.md` can be used to provide additional context for this bundle to the summarizer. Changing its content causes the summary to be regenerated on the next processing run.
+
+### Recording dates
+
+The transcriber recognizes timestamps at the beginning of filenames in these forms:
+
+```text
+Recording 20260801143000.m4a
+2026-08-01_recording.m4a
+```
+
+The `Recording YYYYMMDDHHMMSS` form carries a date and time. The `YYYY-MM-DD` form carries a date only. If no supported prefix is found, the file modification time is used.
+
+The generated bundle directory name combines the recording date with a short summary-derived or user-provided title.
+
+## CLI usage
+
+Show all command-line options:
+
 ```bash
 uv run transcriber --help
-# or when in venv
-transcriber --help
 ```
 
-## Running tests
+Common modes:
 
-Run the test suite with `uv` from the repository root:
+```bash
+# Process pending work and exit
+uv run transcriber
+
+# Continue watching the input directory
+uv run transcriber --daemon
+
+# Show intended work without modifying bundle files
+uv run transcriber --dry-run
+```
+
+## Guides
+
+- [Configuration](configuration.md): TOML files, environment variables, and setting reference.
+- [Voice commands](voice-commands.md): Command boundaries and supported recording operations.
+- [Container deployment](deployment.md): Docker and Podman builds and runtime configuration.
+- [Example phone sync setup](phone-sync-workflow.md): One way to send recordings automatically from a phone to the daemon.
+
+## Development
+
+Run the full test suite from the repository root:
+
 ```bash
 uv run pytest
 ```
 
-To run a single test file:
-```bash
-uv run pytest tests/test_transcribe_bundle.py -q
-```
-
-## Spoken recording commands
-
-Commands must be spoken between command boundaries, for example:
-
-```text
-Start command. Set the title to Quarterly planning. End command.
-```
-
-The title command accepts equivalent wording in any language. It keeps the
-recording's canonical date prefix and marks the requested title as manual, so
-later summary regeneration does not replace it. If a recording contains several
-title commands, only the last one is applied.
-
-
-# Docker / Podman
-
-## Build
+Run a single test file:
 
 ```bash
-# Get the current git tag
-$version = git describe --tags --abbrev=0
-
-# Build the image
-docker build --build-arg VERSION=$version -t audio-journal-transcriber:$version .
-```
-
-## Container configuration
-
-You can either use env variables or mount a config file at `/app/config.custom.toml`.  
-See "Configuration" section above for details.   
-
-## Examples
-
-```bash
-# Using env variables 
-docker run -v /path/to/input:/data/input \
-           -v /path/to/store:/data/store \
-           -e TRANSCRIBER_GENERAL__DELETE_SOURCE_AUDIO_AFTER_DAYS=30 \
-           -e TRANSCRIBER_GENERAL__MIN_LENGTH_SECONDS=10.0 \
-           -e TRANSCRIBER_TEXT__SUMMARY_ENABLED=true \
-           -e TRANSCRIBER_TEXT__API_BASE_URL=https://api.openai.com/v1/ \
-           -e TRANSCRIBER_TEXT__MODEL=gpt-4o-mini \
-           -e TRANSCRIBER_TEXT__API_KEY=sk-xxxx \
-           -e TRANSCRIBER_AUDIO__API_BASE_URL=https://api.openai.com/v1/ \
-           -e TRANSCRIBER_AUDIO__MODEL=whisper-1 \
-           -e TRANSCRIBER_AUDIO__API_KEY=sk-xxxx \
-           audio-journal-transcriber:latest
-
-# Using config file
-docker run -v /path/to/input:/data/input \
-           -v /path/to/store:/data/store \
-           -v /path/to/config.toml:/app/config.custom.toml \
-           -e TRANSCRIBER_GENERAL__INPUT_DIR=/data/input \
-           -e TRANSCRIBER_GENERAL__STORE_DIR=/data/store \
-           audio-journal-transcriber:latest
-
-# (Or combine both as needed)
+uv run pytest tests/test_transcribe_bundle.py
 ```
