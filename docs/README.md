@@ -61,6 +61,19 @@ To run a single test file:
 uv run pytest tests/test_transcribe_bundle.py -q
 ```
 
+## Spoken recording commands
+
+Commands must be spoken between command boundaries, for example:
+
+```text
+Start command. Set the title to Quarterly planning. End command.
+```
+
+The title command accepts equivalent wording in any language. It keeps the
+recording's canonical date prefix and marks the requested title as manual, so
+later summary regeneration does not replace it. If a recording contains several
+title commands, only the last one is applied.
+
 
 # Docker / Podman
 

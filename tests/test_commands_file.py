@@ -10,7 +10,7 @@ from pydantic import ValidationError
 from tests.bundle_fixtures import TranscribeBundleFactory
 from tests.fake_file_system import FakeFileSystemService
 from transcriber.commands.command import Command
-from transcriber.commands.command_interpretation import CommandArguments
+from transcriber.commands.command_interpretation import EmptyCommandArguments, SetTitleCommandArguments
 from transcriber.commands.command_registry import COMMAND_REGISTRY
 from transcriber.commands.command_type import CommandType
 from transcriber.constants import COMMANDS_FILENAME
@@ -73,17 +73,18 @@ class TestCommandCreation:
         assert cmd.text == "pause"
         assert cmd.executed is False
         assert cmd.executed_at is None
-        assert cmd.arguments == CommandArguments()
+        assert cmd.arguments == EmptyCommandArguments()
 
     def test_command_arguments_round_trip(self) -> None:
         """Structured arguments survive command serialization."""
         command = Command(
             text="set the title",
-            arguments=CommandArguments(title="Planning session"),
+            arguments=SetTitleCommandArguments(title="Planning session"),
         )
 
         loaded = Command.from_dict(command.to_dict())
 
+        assert isinstance(loaded.arguments, SetTitleCommandArguments)
         assert loaded.arguments.title == "Planning session"
 
     def test_command_from_dict_invalid_text_type(self) -> None:

@@ -8,7 +8,8 @@ from tests.fake_audio_service import FakeAudioService
 from tests.fake_file_system import FakeFileSystemService
 from transcriber.bundle_title import BundleTitleState
 from transcriber.commands.command import Command
-from transcriber.commands.command_handlers import AbortForMergeTargetException, handle_merge, handle_unknown
+from transcriber.commands.command_handlers import AbortForMergeTargetException, handle_merge, handle_set_title, handle_unknown
+from transcriber.commands.command_interpretation import SetTitleCommandArguments
 from transcriber.config import TranscribeConfig
 from transcriber.constants import MERGE_FAILED_FILENAME, MULTIPLE_TRANSCRIPTS_SEPARATOR
 from transcriber.exception import (
@@ -829,6 +830,45 @@ class TestHandleMerge:
             fake_audio_service,
         )
         assert reloaded_target.metadata.bundle_title_state is BundleTitleState.MANUAL
+
+
+class TestHandleSetTitle:
+    """Tests for applying a title command directly to a bundle."""
+
+    def test_handle_set_title_applies_manual_normalized_title(
+        self,
+        fake_config: TranscribeConfig,
+        transcribe_bundle_factory: TranscribeBundleFactory,
+    ) -> None:
+        """The handler delegates normalization and persists manual provenance."""
+        bundle = transcribe_bundle_factory(
+            bundle_name="2025-01-15_recording",
+            audio_filename="recording.mp3",
+        )
+        command = Command(
+            text="set the title to quarterly planning",
+            arguments=SetTitleCommandArguments(title="  Quarterly / Planning  "),
+        )
+
+        handle_set_title(bundle, fake_config, _bundle_cache(bundle), command)
+
+        assert bundle.bundle_name.endswith("Quarterly Planning")
+        assert bundle.metadata.bundle_title_state is BundleTitleState.MANUAL
+
+    def test_handle_set_title_rejects_missing_title(
+        self,
+        fake_config: TranscribeConfig,
+        transcribe_bundle_factory: TranscribeBundleFactory,
+    ) -> None:
+        """Defensive handler validation catches malformed persisted commands."""
+        bundle = transcribe_bundle_factory(
+            bundle_name="2025-01-15_recording",
+            audio_filename="recording.mp3",
+        )
+        command = Command(text="set the title")
+
+        with pytest.raises(ValueError, match="requires a non-empty title"):
+            handle_set_title(bundle, fake_config, _bundle_cache(bundle), command)
 
 
 class TestHandleUnknown:

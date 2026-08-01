@@ -10,7 +10,7 @@ from tests.bundle_fixtures import TranscribeBundleFactory
 from tests.fake_audio_service import FakeAudioService
 from transcriber.bundle_id import new_bundle_id
 from transcriber.bundle_title import BundleTitleState
-from transcriber.commands.command_interpretation import CommandArguments, CommandInterpretation
+from transcriber.commands.command_interpretation import SetTitleCommandArguments, SetTitleCommandInterpretation
 from transcriber.commands.command_type import CommandType
 from transcriber.config import TranscribeConfig
 from transcriber.constants import (
@@ -519,15 +519,17 @@ class TestTranscribeBundleWriteOperations:
         generic_bundle.set_and_write_commands([command_one, command_two])
         assert generic_bundle.commands
         cmd_one_id = generic_bundle.commands.commands[0].id
-        interpretation = CommandInterpretation(
-            command_type=CommandType.MERGE,
-            arguments=CommandArguments(title="Planning session"),
+        interpretation = SetTitleCommandInterpretation(
+            command_type=CommandType.SET_TITLE,
+            arguments=SetTitleCommandArguments(title="Planning session"),
         )
         generic_bundle.set_command_interpretation(cmd_one_id, interpretation)
 
         assert generic_bundle.commands
-        assert generic_bundle.commands.commands[0].matched_type == CommandType.MERGE
-        assert generic_bundle.commands.commands[0].arguments.title == "Planning session"
+        assert generic_bundle.commands.commands[0].matched_type == CommandType.SET_TITLE
+        stored_arguments = generic_bundle.commands.commands[0].arguments
+        assert isinstance(stored_arguments, SetTitleCommandArguments)
+        assert stored_arguments.title == "Planning session"
         assert generic_bundle.commands.commands[1].matched_type is None
         assert not generic_bundle.commands.commands[0].executed
         assert not generic_bundle.commands.commands[1].executed
@@ -538,8 +540,10 @@ class TestTranscribeBundleWriteOperations:
             generic_bundle.get_bundle_dir() / COMMANDS_FILENAME,
             fake_fs,
         )
-        assert persisted_commands.commands[0].matched_type is CommandType.MERGE
-        assert persisted_commands.commands[0].arguments.title == "Planning session"
+        assert persisted_commands.commands[0].matched_type is CommandType.SET_TITLE
+        persisted_arguments = persisted_commands.commands[0].arguments
+        assert isinstance(persisted_arguments, SetTitleCommandArguments)
+        assert persisted_arguments.title == "Planning session"
 
         generic_bundle.set_command_executed(cmd_one_id)
         assert generic_bundle.commands.commands[0].executed

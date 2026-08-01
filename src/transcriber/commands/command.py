@@ -9,7 +9,7 @@ from uuid import uuid4
 from pydantic import BaseModel, ConfigDict, Field, field_serializer
 
 from transcriber.commands import command_type  # noqa: TC001
-from transcriber.commands.command_interpretation import CommandArguments
+from transcriber.commands.command_interpretation import CommandArguments, EmptyCommandArguments
 
 
 class Command(BaseModel):
@@ -27,7 +27,7 @@ class Command(BaseModel):
     executed: bool = False
     executed_at: datetime | None = None
     matched_type: command_type.CommandType | None = None
-    arguments: CommandArguments = Field(default_factory=CommandArguments)
+    arguments: CommandArguments = Field(default_factory=EmptyCommandArguments)
     last_error: str | None = None  # Error string to help with debugging
     attempt_count: int = Field(default=0, ge=0)  # we stop trying if reaching the max retries for that command type
 

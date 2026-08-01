@@ -8,6 +8,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING, final
 
+from transcriber.bundle_title import BundleTitleState
+from transcriber.commands.command_interpretation import SetTitleCommandArguments
 from transcriber.constants import (
     MERGE_FAILED_FILENAME,
     MULTIPLE_TRANSCRIPTS_SEPARATOR,
@@ -380,6 +382,27 @@ def handle_delete(bundle: TranscribeBundle, _config: TranscribeConfig, bundles_c
 
     msg = "Skip remaining jobs after delete command"
     raise AbortRemainingBundleJobsException(msg)
+
+
+@command_handler
+def handle_set_title(
+    bundle: TranscribeBundle,
+    _config: TranscribeConfig,
+    _bundles_cache: BundleCache,
+    cmd: Command,
+) -> None:
+    """Apply the command's explicit title to the current recording."""
+    arguments = cmd.arguments
+    if not isinstance(arguments, SetTitleCommandArguments) or not arguments.title.strip():
+        msg = f"SET_TITLE command requires a non-empty title (command text: {cmd.text})"
+        raise ValueError(msg)
+    title = arguments.title
+
+    logger.info(f"Running set-title command for {bundle} (requested title: {title!r})")
+    bundle.set_and_write_bundle_title(
+        title,
+        title_state=BundleTitleState.MANUAL,
+    )
 
 
 @command_handler

@@ -8,7 +8,10 @@ from tests.bundle_fixtures import TranscribeBundleFactory
 from tests.fake_ai_manager import FakeAIManager
 from transcriber.commands.command import Command
 from transcriber.commands.command_execution_policy import CommandExecutionPolicy
-from transcriber.commands.command_interpretation import CommandInterpretation
+from transcriber.commands.command_interpretation import (
+    ArgumentlessCommandInterpretation,
+    ArgumentlessCommandType,
+)
 from transcriber.commands.command_registry import COMMAND_REGISTRY
 from transcriber.commands.command_type import CommandType
 from transcriber.config import TranscribeConfig
@@ -32,11 +35,14 @@ def _recording_handler(calls: list[str]) -> CommandRecorder:
     return handler
 
 
-def _set_all_command_types(bundle: TranscribeBundle, command_type: CommandType) -> None:
+def _set_all_command_types(bundle: TranscribeBundle, command_type: ArgumentlessCommandType) -> None:
     """Persist one matched type for every command in a test bundle."""
     assert bundle.commands is not None
     for command in bundle.commands.commands:
-        bundle.set_command_interpretation(command.id, CommandInterpretation(command_type=command_type))
+        bundle.set_command_interpretation(
+            command.id,
+            ArgumentlessCommandInterpretation(command_type=command_type),
+        )
 
 
 class TestCommandExecutionPolicy:
@@ -100,3 +106,7 @@ class TestCommandExecutionPolicy:
 
         assert calls == ["final choice"]
         assert all(command.executed for command in bundle.commands.commands)
+
+    def test_set_title_uses_latest_pending_policy(self) -> None:
+        """The title command opts into revision-style deduplication."""
+        assert COMMAND_REGISTRY[CommandType.SET_TITLE].execution_policy is CommandExecutionPolicy.LATEST_PENDING

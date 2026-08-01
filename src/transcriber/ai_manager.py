@@ -8,7 +8,7 @@ from typing import override
 
 from transcriber.bundle_title import normalize_bundle_title
 from transcriber.clients.clients import AudioTranscriptionClient, ChatCompletionClient
-from transcriber.commands.command_interpretation import CommandInterpretation
+from transcriber.commands.command_interpretation import CommandInterpretation, parse_command_interpretation
 from transcriber.commands.command_registry import COMMAND_REGISTRY
 from transcriber.config import TranscribeConfig
 from transcriber.exception import (
@@ -245,7 +245,8 @@ class RealAIManager(AIManager):
 
         # Build the command registry description for the prompt
         command_descriptions = "\n".join(
-            f"- {meta.command_type.value.upper()}: {meta.description} (aliases: {', '.join(meta.aliases or [])})"
+            f"- {meta.command_type.value.upper()}: {meta.description} "
+            f"(aliases: {', '.join(meta.aliases or [])}). Arguments: {meta.argument_instructions}"
             for meta in COMMAND_REGISTRY.values()
         )
 
@@ -265,8 +266,9 @@ class RealAIManager(AIManager):
   **Response format:**
   - Return exactly one JSON object with no markdown or surrounding explanation.
   - "command_type" must be the lowercase command value (for example, "merge").
-  - "arguments" must be a JSON object. All currently available commands use an empty object.
+  - "arguments" must be a JSON object following the matched command's argument instructions.
   - Example: {{"command_type": "merge", "arguments": {{}}}}
+  - SET_TITLE example: {{"command_type": "set_title", "arguments": {{"title": "Quarterly planning"}}}}
 
   **User Command:**
   {command_string}
@@ -278,7 +280,7 @@ class RealAIManager(AIManager):
         logger.debug(f"interpret_command answered {raw_response}")
         try:
             response_data: object = json.loads(response)
-            return CommandInterpretation.model_validate(response_data)
+            return parse_command_interpretation(response_data)
         except (json.JSONDecodeError, ValueError) as error:
             logger.error(f"LLM returned unexpected response: {raw_response}")
             raise UnexpectedChatClientAnswerException(

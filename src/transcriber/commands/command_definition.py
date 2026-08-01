@@ -28,6 +28,8 @@ class CommandDefinition:
         max_attempts: How many times the command can be attempted before being considered failed.
         aliases: Optional list of alternative names for this command.
         execution_policy: How repeated commands of this type are selected.
+        argument_instructions: Description of the JSON arguments expected from
+            command interpretation.
 
     """
 
@@ -37,3 +39,4 @@ class CommandDefinition:
     max_attempts: int
     aliases: list[str] = field(default_factory=list)
     execution_policy: CommandExecutionPolicy = CommandExecutionPolicy.ONCE_PER_BUNDLE
+    argument_instructions: str = "Use an empty object."

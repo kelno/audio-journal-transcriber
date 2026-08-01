@@ -6,7 +6,7 @@ from typing import override
 import pytest
 
 from transcriber.ai_manager import AIManager
-from transcriber.commands.command_interpretation import CommandInterpretation
+from transcriber.commands.command_interpretation import ArgumentlessCommandInterpretation, CommandInterpretation
 from transcriber.commands.command_type import CommandType
 
 
@@ -107,7 +107,7 @@ class FakeAIManager(AIManager):
         if command_string in self.interpret_commands:
             return self.interpret_commands[command_string]
         else:
-            return CommandInterpretation(command_type=CommandType.UNKNOWN)
+            return ArgumentlessCommandInterpretation(command_type=CommandType.UNKNOWN)
 
     @override
     def extract_raw_commands(self, text: str, bundle_name: str) -> list[str]:

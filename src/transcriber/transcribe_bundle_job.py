@@ -390,8 +390,8 @@ class RunCommandsJob(TranscribeBundleJob):
     ) -> None:
         """Execute pending commands for the bundle.
 
-        Processes commands in priority order, ensuring each command type is executed
-        only once per bundle. Handles command execution, error recovery, and retry logic.
+        Processes commands in priority order and applies each type's execution
+        policy. Handles command execution, error recovery, and retry logic.
 
         Args:
             ai_manager: AI operations used while interpreting commands.
@@ -487,9 +487,10 @@ class RunCommandsJob(TranscribeBundleJob):
         config: TranscribeConfig,
         bundle_cache: BundleCache,
     ) -> None:
-        """Execute commands while avoiding duplicate command types.
+        """Execute commands according to retry and repetition policies.
 
-        A bundle only ever has one effective command execution per command type, even across multiple job runs.
+        Once-per-bundle types skip later duplicates, while revision-style types
+        may execute again when a new pending command is recorded.
 
         Args:
             pending_commands: Commands that still require execution.

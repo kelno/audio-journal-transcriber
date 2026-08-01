@@ -4,6 +4,12 @@ import pytest
 
 from tests.fake_clients import FakeAudioClient, FakeChatClient
 from transcriber.ai_manager import RealAIManager
+from transcriber.commands.command_interpretation import (
+    ArgumentlessCommandInterpretation,
+    EmptyCommandArguments,
+    SetTitleCommandArguments,
+    SetTitleCommandInterpretation,
+)
 from transcriber.commands.command_type import CommandType
 from transcriber.config import TranscribeConfig
 from transcriber.exception import UnexpectedChatClientAnswerException
@@ -33,8 +39,26 @@ class TestInterpretCommand:
 
         interpretation = ai_manager.interpret_command("merge this recording")
 
+        assert isinstance(interpretation, ArgumentlessCommandInterpretation)
+        assert isinstance(interpretation.arguments, EmptyCommandArguments)
         assert interpretation.command_type is CommandType.MERGE
-        assert interpretation.arguments.title is None
+
+    def test_extracts_set_title_argument(
+        self,
+        fake_config: TranscribeConfig,
+    ) -> None:
+        """SET_TITLE preserves the requested title in structured arguments."""
+        ai_manager = _ai_manager_with_response(
+            '{"command_type": "set_title", "arguments": {"title": "Planification trimestrielle"}}',
+            fake_config,
+        )
+
+        interpretation = ai_manager.interpret_command("appelle cet enregistrement Planification trimestrielle")
+
+        assert isinstance(interpretation, SetTitleCommandInterpretation)
+        assert isinstance(interpretation.arguments, SetTitleCommandArguments)
+        assert interpretation.command_type is CommandType.SET_TITLE
+        assert interpretation.arguments.title == "Planification trimestrielle"
 
     @pytest.mark.parametrize("opening_fence", ["```json", "```"])
     def test_accepts_json_in_markdown_code_fence(
@@ -80,6 +104,10 @@ class TestInterpretCommand:
         [
             '{"command_type": "not-a-command", "arguments": {}}',
             '{"command_type": "merge", "arguments": {"unexpected": "value"}}',
+            '{"command_type": "merge", "arguments": {"title": "Not allowed"}}',
+            '{"command_type": "merge", "arguments": {"title": null}}',
+            '{"command_type": "set_title", "arguments": {}}',
+            '{"command_type": "set_title", "arguments": {"title": "   "}}',
         ],
     )
     def test_raises_on_invalid_structured_response(
