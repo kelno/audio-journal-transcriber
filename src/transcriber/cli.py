@@ -20,7 +20,7 @@ def main() -> None:
     parser.add_argument(
         "--dry-run",
         action="store_true",
-        help="Simulate transcription and other jobs without actually writing changes. Will still create directories.",
+        help="Simulate transcription and other jobs without actually writing changes.",
     )
     parser.add_argument(
         "--debug",

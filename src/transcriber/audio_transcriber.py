@@ -407,8 +407,10 @@ class AudioTranscriber:
         input_dir = self.config.general.input_dir
         store_dir = self.config.general.store_dir
 
-        # Create store_dir if needed
-        self.fs_service.ensure_directory_exists(store_dir)
+        # Discovery treats a missing store as empty, so dry runs do not need to
+        # create it before gathering bundles.
+        if not self.dry_run:
+            self.fs_service.ensure_directory_exists(store_dir)
 
         # Loading existing bundles
         # Keep a cache of loaded bundles for the time of this run.
