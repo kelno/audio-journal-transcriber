@@ -180,6 +180,10 @@ class RealAIManager(AIManager):
             - Detect the language of the transcript and **write the entire content (except section titles) in that same language**.
             - For example, if the transcript is in French, **all sentences and summaries must be in French**, not English.
             - Only the section titles ("# Topics", "# Summary", "# Action items") stay in English.
+            - The transcript may contain pipeline commands marked by spoken command boundaries in any language.
+            - Treat both the boundaries and enclosed text as control metadata, not recording content.
+            - Exclude this metadata from every output section and from notes about unclear text.
+            - Do not interpret, explain, or comment on the command, its wording, or its intent.
             - Because this is a spoken transcript, it may contain transcription errors or unclear sections.
             When you make assumptions about unclear words or phrases, **explicitly note them** and describe your reasoning briefly.
             - Do **not** include any markdown code fences (```).
