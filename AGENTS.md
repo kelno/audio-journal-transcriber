@@ -18,6 +18,8 @@
 - Preserve and improve existing contextual comments when refactoring.
 - Validate changes against IDE diagnostics, linters, and warnings. Use the diagnostic tool if available provided by the IDE as it alreadys runs the linter for you.
 - For non-trivial changes, design the interface and tests before implementation. Use mocks or stubs to validate behavior and isolate dependencies.
+- Always try to split the work into small slices of reviewable changes, and assume user will always want to review changes before any commit.
+- Suggest commit names when you think we're ready to commit.
 
 ## Technical Preferences
 
