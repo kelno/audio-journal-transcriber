@@ -7,6 +7,7 @@ import pytest
 from pydantic import ValidationError
 
 from tests.fake_file_system import FakeFileSystemService
+from transcriber.bundle_title import BundleTitleState
 from transcriber.config import TranscribeConfig
 from transcriber.exception import InvalidMetadataFileException
 from transcriber.files.metadata import MetadataFile
@@ -35,7 +36,7 @@ class TestMetadataFileFromInvalidFile:
         meta_file = Path("/fake/store/2025-01-15_meeting/_metadata.md")
         fake_fs.write_file(
             meta_file,
-            "---\naudio_files: []\nbundle_date: 2025-01-15T12:00:00+00:00\n---\n",
+            "---\naudio_files: []\nbundle_date: 2025-01-15T12:00:00+00:00\nbundle_title_state: pending\n---\n",
         )
 
         with pytest.raises(ValidationError, match="bundle_id"):
@@ -56,6 +57,7 @@ class TestMetadataFileBundleId:
         metadata = MetadataFile(
             bundle_id=bundle_id,
             bundle_date=datetime.now(fake_config.general.timezone),
+            bundle_title_state=BundleTitleState.PENDING,
         )
 
         metadata.write(bundle_dir, fake_fs)
@@ -69,4 +71,47 @@ class TestMetadataFileBundleId:
             MetadataFile(
                 bundle_id="not-a-valid-bundle-id",
                 bundle_date=datetime.now(fake_config.general.timezone),
+                bundle_title_state=BundleTitleState.PENDING,
             )
+
+
+class TestMetadataFileBundleTitleState:
+    """Tests for strict title-state persistence."""
+
+    def test_rejects_legacy_bundle_name_generated_boolean(
+        self,
+        fake_fs: FakeFileSystemService,
+    ) -> None:
+        """Legacy metadata must be upgraded with the explicit migration script."""
+        meta_file = Path("/fake/store/legacy") / "_metadata.md"
+        fake_fs.write_file(
+            meta_file,
+            "---\n"
+            "bundle_id: 0123456789abcdef0123456789abcdef\n"
+            "audio_files: []\n"
+            "bundle_date: 2025-01-15T12:00:00+00:00\n"
+            "bundle_name_generated: true\n"
+            "---\n",
+        )
+
+        with pytest.raises(ValidationError, match="bundle_title_state"):
+            MetadataFile.from_file(meta_file, fake_fs)
+
+    def test_writes_only_bundle_title_state(
+        self,
+        fake_config: TranscribeConfig,
+        fake_fs: FakeFileSystemService,
+    ) -> None:
+        """New metadata writes the enum state without retaining the legacy boolean."""
+        bundle_dir = fake_config.general.store_dir / "manual"
+        metadata = MetadataFile(
+            bundle_id="0123456789abcdef0123456789abcdef",
+            bundle_date=datetime.now(fake_config.general.timezone),
+            bundle_title_state=BundleTitleState.MANUAL,
+        )
+
+        metadata.write(bundle_dir, fake_fs)
+        serialized = fake_fs.read_file(bundle_dir / "_metadata.md")
+
+        assert "bundle_title_state: manual" in serialized
+        assert "bundle_name_generated" not in serialized

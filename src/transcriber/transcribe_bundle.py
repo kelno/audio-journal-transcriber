@@ -7,6 +7,7 @@ from typing import override
 
 from transcriber.audio_service import AudioService
 from transcriber.bundle_id import BundleId, new_bundle_id
+from transcriber.bundle_title import BundleTitleState, normalize_bundle_title
 from transcriber.commands.command import Command
 from transcriber.commands.command_interpretation import CommandInterpretation
 from transcriber.config import TranscribeConfig
@@ -213,6 +214,7 @@ class TranscribeBundle:
             bundle_id=new_bundle_id(),
             audio_files=[AudioFileMeta(filename=source_audio.name)],
             bundle_date=bundle_date,
+            bundle_title_state=BundleTitleState.PENDING,
         )
         bundle_name = TranscribeBundle.generate_generic_bundle_name(
             bundle_date=bundle_date,
@@ -269,6 +271,7 @@ class TranscribeBundle:
             bundle_id=new_bundle_id(),
             audio_files=[AudioFileMeta(filename=name) for name in filenames],
             bundle_date=bundle_date,
+            bundle_title_state=BundleTitleState.PENDING,
         )
 
         # Use first file for date generation if no bundle_name provided
@@ -367,12 +370,13 @@ class TranscribeBundle:
         return self.source_audios
 
     def refresh(self, dry_run: bool) -> None:
-        """Clear transcript, summary, and bundle name to mark bundle for reprocessing.
+        """Clear derived content and invalidate an AI-generated bundle title.
 
-        Used when bundle content changes (e.g., new audio files added).
+        Used when bundle content changes (e.g., new audio files are added). A
+        manual title is preserved because it is not derived from that content.
         """
         logger.info(f"Refreshingbundle {self.bundle_name}")
-        self.metadata.bundle_name_generated = False
+        self.invalidate_generated_bundle_title()
         if not dry_run:
             self.metadata.write(self.get_bundle_dir(), self.fs_service)
             if self.transcript:
@@ -606,7 +610,12 @@ class TranscribeBundle:
 
     def needs_naming(self) -> bool:
         """Check if the bundle needs a generated name."""
-        return not self.metadata.bundle_name_generated
+        return self.metadata.bundle_title_state is BundleTitleState.PENDING
+
+    def invalidate_generated_bundle_title(self) -> None:
+        """Mark an AI title stale while preserving an explicit manual title."""
+        if self.metadata.bundle_title_state is BundleTitleState.GENERATED:
+            self.metadata.bundle_title_state = BundleTitleState.PENDING
 
     def get_bundle_dir(self) -> Path:
         """Get the bundle directory path."""
@@ -796,27 +805,38 @@ class TranscribeBundle:
         self.metadata.summary_context_hash = self.compute_context_hash()
         self.metadata.write(self.get_bundle_dir(), self.fs_service)
 
-    def set_and_write_bundle_name(
+    def set_and_write_bundle_title(
         self,
-        bundle_name_summary: str,
+        bundle_title: str,
+        *,
+        title_state: BundleTitleState,
     ) -> None:
-        """Set bundle name and rename the directory.
+        """Normalize a title, rename the bundle directory, and persist its state.
 
         Args:
-            bundle_name_summary: Human-readable name generated from the summary.
+            bundle_title: Human-readable title without the canonical date prefix.
+            title_state: Whether the title was generated or supplied manually.
 
         Raises:
             FileNotFoundError: If the bundle's current directory is missing.
             FileExistsError: If no collision-free destination is available.
 
         """
+        if title_state is BundleTitleState.PENDING:
+            msg = "A pending title cannot be applied to a bundle directory"
+            raise ValueError(msg)
+
         bundle_path_from = self.get_bundle_dir()
         if not self.fs_service.directory_exists(bundle_path_from):
             msg = f"Bundle directory {bundle_path_from} not found"
             raise FileNotFoundError(msg)
 
+        normalized_title = normalize_bundle_title(bundle_title)
+        if normalized_title != bundle_title:
+            logger.info(f"Normalized bundle title from [{bundle_title}] to [{normalized_title}]")
+
         prefix = self.generate_bundle_name_prefix(self.metadata.bundle_date)
-        base_bundle_name = f"{prefix} {bundle_name_summary}"
+        base_bundle_name = f"{prefix} {normalized_title}"
         new_bundle_name = self._get_available_bundle_name(base_bundle_name, owned_dir=bundle_path_from)
         bundle_path_to = self.config.general.store_dir / new_bundle_name
 
@@ -824,5 +844,5 @@ class TranscribeBundle:
             self.fs_service.rename_directory(bundle_path_from, bundle_path_to)
         self.bundle_name = new_bundle_name
 
-        self.metadata.bundle_name_generated = True
+        self.metadata.bundle_title_state = title_state
         self.metadata.write(self.get_bundle_dir(), self.fs_service)

@@ -106,15 +106,15 @@ class EmptyChatClientAnswerException(AudioTranscriberException):
 
 
 @final
-class InvalidBundleNameAnswerException(AudioTranscriberException):
-    """Chat client returned an invalid bundle name."""
+class InvalidBundleTitleException(AudioTranscriberException):
+    """A proposed bundle title cannot produce a valid directory name."""
 
-    def __init__(self, invalid_name: str, reason: str, context: str | None = None):
-        message = f"Invalid bundle name '{invalid_name}': {reason}"
+    def __init__(self, invalid_title: str, reason: str, context: str | None = None):
+        message = f"Invalid bundle title '{invalid_title}': {reason}"
         if context:
             message = f"{message}: {context}"
         super().__init__(message)
-        self.invalid_name = invalid_name
+        self.invalid_title = invalid_title
         self.reason = reason
 
 

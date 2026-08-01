@@ -6,6 +6,7 @@ import pytest
 from tests.bundle_fixtures import TranscribeBundleFactory
 from tests.fake_audio_service import FakeAudioService
 from tests.fake_file_system import FakeFileSystemService
+from transcriber.bundle_title import BundleTitleState
 from transcriber.commands.command import Command
 from transcriber.commands.command_handlers import AbortForMergeTargetException, handle_merge, handle_unknown
 from transcriber.config import TranscribeConfig
@@ -45,6 +46,7 @@ class TestHandleMerge:
             audio_filename="Recording 20250115010000.mp3",
             commands=["shared", "only previous"],
         )
+        previous_bundle.metadata.bundle_title_state = BundleTitleState.GENERATED
         current_bundle = transcribe_bundle_factory(
             bundle_name="2025-01-15_meeting",
             audio_filename="Recording 20250115090000.mp3",
@@ -166,7 +168,7 @@ class TestHandleMerge:
 
         # Verify summary was cleared
         assert merged_bundle.summary is None
-        assert merged_bundle.metadata.bundle_name_generated is False
+        assert merged_bundle.metadata.bundle_title_state is BundleTitleState.PENDING
 
         # Verify all commands were preserved with their execution states
         assert merged_bundle.commands is not None
@@ -796,6 +798,37 @@ class TestHandleMerge:
         merge_cmd = current_bundle.commands.commands[0]
         with pytest.raises(NoPreviousBundleException):
             handle_merge(current_bundle, fake_config, _bundle_cache(current_bundle), merge_cmd)
+
+    def test_handle_merge_preserves_manual_target_title_state(
+        self,
+        fake_config: TranscribeConfig,
+        fake_fs: FakeFileSystemService,
+        fake_audio_service: FakeAudioService,
+        transcribe_bundle_factory: TranscribeBundleFactory,
+    ) -> None:
+        """Merging new content does not unlock the target's explicit title."""
+        target = transcribe_bundle_factory(
+            bundle_name="2025-01-15_manual-target",
+            audio_filename="Recording 20250115010000.mp3",
+        )
+        target.metadata.bundle_title_state = BundleTitleState.MANUAL
+        source = transcribe_bundle_factory(
+            bundle_name="2025-01-15_source",
+            audio_filename="Recording 20250115090000.mp3",
+            commands=["merge"],
+        )
+        assert source.commands is not None
+
+        with pytest.raises(AbortForMergeTargetException):
+            handle_merge(source, fake_config, _bundle_cache(target, source), source.commands.commands[0])
+
+        reloaded_target = TranscribeBundle.from_existing_directory(
+            target.get_bundle_dir(),
+            fake_config,
+            fake_fs,
+            fake_audio_service,
+        )
+        assert reloaded_target.metadata.bundle_title_state is BundleTitleState.MANUAL
 
 
 class TestHandleUnknown:

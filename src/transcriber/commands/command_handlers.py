@@ -276,7 +276,8 @@ def handle_merge(source: TranscribeBundle, _config: TranscribeConfig, bundles_ca
           regenerated for the combined bundle. This is intentional: a summary written
           for only part of the merged content would be stale. Any summary on the
           current bundle is therefore dropped.
-        - ``bundle_name_generated`` is reset to False so the name can be regenerated.
+        - AI-generated titles are reset to pending so the name can be regenerated;
+          manual titles are preserved.
         - ``keep_forever`` is promoted to True if either source bundle had it set.
         - The current (source) bundle directory is deleted once the merge succeeds.
 
@@ -323,7 +324,7 @@ def handle_merge(source: TranscribeBundle, _config: TranscribeConfig, bundles_ca
             if target.fs_service.file_exists(summary_path):
                 target.fs_service.delete_file(summary_path)
 
-        target.metadata.bundle_name_generated = False
+        target.invalidate_generated_bundle_title()
         target.metadata.keep_forever = target.metadata.keep_forever or source.metadata.keep_forever
         # Commit target metadata (without the source audio yet) so a failure below
         # leaves the source bundle fully intact and retryable.

@@ -2,9 +2,10 @@ from datetime import datetime
 from pathlib import Path
 
 import yaml
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_serializer
 
 from transcriber.bundle_id import BundleId
+from transcriber.bundle_title import BundleTitleState
 from transcriber.constants import METADATA_FILENAME
 from transcriber.exception import InvalidMetadataFileException
 from transcriber.files.file_system import FileSystemService
@@ -35,11 +36,16 @@ class Metadata(BaseModel):
     # Computed once at creation from the first audio file's timestamp.
     bundle_date: datetime
     summary_model_used: str | None = None
-    bundle_name_generated: bool = False
+    bundle_title_state: BundleTitleState
     keep_forever: bool = False
     # sha256[:16] of the effective custom_context.md content. None means the hash
     # has not been computed yet (e.g. metadata written before this field existed).
     summary_context_hash: str | None = None
+
+    @field_serializer("bundle_title_state")
+    def serialize_bundle_title_state(self, value: BundleTitleState) -> str:
+        """Serialize title state as a portable YAML string."""
+        return value.value
 
 
 class MetadataFile(Metadata):

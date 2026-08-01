@@ -6,8 +6,10 @@ from tests.bundle_fixtures import TranscribeBundleFactory
 from tests.fake_ai_manager import FakeAIManager
 from tests.fake_file_system import FakeFileSystemService
 from transcriber.audio_transcriber import AudioTranscriber
+from transcriber.bundle_title import BundleTitleState
 from transcriber.commands.command_interpretation import CommandInterpretation
 from transcriber.commands.command_type import CommandType
+from transcriber.config import TranscribeConfig
 from transcriber.constants import CUSTOM_CONTEXT_FILENAME, SUMMARY_FILENAME
 from transcriber.files.text_file import CustomContextFile
 from transcriber.transcribe_bundle import TranscribeBundle
@@ -96,6 +98,84 @@ class TestSummaryScheduling:
         jobs = fake_transcriber.gather_bundle_jobs(bundle, bundle.get_bundle_dir().parent, True, fake_transcriber.config)
         assert self._has_summary_job(jobs) is True
 
+    def test_changed_context_preserves_manual_title_and_skips_name_job(
+        self,
+        fake_transcriber: AudioTranscriber,
+        fake_fs: FakeFileSystemService,
+        transcribe_bundle_factory: TranscribeBundleFactory,
+    ) -> None:
+        """Summary regeneration does not schedule replacement of a manual title."""
+        bundle = transcribe_bundle_factory(
+            bundle_name="2025-01-15_manual",
+            audio_filename="memo.mp3",
+            transcript_text="This is the transcript.",
+            summary_text="Existing summary.",
+        )
+        bundle.metadata.bundle_title_state = BundleTitleState.MANUAL
+        bundle.metadata.summary_context_hash = bundle.compute_context_hash()
+        fake_fs.write_file(
+            bundle.get_bundle_dir() / CUSTOM_CONTEXT_FILENAME,
+            "New context\n",
+        )
+        bundle.custom_context = CustomContextFile("New context\n")
+
+        jobs = fake_transcriber.gather_bundle_jobs(bundle, bundle.get_bundle_dir().parent, True, fake_transcriber.config)
+
+        assert self._has_summary_job(jobs) is True
+        assert self._has_name_job(jobs) is False
+
+
+class TestManualBundleTitleScheduling:
+    """Manual titles remain authoritative even when jobs were queued earlier."""
+
+    def test_summary_job_does_not_invalidate_manual_title(
+        self,
+        fake_ai_manager: FakeAIManager,
+        fake_config: TranscribeConfig,
+        transcribe_bundle_factory: TranscribeBundleFactory,
+    ) -> None:
+        """Regenerating summary content leaves manual title state unchanged."""
+        bundle = transcribe_bundle_factory(
+            bundle_name="2025-01-15_manual",
+            audio_filename="memo.mp3",
+            transcript_text="Transcript",
+            summary_text="Old summary",
+        )
+        bundle.metadata.bundle_title_state = BundleTitleState.MANUAL
+
+        SummaryJob(bundle, dry_run=False).run(
+            fake_ai_manager,
+            fake_config,
+            {bundle.bundle_id: bundle},
+        )
+
+        assert bundle.metadata.bundle_title_state is BundleTitleState.MANUAL
+
+    def test_previously_queued_name_job_skips_manual_title(
+        self,
+        fake_ai_manager: FakeAIManager,
+        fake_config: TranscribeConfig,
+        transcribe_bundle_factory: TranscribeBundleFactory,
+    ) -> None:
+        """A name job rechecks state instead of overwriting a newer manual title."""
+        bundle = transcribe_bundle_factory(
+            bundle_name="2025-01-15_manual",
+            audio_filename="memo.mp3",
+            transcript_text="Transcript",
+            summary_text="Summary",
+        )
+        bundle.metadata.bundle_title_state = BundleTitleState.MANUAL
+        original_name = bundle.bundle_name
+
+        BundleNameJob(bundle, dry_run=False).run(
+            fake_ai_manager,
+            fake_config,
+            {bundle.bundle_id: bundle},
+        )
+
+        assert bundle.bundle_name == original_name
+        assert fake_ai_manager.named_summaries == []
+
 
 class TestMergeRequeue:
     """A merge clears the target's summary; it must be regenerated in the same run.
@@ -172,5 +252,5 @@ class TestMergeRequeue:
         )
         assert reloaded.summary is not None
         assert reloaded.summary.text == post_merge_summary
-        # Name regeneration is chained after summary, so bundle_name_generated is set.
-        assert reloaded.metadata.bundle_name_generated is True
+        # Name regeneration is chained after summary, so the generated state is persisted.
+        assert reloaded.metadata.bundle_title_state is BundleTitleState.GENERATED

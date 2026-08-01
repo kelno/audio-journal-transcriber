@@ -3,8 +3,9 @@ from pathlib import Path
 import pytest
 
 from transcriber.ai_manager import RealAIManager
+from transcriber.bundle_title import BUNDLE_TITLE_MAX_LENGTH
 from transcriber.config import TranscribeConfig
-from transcriber.exception import EmptyChatClientAnswerException, InvalidBundleNameAnswerException
+from transcriber.exception import EmptyChatClientAnswerException, InvalidBundleTitleException
 
 from .fake_clients import FakeAudioClient, FakeChatClient
 
@@ -220,10 +221,10 @@ class TestAIManagerBundleName:
         self,
         fake_config: TranscribeConfig,
     ) -> None:
-        """Test that non-alphanumeric characters are removed."""
+        """Test that filesystem-invalid characters are replaced and whitespace collapses."""
         # Arrange
         fake_chat_client = FakeChatClient(
-            response="Meeting@#$%notes!@#$",  # Contains invalid characters
+            response='  Meeting<>:"/\\|?*   notes  ',
         )
         fake_audio_client = FakeAudioClient()
         ai_manager = RealAIManager(
@@ -235,17 +236,16 @@ class TestAIManagerBundleName:
         # Act
         result = ai_manager.get_bundle_name_summary("summary")
 
-        # Assert: Only alphanumeric and spaces should remain
-        assert result == "Meetingnotes"
+        assert result == "Meeting notes"
 
-    def test_get_bundle_name_summary_raises_if_too_long(
+    def test_get_bundle_name_summary_truncates_long_title_at_word_boundary(
         self,
         fake_config: TranscribeConfig,
     ) -> None:
-        """Test that overly long names raise an error."""
+        """Overly long titles are shortened deterministically without splitting a word."""
         # Arrange
         fake_chat_client = FakeChatClient(
-            response="This is a very long bundle name that exceeds the maximum" * 3,
+            response="This is a very long bundle title that exceeds the maximum allowed character length",
         )
         fake_audio_client = FakeAudioClient()
         ai_manager = RealAIManager(
@@ -254,8 +254,23 @@ class TestAIManagerBundleName:
             config=fake_config,
         )
 
-        # Act & Assert
-        with pytest.raises(InvalidBundleNameAnswerException, match="too long"):
+        result = ai_manager.get_bundle_name_summary("summary")
+
+        assert result == "This is a very long bundle title that exceeds the maximum"
+        assert len(result) <= BUNDLE_TITLE_MAX_LENGTH
+
+    def test_get_bundle_name_summary_rejects_empty_normalized_title(
+        self,
+        fake_config: TranscribeConfig,
+    ) -> None:
+        """A response containing only invalid filename characters is rejected."""
+        ai_manager = RealAIManager(
+            audio_client=FakeAudioClient(),
+            chat_client=FakeChatClient(response='<>:"/\\|?*'),
+            config=fake_config,
+        )
+
+        with pytest.raises(InvalidBundleTitleException, match="empty"):
             ai_manager.get_bundle_name_summary("summary")
 
     def test_extract_commands_no_commands(

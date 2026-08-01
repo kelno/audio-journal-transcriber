@@ -9,6 +9,7 @@ import pytest
 from tests.fake_audio_service import FakeAudioService
 from tests.fake_file_system import FakeFileSystemService
 from transcriber.bundle_id import BundleId, new_bundle_id
+from transcriber.bundle_title import BundleTitleState
 from transcriber.config import TranscribeConfig
 from transcriber.files.commands_file import CommandsFile
 from transcriber.files.metadata import AudioFileMeta, MetadataFile
@@ -113,6 +114,7 @@ def transcribe_bundle_factory(
                 bundle_id=bundle_id or new_bundle_id(),
                 audio_files=[AudioFileMeta(filename=audio_filename)],
                 bundle_date=bundle_date or datetime.now(config.general.timezone),
+                bundle_title_state=BundleTitleState.PENDING,
             ),
             source_audios=[bundle_dir / audio_filename],
             transcript=TranscriptFile(transcript_text) if transcript_text else None,

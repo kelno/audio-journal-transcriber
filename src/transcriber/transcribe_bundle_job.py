@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import override
 
+from transcriber.bundle_title import BundleTitleState
 from transcriber.commands.command import Command
 from transcriber.commands.command_execution_policy import CommandExecutionPolicy
 from transcriber.commands.command_handlers import AbortForMergeTargetException
@@ -246,10 +247,9 @@ class SummaryJob(TranscribeBundleJob):
         # Persist the context hash so the next run can detect whether the
         # user-edited custom_context.md requires regenerating the summary.
         self.bundle.metadata.summary_context_hash = self.bundle.compute_context_hash()
-        # The summary changed (new content or new context), so the AI-generated
-        # name (derived from the summary) is stale. Reset the flag so the name
-        # job chains after this one and recomputes it.
-        self.bundle.metadata.bundle_name_generated = False
+        # A summary change invalidates only an AI-generated title. A manual title
+        # is an explicit user choice and remains authoritative.
+        self.bundle.invalidate_generated_bundle_title()
         self.bundle.metadata.write(self.bundle.get_bundle_dir(), self.bundle.fs_service)
 
 
@@ -272,6 +272,10 @@ class BundleNameJob(TranscribeBundleJob):
             bundle_cache: Loaded bundles indexed by persistent ID.
 
         """
+        if not self.bundle.needs_naming():
+            logger.debug(f"{self.bundle}: Skipping bundle naming because its title is no longer pending")
+            return
+
         logger.info(f"{self.bundle}: Generating bundle name")
         if self.dry_run:
             return
@@ -287,7 +291,10 @@ class BundleNameJob(TranscribeBundleJob):
             raise
 
         logger.info(f"Generated bundle name: {bundle_name}")
-        self.bundle.set_and_write_bundle_name(bundle_name)
+        self.bundle.set_and_write_bundle_title(
+            bundle_name,
+            title_state=BundleTitleState.GENERATED,
+        )
 
 
 @dataclass

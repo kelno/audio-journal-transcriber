@@ -9,6 +9,7 @@ import pytest
 from tests.bundle_fixtures import TranscribeBundleFactory
 from tests.fake_audio_service import FakeAudioService
 from transcriber.bundle_id import new_bundle_id
+from transcriber.bundle_title import BundleTitleState
 from transcriber.commands.command_interpretation import CommandArguments, CommandInterpretation
 from transcriber.commands.command_type import CommandType
 from transcriber.config import TranscribeConfig
@@ -24,6 +25,7 @@ from transcriber.exception import (
     DuplicateBundleIdException,
     FailedToExtractDateException,
     InvalidBundleException,
+    InvalidBundleTitleException,
     InvalidSourceAudiosException,
 )
 from transcriber.files.commands_file import CommandsFile
@@ -409,7 +411,7 @@ class TestTranscribeBundleFromExistingDirectory:
             "- transcript_model_used: []\n"  # missing required 'filename'
             "transcript_model_used: null\n"
             "summary_model_used: null\n"
-            "bundle_name_generated: false\n"
+            "bundle_title_state: pending\n"
             "keep_forever: false\n"
             "---\n"
         )
@@ -559,6 +561,7 @@ class TestTranscribeBundleWriteOperations:
                 bundle_id=new_bundle_id(),
                 audio_files=[],
                 bundle_date=datetime.now(fake_config.general.timezone),
+                bundle_title_state=BundleTitleState.PENDING,
             ),
             source_audios=[],
             transcript=None,
@@ -624,6 +627,7 @@ class TestTranscribeBundleRefresh:
             transcript_text="Old transcript",
             summary_text="Old summary",
         )
+        bundle.metadata.bundle_title_state = BundleTitleState.GENERATED
 
         bundle.refresh(dry_run=False)
 
@@ -632,8 +636,7 @@ class TestTranscribeBundleRefresh:
         assert bundle.summary is None
         assert bundle.commands is None
 
-        # Check metadata was updated (bundle_name_generated = False)
-        assert bundle.metadata.bundle_name_generated is False
+        assert bundle.metadata.bundle_title_state is BundleTitleState.PENDING
 
         # Check files were deleted
         assert not fake_fs.file_exists(generic_bundle_dir / TRANSCRIPT_FILENAME)
@@ -667,11 +670,28 @@ class TestTranscribeBundleRefresh:
         assert bundle.summary is None
         assert bundle.commands is None
 
+    def test_refresh_preserves_manual_title_state(
+        self,
+        transcribe_bundle_factory: TranscribeBundleFactory,
+    ) -> None:
+        """Refreshing recording content does not unlock an explicit user title."""
+        bundle = transcribe_bundle_factory(
+            bundle_name="2025-01-15_manual",
+            audio_filename="meeting.mp3",
+            transcript_text="Transcript",
+            summary_text="Summary",
+        )
+        bundle.metadata.bundle_title_state = BundleTitleState.MANUAL
+
+        bundle.refresh(dry_run=False)
+
+        assert bundle.metadata.bundle_title_state is BundleTitleState.MANUAL
+
 
 class TestTranscribeBundleRenaming:
     """Tests for bundle directory renaming."""
 
-    def test_set_and_write_bundle_name(
+    def test_set_and_write_generated_bundle_title(
         self,
         fake_config: TranscribeConfig,
         fake_fs: FakeFileSystemService,
@@ -688,7 +708,10 @@ class TestTranscribeBundleRenaming:
         original_id = generic_bundle.bundle_id
 
         # Rename the bundle
-        generic_bundle.set_and_write_bundle_name(new_name_summary)
+        generic_bundle.set_and_write_bundle_title(
+            new_name_summary,
+            title_state=BundleTitleState.GENERATED,
+        )
 
         # Check bundle name was updated with correct prefix
         assert generic_bundle.bundle_name.endswith(new_name_summary)
@@ -702,25 +725,76 @@ class TestTranscribeBundleRenaming:
         assert fake_fs.file_exists(new_path / "meeting.mp3")
         assert fake_fs.file_exists(new_path / METADATA_FILENAME)
 
-        # Check metadata was marked as generated
-        assert generic_bundle.metadata.bundle_name_generated is True
+        assert generic_bundle.metadata.bundle_title_state is BundleTitleState.GENERATED
         assert generic_bundle.bundle_id == original_id
 
-    def test_set_and_write_bundle_name_is_a_noop_for_the_current_name(
+    def test_set_and_write_manual_bundle_title_persists_manual_state(
+        self,
+        fake_fs: FakeFileSystemService,
+        generic_bundle: TranscribeBundle,
+    ) -> None:
+        """An explicit title is normalized and persisted as manual."""
+        generic_bundle.set_and_write_bundle_title(
+            "  Q4 / Planning  ",
+            title_state=BundleTitleState.MANUAL,
+        )
+
+        metadata = MetadataFile.from_file(
+            generic_bundle.get_bundle_dir() / METADATA_FILENAME,
+            fake_fs,
+        )
+        assert generic_bundle.bundle_name.endswith("Q4 Planning")
+        assert metadata.bundle_title_state is BundleTitleState.MANUAL
+        assert generic_bundle.needs_naming() is False
+
+    def test_set_and_write_bundle_title_rejects_pending_state(
+        self,
+        generic_bundle: TranscribeBundle,
+    ) -> None:
+        """Pending represents missing work and cannot describe an applied title."""
+        with pytest.raises(ValueError, match="pending title"):
+            generic_bundle.set_and_write_bundle_title(
+                "Planning Session",
+                title_state=BundleTitleState.PENDING,
+            )
+
+    def test_set_and_write_bundle_title_rejects_empty_title(
+        self,
+        generic_bundle: TranscribeBundle,
+    ) -> None:
+        """A failed normalization leaves the directory and state unchanged."""
+        original_name = generic_bundle.bundle_name
+
+        with pytest.raises(InvalidBundleTitleException, match="empty"):
+            generic_bundle.set_and_write_bundle_title(
+                '<>:"/\\|?*',
+                title_state=BundleTitleState.MANUAL,
+            )
+
+        assert generic_bundle.bundle_name == original_name
+        assert generic_bundle.metadata.bundle_title_state is BundleTitleState.PENDING
+
+    def test_set_and_write_bundle_title_is_a_noop_for_the_current_name(
         self,
         fake_fs: FakeFileSystemService,
         generic_bundle: TranscribeBundle,
     ) -> None:
         """Regenerating the same name does not ask the filesystem to move it."""
-        generic_bundle.set_and_write_bundle_name("Planning Session")
+        generic_bundle.set_and_write_bundle_title(
+            "Planning Session",
+            title_state=BundleTitleState.GENERATED,
+        )
         rename_count = len(fake_fs.get_operations("rename"))
 
-        generic_bundle.set_and_write_bundle_name("Planning Session")
+        generic_bundle.set_and_write_bundle_title(
+            "Planning Session",
+            title_state=BundleTitleState.GENERATED,
+        )
 
         assert len(fake_fs.get_operations("rename")) == rename_count
-        assert generic_bundle.metadata.bundle_name_generated is True
+        assert generic_bundle.metadata.bundle_title_state is BundleTitleState.GENERATED
 
-    def test_set_and_write_bundle_name_uses_id_suffix_on_collision(
+    def test_set_and_write_bundle_title_uses_id_suffix_on_collision(
         self,
         fake_config: TranscribeConfig,
         fake_fs: FakeFileSystemService,
@@ -731,12 +805,15 @@ class TestTranscribeBundleRenaming:
         desired_name = f"{prefix} Planning Session"
         fake_fs.create_directory(fake_config.general.store_dir / desired_name)
 
-        generic_bundle.set_and_write_bundle_name("Planning Session")
+        generic_bundle.set_and_write_bundle_title(
+            "Planning Session",
+            title_state=BundleTitleState.GENERATED,
+        )
 
         assert generic_bundle.bundle_name == f"{desired_name} ~{generic_bundle.bundle_id[:8]}"
         assert fake_fs.directory_exists(generic_bundle.get_bundle_dir())
 
-    def test_set_and_write_bundle_name_raises_on_missing_directory(
+    def test_set_and_write_bundle_title_raises_on_missing_directory(
         self,
         fake_config: TranscribeConfig,
         fake_fs: FakeFileSystemService,
@@ -749,6 +826,7 @@ class TestTranscribeBundleRenaming:
                 bundle_id=new_bundle_id(),
                 audio_files=[AudioFileMeta(filename="meeting.mp3")],
                 bundle_date=datetime.now(fake_config.general.timezone),
+                bundle_title_state=BundleTitleState.PENDING,
             ),
             source_audios=[Path("/store/2025-01-15_meeting/meeting.mp3")],
             fs_service=fake_fs,
@@ -758,7 +836,10 @@ class TestTranscribeBundleRenaming:
         # don't write it to filesystem
 
         with pytest.raises(FileNotFoundError, match=r"Bundle directory.*not found"):
-            bundle.set_and_write_bundle_name("New Name")
+            bundle.set_and_write_bundle_title(
+                "New Name",
+                title_state=BundleTitleState.GENERATED,
+            )
 
 
 class TestGatherExistingBundles:
@@ -1080,7 +1161,7 @@ class TestTranscribeBundleIntegration:
             "  transcript_model_used: []\n"
             "transcript_model_used: []\n"
             "summary_model_used: null\n"
-            "bundle_name_generated: false\n"
+            "bundle_title_state: pending\n"
             "keep_forever: false\n"
             "---\n"
         )

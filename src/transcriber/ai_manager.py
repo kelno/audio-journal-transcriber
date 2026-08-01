@@ -6,18 +6,16 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import override
 
+from transcriber.bundle_title import normalize_bundle_title
 from transcriber.clients.clients import AudioTranscriptionClient, ChatCompletionClient
 from transcriber.commands.command_interpretation import CommandInterpretation
 from transcriber.commands.command_registry import COMMAND_REGISTRY
 from transcriber.config import TranscribeConfig
 from transcriber.exception import (
     EmptyChatClientAnswerException,
-    InvalidBundleNameAnswerException,
     UnexpectedChatClientAnswerException,
 )
 from transcriber.logger import logger
-
-BUNDLE_NAME_MAX_LENGTH = 60  # arbitrary max length
 
 
 def _unwrap_json_code_fence(response: str) -> str:
@@ -66,7 +64,7 @@ class AIManager(ABC):
         """Return a short AI generated name for a bundle.
 
         Raises:
-            InvalidBundleNameAnswerException: When LLM returns an invalid bundle name.
+            InvalidBundleTitleException: When LLM returns an invalid bundle title.
 
         """
         ...
@@ -207,7 +205,7 @@ class RealAIManager(AIManager):
         """Return a short AI generated name for a bundle.
 
         Raises:
-            InvalidBundleNameAnswerException: When LLM returns an invalid bundle name.
+            InvalidBundleTitleException: When LLM returns an invalid bundle title.
             *: Pass through any exceptions from the OpenAI client.
 
         """
@@ -221,20 +219,9 @@ class RealAIManager(AIManager):
             Okay. Now the summary follows:
             ---
             {summary}"""
-        bundle_name = self.query_chat_completion(prompt)
-
-        # Sanitize (Source: https://stackoverflow.com/a/7406369)
-        bundle_name = "".join(c for c in bundle_name if c.isalpha() or c.isdigit() or c == " ").rstrip()
-
-        logger.debug(f"AI generated bundle name: {bundle_name}")
-        if len(bundle_name) > BUNDLE_NAME_MAX_LENGTH:
-            raise InvalidBundleNameAnswerException(
-                invalid_name=bundle_name,
-                reason=f"length {len(bundle_name)} > {BUNDLE_NAME_MAX_LENGTH}",
-                context="get_bundle_name_summary: LLM returned a bundle name too long",
-            )
-
-        return bundle_name
+        bundle_title = normalize_bundle_title(self.query_chat_completion(prompt))
+        logger.debug(f"AI generated bundle title: {bundle_title}")
+        return bundle_title
 
     @override
     def interpret_command(self, command_string: str) -> CommandInterpretation:
