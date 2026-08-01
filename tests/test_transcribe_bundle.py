@@ -668,7 +668,7 @@ class TestTranscribeBundleRenaming:
 
         old_path = generic_bundle_dir
         new_name_summary = "Q4 Planning Session"
-        new_path = store_dir / "2025-01-15 Q4 Planning Session"
+        new_path = store_dir / "2025-01-15 14.30 Q4 Planning Session"
 
         original_id = generic_bundle.bundle_id
 
@@ -712,7 +712,7 @@ class TestTranscribeBundleRenaming:
         generic_bundle: TranscribeBundle,
     ) -> None:
         """Two bundles may share a display name without sharing a directory."""
-        prefix = generic_bundle.generate_bundle_name_date_prefix(generic_bundle.metadata.bundle_date)
+        prefix = generic_bundle.generate_bundle_name_prefix(generic_bundle.metadata.bundle_date)
         desired_name = f"{prefix} Planning Session"
         fake_fs.create_directory(fake_config.general.store_dir / desired_name)
 
@@ -897,6 +897,36 @@ class TestGatherExistingBundles:
 
 class TestBundleDate:
     """Tests for the canonical metadata.bundle_date field."""
+
+    def test_bundle_name_prefix_includes_hour_and_minute(self, fake_config: TranscribeConfig) -> None:
+        """The human-facing prefix remains chronologically sortable to the minute."""
+        bundle_date = datetime(
+            year=2025,
+            month=1,
+            day=15,
+            hour=14,
+            minute=30,
+            second=59,
+            tzinfo=fake_config.general.timezone,
+        )
+
+        assert TranscribeBundle.generate_bundle_name_prefix(bundle_date) == "2025-01-15 14.30"
+
+    def test_date_only_audio_filename_uses_midnight_in_bundle_name(
+        self,
+        fake_config: TranscribeConfig,
+        fake_fs: FakeFileSystemService,
+        fake_audio_service: FakeAudioService,
+    ) -> None:
+        """A filename without time information produces the explicit 00.00 prefix."""
+        bundle = TranscribeBundle.from_audio_file(
+            source_audio=fake_config.general.input_dir / "2025-01-15_meeting.mp3",
+            config=fake_config,
+            fs_service=fake_fs,
+            audio_service=fake_audio_service,
+        )
+
+        assert bundle.bundle_name == "2025-01-15 00.00_2025-01-15_meeting"
 
     def test_init_metadata_seeds_bundle_date_from_audio_filename(
         self,

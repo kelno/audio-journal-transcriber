@@ -170,6 +170,7 @@ def generic_bundle_dir(
 @pytest.fixture
 def generic_bundle(
     generic_bundle_dir: Path,
+    fake_config: TranscribeConfig,
     transcribe_bundle_factory: TranscribeBundleFactory,
 ) -> TranscribeBundle:
     """Create a generic bundle, containing only the audio & metadata.
@@ -179,4 +180,12 @@ def generic_bundle(
     return transcribe_bundle_factory(
         bundle_name=generic_bundle_dir.name,
         audio_filename="meeting.mp3",
+        bundle_date=datetime(
+            year=2025,
+            month=1,
+            day=15,
+            hour=14,
+            minute=30,
+            tzinfo=fake_config.general.timezone,
+        ),
     )

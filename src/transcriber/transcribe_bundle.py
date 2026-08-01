@@ -43,6 +43,8 @@ from transcriber.utils import (
 
 type BundleCache = dict[BundleId, "TranscribeBundle"]
 
+BUNDLE_NAME_PREFIX_FORMAT = "%Y-%m-%d %H.%M"
+
 
 @dataclass(eq=False)
 class TranscribeBundle:
@@ -421,11 +423,11 @@ class TranscribeBundle:
             )
 
     @staticmethod
-    def generate_bundle_name_date_prefix(
+    def generate_bundle_name_prefix(
         bundle_date: datetime,
     ) -> str:
-        """Return a date prefix string in the 'YYYY-MM-DD' format."""
-        return bundle_date.strftime("%Y-%m-%d")
+        """Return the sortable, human-facing date and time prefix for a bundle name."""
+        return bundle_date.strftime(BUNDLE_NAME_PREFIX_FORMAT)
 
     @classmethod
     def generate_generic_bundle_name(
@@ -436,7 +438,7 @@ class TranscribeBundle:
         """Generate a bundle name based on date and audio filename."""
         logger.debug(f"Generating bundle name for audio file: [{audio_filename}]")
 
-        prefix = cls.generate_bundle_name_date_prefix(bundle_date)
+        prefix = cls.generate_bundle_name_prefix(bundle_date)
         return f"{prefix}_{Path(audio_filename).stem}"
 
     def audio_source_needs_removal(
@@ -812,7 +814,7 @@ class TranscribeBundle:
             msg = f"Bundle directory {bundle_path_from} not found"
             raise FileNotFoundError(msg)
 
-        prefix = self.generate_bundle_name_date_prefix(self.metadata.bundle_date)
+        prefix = self.generate_bundle_name_prefix(self.metadata.bundle_date)
         base_bundle_name = f"{prefix} {bundle_name_summary}"
         new_bundle_name = self._get_available_bundle_name(base_bundle_name, owned_dir=bundle_path_from)
         bundle_path_to = self.config.general.store_dir / new_bundle_name
