@@ -40,6 +40,6 @@ The transcriber moves recordings out of the input directory and writes bundles t
 
 When Syncthing or another service owns the synchronized files, running both services as the same user is the simplest arrangement.
 
-## Browsing the archive
+## Browsing the bundles store
 
 The generated transcript, summary, and context files can be browsed with any tool that reads Markdown. One convenient option is to point `general.store_dir` to a directory inside an Obsidian vault.
