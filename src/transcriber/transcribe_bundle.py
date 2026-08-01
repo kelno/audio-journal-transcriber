@@ -68,7 +68,8 @@ class TranscribeBundle:
 
     @override
     def __str__(self) -> str:
-        return f"[Bundle:{self.bundle_id[:8]}:{self.bundle_name}]"
+        name = self.bundle_name if len(self.bundle_name) < 30 else f"{self.bundle_name[:27]}..."
+        return f"[Bundle:{self.bundle_id[:8]}:{name}]"
 
     @override
     def __eq__(self, other: object) -> bool:
