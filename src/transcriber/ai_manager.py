@@ -186,6 +186,10 @@ class RealAIManager(AIManager):
             - Do not interpret, explain, or comment on the command, its wording, or its intent.
             - Because this is a spoken transcript, it may contain transcription errors or unclear sections.
             When you make assumptions about unclear words or phrases, **explicitly note them** and describe your reasoning briefly.
+            - Treat "# Action items" as a strict extraction task, not a recommendations section.
+            - Include an action item only when it is still pending and the speaker explicitly presents it as intended, required, committed to, or directly requested.
+            - Do not infer next steps from a topic, problem, goal, discussion, or context. Do not turn suggestions, possibilities, questions, observations, or completed actions into action items.
+            - Never invent an action, owner, or deadline. When in doubt, write "(None)".
             - Do **not** include any markdown code fences (```).
             - Follow **exactly** this structure in your output:
             ```
@@ -194,7 +198,7 @@ class RealAIManager(AIManager):
             # Summary
             [Comprehensive summary in natural language]
             # Action items
-            [List of actionable points only if clearly stated in the transcript; otherwise write "(None)"]
+            [List only explicit pending actions; otherwise write "(None)"]
             ```
             ---
             Transcript:
