@@ -66,35 +66,75 @@ class OpenAIAudioClient(AudioTranscriptionClient):
             raise ValueError(msg)
 
     def _extract_streaming_response(self, response: requests.Response) -> str:
-        """Process a streaming response from the transcription API.
+        """Process an OpenAI-compatible SSE transcription response.
 
         Returns:
             str: The complete transcript.
 
         """
         logger.debug("Processing streaming response")
+        response.raise_for_status()
+
         text_chunks: list[str] = []
+        final_text: str | None = None
         print_done = False
 
-        for line in response.iter_lines():
-            if line:
-                try:
-                    json_str = line.decode("utf-8").removeprefix("data: ")
-                    if json_str.strip() == "[DONE]":
-                        break
-                    result = json.loads(json_str)
-                    if "text" in result:
-                        text = result["text"]
-                        text_chunks.append(text)
-                        if not print_done:
-                            logger.debug(f"Transcript streaming start: {text} [...]")
-                            print_done = True
-                except Exception:
-                    logger.error(f"Error decoding line:\n{line}\n{traceback.format_exc()}")
-                    raise
+        for raw_line in response.iter_lines():
+            if not raw_line:
+                continue
 
-        complete_transcript = " ".join(text_chunks)
-        return complete_transcript
+            try:
+                line = raw_line.decode("utf-8").strip()
+
+                # SSE comments are used as connection keepalives.
+                if line.startswith(":"):
+                    continue
+
+                # Ignore other SSE fields we do not use, such as event: or id:.
+                if not line.startswith("data:"):
+                    continue
+
+                json_str = line.removeprefix("data:").lstrip()
+                if json_str == "[DONE]":
+                    break
+
+                event = json.loads(json_str)
+
+                if error := event.get("error"):
+                    message = error.get("message", "Transcription stream failed")
+                    raise RuntimeError(message)
+
+                match event.get("type"):
+                    case "transcript.text.delta":
+                        delta = event.get("delta", "")
+                        if delta:
+                            text_chunks.append(delta)
+                            if not print_done:
+                                logger.debug(
+                                    "Transcript streaming start: %s [...]",
+                                    delta,
+                                )
+                                print_done = True
+
+                    case "transcript.text.done":
+                        final_text = event.get("text", "")
+                        break
+
+                    case _:
+                        # Compatibility with older backends that streamed {"text": ...}.
+                        if text := event.get("text"):
+                            text_chunks.append(text)
+
+            except Exception:
+                logger.error(
+                    "Error decoding line:\n%s\n%s",
+                    raw_line,
+                    traceback.format_exc(),
+                )
+                raise
+
+        # Deltas already contain their required leading spaces, so don't join with " ".
+        return final_text if final_text is not None else "".join(text_chunks)
 
 
 @final
