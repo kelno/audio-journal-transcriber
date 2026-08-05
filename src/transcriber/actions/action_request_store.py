@@ -118,6 +118,16 @@ class ActionRequestStore(ABC):
         """Return pending requests in stable oldest-first order."""
         ...
 
+    @abstractmethod
+    def get_running(self) -> ActionRequest | None:
+        """Return the single running request, or ``None`` when idle."""
+        ...
+
+    @abstractmethod
+    def prune_expired(self, current_time: datetime) -> list[ActionRequestId]:
+        """Delete expired terminal requests and return their IDs."""
+        ...
+
 
 def default_action_request_database_path(store_dir: Path) -> Path:
     """Return the default daemon-owned SQLite path below a managed store."""
@@ -400,3 +410,47 @@ class SQLiteActionRequestStore(ActionRequestStore):
             msg = f"Could not list pending action requests: {error}"
             raise ActionRequestStoreError(msg) from error
         return [self._row_to_request(row) for row in rows]
+
+    @override
+    def get_running(self) -> ActionRequest | None:
+        """Return the single running request, or ``None`` when idle."""
+        if not self._database_available:
+            return None
+        try:
+            with closing(self._connect(read_only=self.dry_run)) as connection:
+                row = connection.execute(
+                    "SELECT * FROM action_requests WHERE status = 'running'",
+                ).fetchone()
+        except sqlite3.Error as error:
+            msg = f"Could not load the running action request: {error}"
+            raise ActionRequestStoreError(msg) from error
+        return self._row_to_request(row) if row is not None else None
+
+    @override
+    def prune_expired(self, current_time: datetime) -> list[ActionRequestId]:
+        """Delete expired terminal requests and return their IDs."""
+        self._require_writable()
+        cutoff = self._stored_datetime(current_time)
+        try:
+            with closing(self._connect(read_only=False)) as connection, connection:
+                rows = connection.execute(
+                    """
+                    SELECT request_id FROM action_requests
+                    WHERE status IN ('succeeded', 'failed', 'blocked')
+                        AND expires_at <= ?
+                    ORDER BY expires_at, request_id
+                    """,
+                    (cutoff,),
+                ).fetchall()
+                connection.execute(
+                    """
+                    DELETE FROM action_requests
+                    WHERE status IN ('succeeded', 'failed', 'blocked')
+                        AND expires_at <= ?
+                    """,
+                    (cutoff,),
+                )
+        except sqlite3.Error as error:
+            msg = f"Could not prune expired action requests: {error}"
+            raise ActionRequestStoreError(msg) from error
+        return [row["request_id"] for row in rows]

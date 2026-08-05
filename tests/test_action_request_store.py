@@ -240,7 +240,7 @@ class TestSQLiteActionRequestStorePersistence:
         assert store.get(FIRST_REQUEST_ID) is None
 
     def test_loaded_row_is_revalidated_as_domain_model(self, tmp_path: Path) -> None:
-        """ORM loading cannot bypass the trusted ActionRequest boundary."""
+        """Database loading cannot bypass the trusted ActionRequest boundary."""
         database_path = tmp_path / "requests.sqlite3"
         store = SQLiteActionRequestStore(database_path)
         request = _pending_request()
@@ -260,6 +260,46 @@ class TestSQLiteActionRequestStorePersistence:
 
         with pytest.raises(ActionRequestNotFoundError):
             store.update(_pending_request())
+
+    def test_running_request_can_be_loaded_for_startup_recovery(self, tmp_path: Path) -> None:
+        """The durable uniqueness invariant gives recovery at most one request."""
+        store = SQLiteActionRequestStore(tmp_path / "requests.sqlite3")
+        assert store.get_running() is None
+        running = _pending_request()
+        running.status = "running"
+        running.attempt_count = 1
+        running.started_at = datetime(2026, 8, 5, 10, 1, tzinfo=UTC)
+        store.create(running)
+
+        assert store.get_running() == running
+
+    def test_prune_expired_deletes_only_terminal_requests(self, tmp_path: Path) -> None:
+        """Retention cannot age-prune pending or running work."""
+        store = SQLiteActionRequestStore(tmp_path / "requests.sqlite3")
+        current_time = datetime(2026, 8, 12, 10, tzinfo=UTC)
+        expired = _pending_request(request_id="1" * 32)
+        expired.status = "succeeded"
+        expired.finished_at = current_time - timedelta(days=7)
+        expired.expires_at = current_time
+        retained_terminal = _pending_request(request_id="2" * 32)
+        retained_terminal.status = "succeeded"
+        retained_terminal.finished_at = current_time
+        retained_terminal.expires_at = current_time + timedelta(seconds=1)
+        pending = _pending_request(request_id="3" * 32)
+        pending.expires_at = current_time - timedelta(days=1)
+        running = _pending_request(request_id="4" * 32)
+        running.status = "running"
+        running.expires_at = current_time - timedelta(days=1)
+        for request in (expired, retained_terminal, pending, running):
+            store.create(request)
+
+        deleted_ids = store.prune_expired(current_time)
+
+        assert deleted_ids == [expired.request_id]
+        assert store.get(expired.request_id) is None
+        assert store.get(retained_terminal.request_id) == retained_terminal
+        assert store.get(pending.request_id) == pending
+        assert store.get(running.request_id) == running
 
 
 class TestSQLiteActionRequestStoreTransactions:
@@ -337,4 +377,6 @@ class TestSQLiteActionRequestStoreDryRun:
         assert read_only_store.get(request.request_id) == request
         with pytest.raises(ActionRequestStoreReadOnlyError):
             read_only_store.update(request)
+        with pytest.raises(ActionRequestStoreReadOnlyError):
+            read_only_store.prune_expired(datetime(2026, 8, 12, tzinfo=UTC))
         assert database_path.read_bytes() == before
