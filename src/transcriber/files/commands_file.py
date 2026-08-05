@@ -128,8 +128,8 @@ class CommandsFile(TextFile):
 
         """
         if 0 <= command_index < len(self.commands):
-            self.commands[command_index].executed = True
             self.commands[command_index].executed_at = datetime.now(tz)
+            self.commands[command_index].executed = True
 
     @override
     def write(self, bundle_dir: Path, fs_service: FileSystemService) -> None:
@@ -166,6 +166,7 @@ class CommandsFile(TextFile):
 
         """
         return any(
-            not command.executed and (command.matched_type is None or command.attempt_count < max_attempts_for(command.matched_type))
+            command.needs_resolution
+            and (command.matched_type is None or command.attempt_count < max_attempts_for(command.matched_type))
             for command in self.commands
         )

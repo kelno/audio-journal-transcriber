@@ -414,8 +414,8 @@ class RunCommandsJob(TranscribeBundleJob):
         if not self.bundle.commands.commands:
             return  # no commands to run, that's valid
 
-        if not any(not cmd.executed for cmd in self.bundle.commands.commands):
-            logger.debug(f"All commands already executed for {self.bundle}")
+        if not any(cmd.needs_resolution for cmd in self.bundle.commands.commands):
+            logger.debug(f"All commands already resolved or submitted for {self.bundle}")
             return
 
         logger.debug(f"Running commands for {self.bundle}")
@@ -442,7 +442,7 @@ class RunCommandsJob(TranscribeBundleJob):
         pending_commands = []
 
         for cmd in commands:
-            if cmd.executed:
+            if not cmd.needs_resolution:
                 continue
 
             if cmd.matched_type is None:
@@ -474,7 +474,7 @@ class RunCommandsJob(TranscribeBundleJob):
                 logger.info(
                     f"Skipping superseded {matched_type.value} command: {command.text}",
                 )
-                self.bundle.set_command_executed(command.id)
+                self.bundle.set_command_superseded(command.id)
                 continue
 
             selected_commands.append(command)
@@ -500,7 +500,7 @@ class RunCommandsJob(TranscribeBundleJob):
         """
         assert self.bundle.commands
         seen_executed_types: set[CommandType] = {
-            cmd.matched_type for cmd in self.bundle.commands.commands if cmd.executed and cmd.matched_type is not None
+            cmd.matched_type for cmd in self.bundle.commands.commands if cmd.is_resolved and cmd.matched_type is not None
         }
 
         for cmd in pending_commands:
@@ -517,8 +517,7 @@ class RunCommandsJob(TranscribeBundleJob):
                         f"Skipping duplicate {matched_type.value} command: {cmd.text}",
                     )
 
-                    # Mark as executed to avoid picking it up when gathering bundle with pending commands.
-                    self.bundle.set_command_executed(cmd.id)
+                    self.bundle.set_command_superseded(cmd.id)
                     continue
 
                 max_attemps = definition.max_attempts
@@ -533,7 +532,10 @@ class RunCommandsJob(TranscribeBundleJob):
                 handler = definition.handler
                 handler(self.bundle, config, bundle_cache, cmd)
 
-                self.bundle.set_command_executed(cmd.id)
+                if matched_type is CommandType.IGNORE:
+                    self.bundle.set_command_ignored(cmd.id)
+                else:
+                    self.bundle.set_command_executed(cmd.id)
                 seen_executed_types.add(matched_type)
 
             except AbortRemainingBundleJobsException:

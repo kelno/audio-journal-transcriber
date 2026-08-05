@@ -367,6 +367,13 @@ request has been accepted, such as command interpretation or request submission.
 It should later be renamed or replaced if that narrower responsibility is not
 useful.
 
+During migration, `executed` and `executed_at` remain serialized as a compatibility
+projection. A legacy command with `executed: true` and no resolution loads as a
+terminal `legacy_executed` resolution. New ignored and superseded decisions store
+their specific resolution while still appearing executed to older readers. An
+active `action_request` resolution remains `executed: false` but is not eligible
+for dispatch again while its outcome is pending.
+
 ### Dispatching a command safely
 
 The command file and global request cannot be updated atomically. Use a simple,

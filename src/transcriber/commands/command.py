@@ -6,10 +6,16 @@ from datetime import datetime  # noqa: TC003
 from typing import Any, override
 from uuid import uuid4
 
-from pydantic import BaseModel, ConfigDict, Field, field_serializer
+from pydantic import BaseModel, ConfigDict, Field, field_serializer, model_validator
 
 from transcriber.commands import command_type  # noqa: TC001
 from transcriber.commands.command_interpretation import CommandArguments, EmptyCommandArguments
+from transcriber.commands.command_resolution import (
+    CommandResolution,
+    LegacyExecutedCommandResolution,
+    is_terminal_resolution,
+    resolution_time,
+)
 
 
 class Command(BaseModel):
@@ -28,6 +34,7 @@ class Command(BaseModel):
     executed_at: datetime | None = None
     matched_type: command_type.CommandType | None = None
     arguments: CommandArguments = Field(default_factory=EmptyCommandArguments)
+    resolution: CommandResolution | None = None
     last_error: str | None = None  # Error string to help with debugging
     attempt_count: int = Field(default=0, ge=0)  # we stop trying if reaching the max retries for that command type
 
@@ -40,6 +47,42 @@ class Command(BaseModel):
     def serialize_arguments(self, value: CommandArguments) -> dict[str, object]:
         """Serialize only arguments that have an extracted value."""
         return value.model_dump(mode="json", exclude_none=True)
+
+    @model_validator(mode="after")
+    def synchronize_legacy_execution_fields(self) -> Command:
+        """Keep old execution fields as a compatibility projection of resolution."""
+        resolution = self.resolution
+        if resolution is None:
+            if self.executed:
+                object.__setattr__(
+                    self,
+                    "resolution",
+                    LegacyExecutedCommandResolution(resolved_at=self.executed_at),
+                )
+            return self
+
+        terminal = is_terminal_resolution(resolution)
+        object.__setattr__(self, "executed", terminal)
+        if terminal:
+            object.__setattr__(self, "executed_at", resolution_time(resolution))
+        else:
+            object.__setattr__(self, "executed_at", None)
+        return self
+
+    @property
+    def is_resolved(self) -> bool:
+        """Return whether the command has a terminal resolution."""
+        return self.executed or (self.resolution is not None and is_terminal_resolution(self.resolution))
+
+    @property
+    def has_active_request(self) -> bool:
+        """Return whether a submitted action request still lacks an outcome."""
+        return self.resolution is not None and not is_terminal_resolution(self.resolution)
+
+    @property
+    def needs_resolution(self) -> bool:
+        """Return whether command policy should consider this command again."""
+        return not self.is_resolved and not self.has_active_request
 
     def to_dict(self) -> dict[str, Any]:
         """Convert command to dictionary for YAML serialization."""

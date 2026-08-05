@@ -10,6 +10,14 @@ from transcriber.bundle_id import BundleId, new_bundle_id
 from transcriber.bundle_title import BundleTitleState, normalize_bundle_title
 from transcriber.commands.command import Command
 from transcriber.commands.command_interpretation import CommandInterpretation
+from transcriber.commands.command_resolution import (
+    CommandResolution,
+    IgnoredCommandResolution,
+    LegacyExecutedCommandResolution,
+    SupersededCommandResolution,
+    is_terminal_resolution,
+    resolution_time,
+)
 from transcriber.config import TranscribeConfig
 from transcriber.constants import (
     COMMANDS_FILENAME,
@@ -735,13 +743,37 @@ class TranscribeBundle:
         self.commands.write(self.get_bundle_dir(), self.fs_service)
 
     def set_command_executed(self, cmd_id: str) -> None:
-        """Mark a raw command as executed."""
+        """Record a compatibility receipt for a directly executed command."""
+        self.set_command_resolution(
+            cmd_id,
+            LegacyExecutedCommandResolution(
+                resolved_at=datetime.now(self.config.general.timezone),
+            ),
+        )
+
+    def set_command_resolution(self, cmd_id: str, resolution: CommandResolution) -> None:
+        """Persist a command resolution and its legacy execution projection."""
         cmd = self.assert_command(cmd_id)
-        cmd.executed = True
-        cmd.executed_at = datetime.now(self.config.general.timezone)
+        cmd.resolution = resolution
+        cmd.executed = is_terminal_resolution(resolution)
+        cmd.executed_at = resolution_time(resolution) if cmd.executed else None
 
         assert self.commands is not None
         self.commands.write(self.get_bundle_dir(), self.fs_service)
+
+    def set_command_ignored(self, cmd_id: str) -> None:
+        """Persist a terminal resolution for a command requiring no action."""
+        self.set_command_resolution(
+            cmd_id,
+            IgnoredCommandResolution(resolved_at=datetime.now(self.config.general.timezone)),
+        )
+
+    def set_command_superseded(self, cmd_id: str) -> None:
+        """Persist that command policy selected another command instead."""
+        self.set_command_resolution(
+            cmd_id,
+            SupersededCommandResolution(resolved_at=datetime.now(self.config.general.timezone)),
+        )
 
     def set_last_error(self, cmd_id: str, error: object) -> None:
         """Set a debug error string for a command and write the commands file.
