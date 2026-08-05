@@ -139,3 +139,47 @@ def test_missing_transcript_is_reported_as_already_pending(
     assert result.eligible == 0
     assert result.already_pending == 1
     assert fake_fs.file_exists(store_dir / "pending" / METADATA_FILENAME)
+
+
+def test_empty_target_model_is_rejected(
+    fake_config: TranscribeConfig,
+    fake_fs: FakeFileSystemService,
+) -> None:
+    """An empty model cannot produce a meaningful regeneration decision."""
+    store_dir = fake_config.general.store_dir
+
+    with pytest.raises(ValueError, match="Target transcript model cannot be empty"):
+        prepare_transcript_regeneration(
+            store_dir,
+            target_model="  ",
+            apply=False,
+            fs_service=fake_fs,
+        )
+
+
+def test_invalid_bundle_prevents_all_planned_renames(
+    fake_config: TranscribeConfig,
+    fake_fs: FakeFileSystemService,
+) -> None:
+    """Preflight finds invalid metadata before apply mode can rename any transcript."""
+    store_dir = fake_config.general.store_dir
+    valid_dir = _create_bundle(
+        store_dir,
+        "a-valid",
+        {"recording.mp3": ["old-model"]},
+        fake_fs,
+    )
+    invalid_dir = store_dir / "z-missing-metadata"
+    fake_fs.create_directory(invalid_dir)
+    fake_fs.write_file(invalid_dir / "recording.wav", "audio")
+
+    with pytest.raises(FileNotFoundError, match=METADATA_FILENAME):
+        prepare_transcript_regeneration(
+            store_dir,
+            target_model="new-model",
+            apply=True,
+            fs_service=fake_fs,
+        )
+
+    assert fake_fs.file_exists(valid_dir / TRANSCRIPT_FILENAME)
+    assert fake_fs.get_operations("move") == []
