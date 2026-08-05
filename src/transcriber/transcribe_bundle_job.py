@@ -1,14 +1,29 @@
 import traceback
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import override
 
+from transcriber.actions.action import MergeAction, PreviousBundleTarget
+from transcriber.actions.action_executors import BundleActionExecutor
+from transcriber.actions.action_request import (
+    ActionBlocked,
+    ActionFailed,
+    ActionRequest,
+    ActionResult,
+    ActionSucceeded,
+    CommandActionOrigin,
+    new_action_request_id,
+)
+from transcriber.actions.action_request_store import SQLiteActionRequestStore, default_action_request_database_path
+from transcriber.actions.action_service import ActionProcessor, ActionService
 from transcriber.bundle_title import BundleTitleState
 from transcriber.commands.command import Command
 from transcriber.commands.command_execution_policy import CommandExecutionPolicy
 from transcriber.commands.command_handlers import AbortForMergeTargetException
 from transcriber.commands.command_registry import COMMAND_REGISTRY
+from transcriber.commands.command_resolution import ActionRequestCommandResolution
 from transcriber.commands.command_type import CommandType
 from transcriber.constants import (
     MULTIPLE_TRANSCRIPTS_SEPARATOR,
@@ -19,6 +34,7 @@ from .config import TranscribeConfig
 from .exception import (
     AbortRemainingBundleJobsException,
     EmptyTranscriptException,
+    MergeBlockedException,
     TooShortException,
     UnknownCommandException,
 )
@@ -414,7 +430,7 @@ class RunCommandsJob(TranscribeBundleJob):
         if not self.bundle.commands.commands:
             return  # no commands to run, that's valid
 
-        if not any(cmd.needs_resolution for cmd in self.bundle.commands.commands):
+        if not any(cmd.needs_processing for cmd in self.bundle.commands.commands):
             logger.debug(f"All commands already resolved or submitted for {self.bundle}")
             return
 
@@ -442,10 +458,10 @@ class RunCommandsJob(TranscribeBundleJob):
         pending_commands = []
 
         for cmd in commands:
-            if not cmd.needs_resolution:
+            if not cmd.needs_processing:
                 continue
 
-            if cmd.matched_type is None:
+            if cmd.matched_type is None and cmd.needs_resolution:
                 # Should not happen under normal circumstances, but recover from
                 # inconsistent state if a command was marked executed without its type.
                 interpretation = ai_manager.interpret_command(cmd.text)
@@ -529,6 +545,10 @@ class RunCommandsJob(TranscribeBundleJob):
 
                 logger.info(f"Executing {matched_type.value} command for bundle {self.bundle}")
 
+                if matched_type is CommandType.MERGE:
+                    self._execute_merge_action(cmd, config, bundle_cache)
+                    continue
+
                 handler = definition.handler
                 handler(self.bundle, config, bundle_cache, cmd)
 
@@ -552,6 +572,111 @@ class RunCommandsJob(TranscribeBundleJob):
                 self.bundle.set_last_error(cmd_id=cmd.id, error=str(e))
                 self.bundle.add_command_attempt(cmd_id=cmd.id)
                 raise
+
+    def _execute_merge_action(
+        self,
+        command: Command,
+        config: TranscribeConfig,
+        bundle_cache: BundleCache,
+    ) -> None:
+        """Submit, execute, and acknowledge a merge through the request boundary."""
+        action = MergeAction(
+            source_bundle_id=self.bundle.bundle_id,
+            target=PreviousBundleTarget(),
+        )
+        origin = CommandActionOrigin(bundle_id=self.bundle.bundle_id, command_id=command.id)
+        resolution = command.resolution
+        if isinstance(resolution, ActionRequestCommandResolution):
+            request_id = resolution.request_id
+        else:
+            request_id = new_action_request_id()
+            self.bundle.set_command_resolution(
+                command.id,
+                ActionRequestCommandResolution(request_id=request_id),
+            )
+
+        store = SQLiteActionRequestStore(default_action_request_database_path(config.general.store_dir))
+        service = ActionService(store)
+        processor = ActionProcessor(store, BundleActionExecutor(bundle_cache))
+        processor.block_interrupted_request()
+        service.submit(action, origin, request_id=request_id)
+
+        request = service.get_request(request_id)
+        assert request is not None
+        result = processor.process(request_id) if request.status == "pending" else self._result_from_request(request)
+        if result is None:
+            request = service.get_request(request_id)
+            assert request is not None
+            result = self._result_from_request(request)
+
+        request = service.get_request(request_id)
+        assert request is not None
+        self._acknowledge_command_result(command.id, request, result, service, bundle_cache, config)
+
+        if isinstance(result, ActionSucceeded):
+            target = next(
+                (bundle_cache.get(bundle_id) for bundle_id in result.effects.changed_bundle_ids if bundle_cache.get(bundle_id)),
+                None,
+            )
+            if target is None:
+                target = self._find_command_bundle(command.id, bundle_cache)
+            if target is None:
+                msg = "Merge succeeded but its surviving target could not be located"
+                raise RuntimeError(msg)
+            raise AbortForMergeTargetException(target, f"Merged bundle {self.bundle} into {target}")
+        if isinstance(result, ActionBlocked):
+            raise MergeBlockedException(result.error.message)
+        logger.error(f"Merge request {request_id} failed: {result.error.message}")
+
+    @staticmethod
+    def _result_from_request(request: ActionRequest) -> ActionResult:
+        """Reconstruct a terminal result when acknowledging after a crash window."""
+        match request.status:
+            case "succeeded":
+                return ActionSucceeded()
+            case "failed":
+                assert request.error is not None
+                return ActionFailed(error=request.error)
+            case "blocked":
+                assert request.error is not None
+                return ActionBlocked(error=request.error)
+            case _:
+                msg = f"Action request {request.request_id} is not terminal: {request.status}"
+                raise ValueError(msg)
+
+    @classmethod
+    def _acknowledge_command_result(
+        cls,
+        command_id: str,
+        request: ActionRequest,
+        result: ActionResult,
+        service: ActionService,
+        bundle_cache: BundleCache,
+        config: TranscribeConfig,
+    ) -> None:
+        """Persist the terminal receipt before acknowledging its request row."""
+        owner = cls._find_command_bundle(command_id, bundle_cache)
+        if owner is None:
+            msg = f"Could not locate command {command_id} while acknowledging request {request.request_id}"
+            raise ValueError(msg)
+        resolved_at = request.finished_at or datetime.now(config.general.timezone)
+        owner.set_command_resolution(
+            command_id,
+            ActionRequestCommandResolution(
+                request_id=request.request_id,
+                outcome=result.status,
+                resolved_at=resolved_at,
+            ),
+        )
+        service.acknowledge(request.request_id)
+
+    @staticmethod
+    def _find_command_bundle(command_id: str, bundle_cache: BundleCache) -> TranscribeBundle | None:
+        """Locate a stable command after an action may have moved its bundle."""
+        for bundle in bundle_cache.values():
+            if bundle.commands and any(command.id == command_id for command in bundle.commands.commands):
+                return bundle
+        return None
 
     @staticmethod
     def _command_priority(command_type: CommandType | None) -> int:

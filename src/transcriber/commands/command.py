@@ -84,6 +84,11 @@ class Command(BaseModel):
         """Return whether command policy should consider this command again."""
         return not self.is_resolved and not self.has_active_request
 
+    @property
+    def needs_processing(self) -> bool:
+        """Return whether dispatch or request reconciliation still has work."""
+        return not self.is_resolved
+
     def to_dict(self) -> dict[str, Any]:
         """Convert command to dictionary for YAML serialization."""
         # Use JSON mode to convert non-primitive types (datetime, enum) into

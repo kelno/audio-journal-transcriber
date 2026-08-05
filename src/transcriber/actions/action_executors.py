@@ -1,0 +1,66 @@
+"""Action executors that apply typed intent to the loaded bundle cache."""
+
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+from transcriber.actions.action import BundleTarget, DeleteAction, MergeAction, SetTitleAction
+from transcriber.actions.action_request import ActionEffects, ActionError, ActionFailed, ActionResult, ActionSucceeded
+from transcriber.commands.command_handlers import merge_bundles
+from transcriber.logger import logger
+
+if TYPE_CHECKING:
+    from transcriber.actions.action import Action
+    from transcriber.transcribe_bundle import BundleCache, TranscribeBundle
+
+
+class BundleActionExecutor:
+    """Dispatch actions against the daemon's current ID-keyed bundle cache."""
+
+    def __init__(self, bundle_cache: BundleCache) -> None:
+        self._bundle_cache: BundleCache = bundle_cache
+
+    def execute(self, action: Action, /) -> ActionResult:
+        """Dispatch a supported action to its sole mutation implementation."""
+        match action:
+            case MergeAction():
+                return self._execute_merge(action)
+            case DeleteAction() | SetTitleAction():
+                return ActionFailed(
+                    error=ActionError(
+                        code="action_not_enabled",
+                        message=f"Action type {action.type!r} is not enabled through requests yet.",
+                    ),
+                )
+
+    def _execute_merge(self, action: MergeAction) -> ActionResult:
+        source = self._bundle_cache.get(action.source_bundle_id)
+        if source is None:
+            return ActionFailed(
+                error=ActionError(code="source_not_found", message="The source bundle no longer exists."),
+            )
+
+        target = self._resolve_merge_target(source, action)
+        if target is None:
+            return ActionFailed(
+                error=ActionError(code="target_not_found", message="No eligible merge target was found."),
+            )
+
+        gap_hours = (source.get_bundle_date() - target.get_bundle_date()).total_seconds() / 3600
+        logger.info(
+            f"{source}: Merge target selected -> {target}, gap = {gap_hours:.1f}h "
+            f"(merge window: {source.config.general.merge_max_hours:.1f}h)",
+        )
+        merge_bundles(source=source, target=target, bundles_cache=self._bundle_cache)
+        return ActionSucceeded(
+            effects=ActionEffects(
+                changed_bundle_ids=(target.bundle_id,),
+                removed_bundle_ids=(source.bundle_id,),
+            ),
+        )
+
+    def _resolve_merge_target(self, source: TranscribeBundle, action: MergeAction) -> TranscribeBundle | None:
+        if isinstance(action.target, BundleTarget):
+            target = self._bundle_cache.get(action.target.bundle_id)
+            return target if target is not None and target.bundle_id != source.bundle_id else None
+        return source.find_previous_bundle(source, self._bundle_cache.values())

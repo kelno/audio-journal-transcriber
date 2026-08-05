@@ -17,6 +17,7 @@ from transcriber.actions.action_request import (
     ActionSucceeded,
 )
 from transcriber.actions.action_request_store import (
+    ActionRequestAlreadyExistsError,
     ActionRequestNotFoundError,
     ActionRequestStore,
 )
@@ -68,13 +69,28 @@ class ActionService:
         self._store: ActionRequestStore = store
         self._clock: UtcClock = clock
 
-    def submit(self, action: Action, origin: ActionOrigin) -> ActionRequestId:
-        """Durably submit new intent and return its generated request ID."""
-        request = ActionRequest(
-            action=action,
-            origin=origin,
-            created_at=_read_utc_clock(self._clock),
-        )
+    def submit(
+        self,
+        action: Action,
+        origin: ActionOrigin,
+        *,
+        request_id: ActionRequestId | None = None,
+    ) -> ActionRequestId:
+        """Durably submit intent, idempotently when a caller records its ID first."""
+        if request_id is not None and (existing := self._store.get(request_id)) is not None:
+            if existing.action == action and existing.origin == origin:
+                return request_id
+            msg = f"Action request ID already belongs to different intent: {request_id}"
+            raise ActionRequestAlreadyExistsError(msg)
+
+        request_values: dict[str, object] = {
+            "action": action,
+            "origin": origin,
+            "created_at": _read_utc_clock(self._clock),
+        }
+        if request_id is not None:
+            request_values["request_id"] = request_id
+        request = ActionRequest.model_validate(request_values)
         self._store.create(request)
         return request.request_id
 
@@ -85,6 +101,21 @@ class ActionService:
     def prune_expired(self) -> list[ActionRequestId]:
         """Delete terminal requests whose seven-day status window has elapsed."""
         return self._store.prune_expired(_read_utc_clock(self._clock))
+
+    def acknowledge(self, request_id: ActionRequestId) -> None:
+        """Record that a terminal outcome is durably reflected at its origin."""
+        request = self._store.get(request_id)
+        if request is None:
+            msg = f"Action request not found: {request_id}"
+            raise ActionRequestNotFoundError(msg)
+        if request.status not in {"succeeded", "failed", "blocked"}:
+            msg = f"Action request is not terminal and cannot be acknowledged: {request_id}"
+            raise ValueError(msg)
+        if request.acknowledged_at is not None:
+            return
+        acknowledged = request.model_copy(deep=True)
+        acknowledged.acknowledged_at = _read_utc_clock(self._clock)
+        self._store.update(acknowledged)
 
 
 class ActionProcessor:

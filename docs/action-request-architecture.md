@@ -295,6 +295,13 @@ replacement work.
 The current command handlers will eventually become command-to-action adapters
 or disappear. They must not remain a second mutation path.
 
+Merge is the first cutover: the command job persists an active request resolution,
+ensures the matching canonical request exists, and invokes `BundleActionExecutor`.
+That executor resolves `previous` immediately before execution and calls the
+existing `merge_bundles()` function, which remains the sole merge mutation core.
+After success, the command is located by its stable ID in the surviving bundle;
+its terminal receipt is written before the request is marked acknowledged.
+
 ## State ownership
 
 | State | Owner |

@@ -301,6 +301,26 @@ class TestSQLiteActionRequestStorePersistence:
         assert store.get(pending.request_id) == pending
         assert store.get(running.request_id) == running
 
+    def test_prune_retains_unacknowledged_command_request(self, tmp_path: Path) -> None:
+        """Command receipts must be durable before their canonical request expires."""
+        store = SQLiteActionRequestStore(tmp_path / "requests.sqlite3")
+        current_time = datetime(2026, 8, 12, 10, tzinfo=UTC)
+        request = ActionRequest(
+            request_id=FIRST_REQUEST_ID,
+            action=DeleteAction(bundle_id=FIRST_BUNDLE_ID),
+            origin=CommandActionOrigin(bundle_id=FIRST_BUNDLE_ID, command_id=COMMAND_ID),
+            status="succeeded",
+            created_at=current_time - timedelta(days=8),
+            finished_at=current_time - timedelta(days=7),
+            expires_at=current_time,
+        )
+        store.create(request)
+
+        assert store.prune_expired(current_time) == []
+        acknowledged = request.model_copy(update={"acknowledged_at": current_time})
+        store.update(acknowledged)
+        assert store.prune_expired(current_time) == [request.request_id]
+
 
 class TestSQLiteActionRequestStoreTransactions:
     """Constraint failures roll back without damaging canonical requests."""

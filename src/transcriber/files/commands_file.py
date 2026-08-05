@@ -166,7 +166,7 @@ class CommandsFile(TextFile):
 
         """
         return any(
-            command.needs_resolution
+            command.needs_processing
             and (command.matched_type is None or command.attempt_count < max_attempts_for(command.matched_type))
             for command in self.commands
         )

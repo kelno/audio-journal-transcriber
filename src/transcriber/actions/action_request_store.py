@@ -438,6 +438,7 @@ class SQLiteActionRequestStore(ActionRequestStore):
                     SELECT request_id FROM action_requests
                     WHERE status IN ('succeeded', 'failed', 'blocked')
                         AND expires_at <= ?
+                        AND (json_extract(origin_json, '$.type') != 'command' OR acknowledged_at IS NOT NULL)
                     ORDER BY expires_at, request_id
                     """,
                     (cutoff,),
@@ -447,6 +448,7 @@ class SQLiteActionRequestStore(ActionRequestStore):
                     DELETE FROM action_requests
                     WHERE status IN ('succeeded', 'failed', 'blocked')
                         AND expires_at <= ?
+                        AND (json_extract(origin_json, '$.type') != 'command' OR acknowledged_at IS NOT NULL)
                     """,
                     (cutoff,),
                 )
