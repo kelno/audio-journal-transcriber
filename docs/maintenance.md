@@ -25,3 +25,16 @@ match the configured model. Run the transcriber to regenerate them:
 uv run transcriber
 ```
 
+## List bundles by transcript length
+
+List longest transcripts first:
+
+```bash
+uv run python scripts/list_bundles_by_transcript_length.py
+```
+
+List shortest first:
+
+```bash
+uv run python scripts/list_bundles_by_transcript_length.py --ascending
+```
