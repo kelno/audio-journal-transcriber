@@ -197,15 +197,9 @@ class RealFileSystemService(FileSystemService):
             relative_path = path.relative_to(root_dir)
             backup_path = deleted_dir / relative_path
         except ValueError:
-            # If path is not relative to store_dir, create a flat structure
-            # using a unique identifier to avoid collisions
+            # Paths outside the managed store use a flat backup structure.
+            # Collision handling is centralized in _get_unique_backup_path().
             backup_path = deleted_dir / path.name
-
-            # If the name already exists, append a counter
-            counter = 1
-            while backup_path.exists():
-                backup_path = deleted_dir / f"{path.name}_{counter}"
-                counter += 1
 
         return backup_path
 
@@ -281,7 +275,7 @@ class RealFileSystemService(FileSystemService):
             raise FileNotFoundError(msg)
 
         if self.config.general.safe_delete:
-            backup_path = self._get_backup_path(path)
+            backup_path = self._get_unique_backup_path(path)
 
             # Ensure the backup directory exists
             backup_path.parent.mkdir(parents=True, exist_ok=True)

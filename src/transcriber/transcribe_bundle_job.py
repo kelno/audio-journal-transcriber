@@ -326,7 +326,7 @@ class DeleteAudioFileJob(TranscribeBundleJob):
 
         for audio_path in self.bundle.source_audios:
             logger.debug(f"Deleting {audio_path}")
-            audio_path.unlink()
+            self.bundle.fs_service.delete_file(audio_path)
 
         self.bundle.update_audio_paths(None)
 

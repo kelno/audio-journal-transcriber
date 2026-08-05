@@ -130,6 +130,27 @@ class TestFileSystemBackupDeletion:
             assert "content 1" in contents
             assert "content 2" in contents
 
+    def test_delete_file_preserves_repeated_deletions_from_store(self, fake_config: TranscribeConfig) -> None:
+        """Repeated safe deletion of one managed file preserves every version."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            store_dir = temp_path / "store"
+            bundle_dir = store_dir / "bundle"
+            bundle_dir.mkdir(parents=True)
+            summary_file = bundle_dir / "summary.md"
+
+            self._create_config_with_backup_enabled(fake_config, temp_path, store_dir)
+            fs = RealFileSystemService(fake_config)
+
+            summary_file.write_text("first summary")
+            fs.delete_file(summary_file)
+            summary_file.write_text("second summary")
+            fs.delete_file(summary_file)
+
+            backup_dir = store_dir / DELETED_DIR_NAME / bundle_dir.name
+            assert (backup_dir / "summary.md").read_text() == "first summary"
+            assert (backup_dir / "summary.md.1").read_text() == "second summary"
+
     def test_delete_directory_with_backup_enabled_moves_to_deleted_dir(self, fake_config: TranscribeConfig) -> None:
         """Test that deleting a directory with backup enabled moves it to _deleted directory."""
         with tempfile.TemporaryDirectory() as temp_dir:

@@ -6,6 +6,7 @@ from tests.bundle_fixtures import TranscribeBundleFactory
 from tests.fake_ai_manager import FakeAIManager
 from tests.fake_audio_service import FakeAudioService
 from tests.fake_file_system import FakeFileSystemService
+from transcriber.audio_transcriber import AudioTranscriber
 from transcriber.config import TranscribeConfig
 from transcriber.constants import (
     CUSTOM_CONTEXT_FILENAME,
@@ -15,6 +16,7 @@ from transcriber.exception import EmptyTranscriptException, TooShortException
 from transcriber.transcribe_bundle import TranscribeBundle
 from transcriber.transcribe_bundle_job import (
     CreateBundleJob,
+    DeleteAudioFileJob,
     SummaryJob,
     TranscriptionJob,
 )
@@ -138,6 +140,65 @@ class TestCreateBundleJob:
         assert exc_info.value.source_audio == input_audio
         # The too-short file must not have been moved into the bundle.
         assert not fake_fs.file_exists(bundle.get_bundle_dir() / "voice_memo.mp3")
+
+    def test_process_jobs_deletes_too_short_audio_through_file_system_service(
+        self,
+        fake_config: TranscribeConfig,
+        fake_fs: FakeFileSystemService,
+        fake_audio_service: FakeAudioService,
+        fake_transcriber: AudioTranscriber,
+    ) -> None:
+        """Configured removal of rejected audio uses the shared deletion policy."""
+        fake_config.general.min_length_seconds = 10.0
+        fake_config.general.remove_short_files = True
+        input_audio = fake_config.general.input_dir / "voice_memo.mp3"
+        fake_fs.write_file(input_audio, "Audio")
+        fake_audio_service.set_audio_duration(input_audio, 5.0)
+
+        bundle = TranscribeBundle.from_audio_file(
+            source_audio=input_audio,
+            config=fake_config,
+            fs_service=fake_fs,
+            audio_service=fake_audio_service,
+        )
+
+        errors = fake_transcriber.process_jobs(
+            [[CreateBundleJob(bundle, dry_run=False)]],
+            {bundle.bundle_id: bundle},
+        )
+
+        assert errors == []
+        assert not fake_fs.file_exists(input_audio)
+        assert ("delete", input_audio) in fake_fs.operations
+
+
+class TestDeleteAudioFileJob:
+    """Tests for source-audio retention cleanup."""
+
+    def test_deletes_audio_through_file_system_service(
+        self,
+        fake_config: TranscribeConfig,
+        fake_fs: FakeFileSystemService,
+        fake_ai_manager: FakeAIManager,
+        transcribe_bundle_factory: TranscribeBundleFactory,
+    ) -> None:
+        """Expired bundle audio uses the shared deletion policy."""
+        bundle = transcribe_bundle_factory(
+            bundle_name="2025-01-15_memo",
+            audio_filename="memo.mp3",
+            transcript_text="Transcript",
+        )
+        audio_path = bundle.source_audios[0]
+
+        DeleteAudioFileJob(bundle, dry_run=False).run(
+            fake_ai_manager,
+            fake_config,
+            {bundle.bundle_id: bundle},
+        )
+
+        assert not fake_fs.file_exists(audio_path)
+        assert bundle.source_audios == []
+        assert ("delete", audio_path) in fake_fs.operations
 
 
 class TestTranscriptionJob:

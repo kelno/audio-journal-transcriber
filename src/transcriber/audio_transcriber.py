@@ -102,7 +102,7 @@ class AudioTranscriber:
             )
             if self.config.general.remove_short_files and not self.dry_run:
                 logger.info(f"Removing too short audio file: {e.source_audio}")
-                e.source_audio.unlink()
+                self.fs_service.delete_file(e.source_audio)
             return False
         elif isinstance(e, AbortRemainingBundleJobsException):
             logger.debug(
