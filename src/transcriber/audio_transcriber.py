@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from pathlib import Path
 
+from transcriber.actions.filesystem_action_requests import FilesystemActionRequestAdapter
 from transcriber.ai_manager import AIManager
 from transcriber.audio_service import AudioService, RealAudioService
 from transcriber.commands.command_handlers import AbortForMergeTargetException
@@ -415,6 +416,11 @@ class AudioTranscriber:
         # Loading existing bundles
         # Keep a cache of loaded bundles for the time of this run.
         bundle_cache = self.gather_bundles(input_dir, store_dir)
+
+        FilesystemActionRequestAdapter(self.config, self.fs_service).process_all(
+            bundle_cache,
+            dry_run=self.dry_run,
+        )
 
         self.log_section_header("Gathering Jobs")
         all_bundle_jobs = self.gather_jobs(bundle_cache)

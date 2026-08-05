@@ -583,6 +583,12 @@ The file adapter is a transport, not the application boundary. A future user
 interface submits the same action through `ActionService` and does not need to
 write request files directly.
 
+The adapter reconciles only top-level Markdown files. It writes an assigned ID
+before canonical insertion, preserves any Markdown body, and rewrites a file only
+when its canonical projection changes so its own watcher does not create a loop.
+The daemon watches `_requests` separately from the audio input tree and filters
+wake-ups to Markdown request files.
+
 The daemon currently watches only the audio input directory. Filesystem request
 support therefore needs a narrowly filtered watcher for the global request
 directory. Bundle mutations elsewhere in the store must not continuously wake
