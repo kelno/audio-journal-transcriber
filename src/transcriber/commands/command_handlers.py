@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, final
 from transcriber.bundle_title import BundleTitleState
 from transcriber.commands.command_interpretation import SetTitleCommandArguments
 from transcriber.constants import (
+    MANAGED_BUNDLE_FILENAMES,
     MERGE_FAILED_FILENAME,
     MULTIPLE_TRANSCRIPTS_SEPARATOR,
     SUMMARY_FILENAME,
@@ -23,6 +24,7 @@ from transcriber.exception import (
 )
 from transcriber.files.metadata import AudioFileMeta
 from transcriber.files.text_file import CustomContextFile, TranscriptFile
+from transcriber.globals import is_handled_audio_file
 from transcriber.logger import logger
 from transcriber.transcribe_bundle import BundleCache, TranscribeBundle
 
@@ -38,6 +40,36 @@ if TYPE_CHECKING:
 def command_handler(func: CommandHandler) -> CommandHandler:
     """Decorator to enforce CommandHandler interface compliance."""
     return func
+
+
+def _get_collision_free_destination(
+    source_item: Path,
+    target_bundle_dir: Path,
+    fs_service: FileSystemService,
+) -> Path:
+    """Choose a target path without overwriting an existing bundle entry."""
+    destination = target_bundle_dir / source_item.name
+    counter = 1
+    while fs_service.file_exists(destination) or fs_service.directory_exists(destination):
+        destination = target_bundle_dir / f"{source_item.stem}_{counter}{source_item.suffix}"
+        counter += 1
+    return destination
+
+
+def _move_additional_entries(source: TranscribeBundle, target: TranscribeBundle) -> None:
+    """Move top-level user-added files and complete directory trees."""
+    target_bundle_dir = target.get_bundle_dir()
+    for source_item in source.fs_service.list_directory(source.get_bundle_dir()):
+        destination = _get_collision_free_destination(source_item, target_bundle_dir, source.fs_service)
+
+        if source.fs_service.file_exists(source_item):
+            if source_item.name in MANAGED_BUNDLE_FILENAMES or is_handled_audio_file(source_item.suffix):
+                continue
+            source.fs_service.move_file(source_item, destination)
+        elif source.fs_service.directory_exists(source_item):
+            # A colliding directory is renamed as a whole instead of combining
+            # unrelated directory trees recursively.
+            source.fs_service.rename_directory(source_item, destination)
 
 
 def _move_audio_to_bundle(source: TranscribeBundle, target: TranscribeBundle) -> None:
@@ -68,11 +100,7 @@ def _move_audio_to_bundle(source: TranscribeBundle, target: TranscribeBundle) ->
             msg = f"Audio file not found for merge: {source_audio}"
             raise FileNotFoundError(msg)
 
-        target_audio = target_bundle_dir / source_audio.name
-        counter = 1
-        while source.fs_service.file_exists(target_audio):
-            target_audio = target_bundle_dir / f"{source_audio.stem}_{counter}{source_audio.suffix}"
-            counter += 1
+        target_audio = _get_collision_free_destination(source_audio, target_bundle_dir, source.fs_service)
 
         source.fs_service.move_file(source_audio, target_audio)
         moved_audio_paths.append(target_audio)
@@ -224,8 +252,8 @@ def _write_fail_markers(source: TranscribeBundle, target: TranscribeBundle) -> N
             raise MergeBlockedException(msg)
 
     # Write failure markers up front into BOTH bundles. If the merge aborts mid-way,
-    # these cues stay on disk (both bundles are preserved and retryable), making a
-    # partial/failed merge obvious and blocking future auto-retries from either side.
+    # both directories remain and these cues make any partial state obvious while
+    # blocking future auto-retries from either side.
     _write_merge_failed_marker(
         bundle=source,
         source_name=source.bundle_name,
@@ -270,6 +298,8 @@ def handle_merge(source: TranscribeBundle, _config: TranscribeConfig, bundles_ca
     Side effects / merge policy:
         - Audio, transcript, commands and transcript-model metadata are merged into
           the previous (target) bundle.
+        - Other top-level files and complete directory trees move into the target
+          with collision-safe names; application-managed files are excluded.
         - The per-bundle custom_context.md is concatenated into the target so the
           combined bundle keeps the context of both recordings.
         - The summary is always cleared (and ``summary_model_used`` reset) so it gets
@@ -330,9 +360,10 @@ def handle_merge(source: TranscribeBundle, _config: TranscribeConfig, bundles_ca
         # leaves the source bundle fully intact and retryable.
         target.metadata.write(target_bundle_dir, target.fs_service)
 
-        # Move audio into the target only after the target is committed. This is the
-        # last mutation before deletion, so a failed merge never strands the source
-        # without its audio: the source stays whole and the merge is safely retried.
+        # Move source-owned files only after the target is committed. These are the
+        # final mutations before source deletion; failure markers make any partial
+        # filesystem move visible and block an unsafe automatic retry.
+        _move_additional_entries(source=source, target=target)
         _move_audio_to_bundle(source=source, target=target)
         # Rebuild target metadata now that the source audio is included, then commit.
         target.metadata.write(target_bundle_dir, target.fs_service)
@@ -350,7 +381,7 @@ def handle_merge(source: TranscribeBundle, _config: TranscribeConfig, bundles_ca
     except Exception:
         logger.exception(
             f"Merge of {source.bundle_name} into {target.bundle_name} failed; "
-            f"source bundle is preserved and retryable (marker written to target).",
+            f"source directory was not deleted; inspect both marked bundles before retrying.",
         )
         raise
 

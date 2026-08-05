@@ -28,9 +28,11 @@ Start command, merge this with the previous recording, stop command.
 
 The current bundle is merged into the most recent earlier bundle within `general.merge_max_hours`. Audio, transcripts, command state, and recording-specific context are combined. The combined summary is regenerated because a summary of either original recording would be stale.
 
-A manual title already assigned to the target bundle remains authoritative. An automatically generated target title can be replaced after the combined summary is generated.
+Additional files and directories stored directly inside the current bundle are also moved into the target bundle.
 
-If a merge fails after mutation begins, `_merge_failed.md` markers block automatic retries. Inspect the affected bundles, correct any inconsistency, and remove the marker files before allowing another merge.
+The target title can be replaced after the combined summary is generated, unless it's marked as a "manual" title.
+
+If a merge fails while processing, `_merge_failed.md` markers block automatic retries. Inspect the affected bundles, correct any inconsistency, and remove the failure marker file to allow retries.
 
 ### Delete the current recording
 

@@ -10,6 +10,20 @@ DELETED_DIR_NAME = "_deleted"
 # effective context is computed, so the pregenerated header never triggers a
 # summary regeneration.
 CUSTOM_CONTEXT_FILENAME = "custom_context.md"
+
+# Files managed by Transcriber. Bundle merges handle each file according to
+# its specific purpose instead of moving it as a user-added attachment.
+MANAGED_BUNDLE_FILENAMES = frozenset(
+    {
+        TRANSCRIPT_FILENAME,
+        SUMMARY_FILENAME,
+        COMMANDS_FILENAME,
+        METADATA_FILENAME,
+        MERGE_FAILED_FILENAME,
+        CUSTOM_CONTEXT_FILENAME,
+    },
+)
+
 DEFAULT_CUSTOM_CONTEXT_CONTENT = (
     "[//]: # Optional context to help the summary. Lines starting with [//]: are ignored.\n"
     "[//]: # Changes to this file will trigger a new summary and bundle name generation.\n"

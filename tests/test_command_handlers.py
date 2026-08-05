@@ -247,6 +247,132 @@ class TestHandleMerge:
             "Recording 20250115090000_1.mp3": ["source-model"],
         }
 
+    def test_handle_merge_moves_additional_files_and_renames_collisions(
+        self,
+        fake_config: TranscribeConfig,
+        fake_fs: FakeFileSystemService,
+        transcribe_bundle_factory: TranscribeBundleFactory,
+    ) -> None:
+        """User-added top-level files survive merge without overwriting target files."""
+        previous_bundle = transcribe_bundle_factory(
+            bundle_name="2025-01-15_previous",
+            audio_filename="Recording 20250115080000.mp3",
+            bundle_date=datetime(2025, 1, 15, 8, tzinfo=fake_config.general.timezone),
+        )
+        current_bundle = transcribe_bundle_factory(
+            bundle_name="2025-01-15_current",
+            audio_filename="Recording 20250115090000.mp3",
+            bundle_date=datetime(2025, 1, 15, 9, tzinfo=fake_config.general.timezone),
+            commands=["merge"],
+        )
+        assert current_bundle.commands is not None
+
+        target_dir = previous_bundle.get_bundle_dir()
+        source_dir = current_bundle.get_bundle_dir()
+        fake_fs.write_file(target_dir / "notes.txt", "target notes")
+        fake_fs.write_file(target_dir / "notes_1.txt", "earlier collision")
+        fake_fs.write_file(source_dir / "notes.txt", "source notes")
+        fake_fs.write_file(source_dir / "attachment.pdf", "source attachment")
+
+        with pytest.raises(AbortForMergeTargetException):
+            handle_merge(
+                current_bundle,
+                fake_config,
+                _bundle_cache(previous_bundle, current_bundle),
+                current_bundle.commands.commands[0],
+            )
+
+        assert fake_fs.read_file(target_dir / "notes.txt") == "target notes"
+        assert fake_fs.read_file(target_dir / "notes_1.txt") == "earlier collision"
+        assert fake_fs.read_file(target_dir / "notes_2.txt") == "source notes"
+        assert fake_fs.read_file(target_dir / "attachment.pdf") == "source attachment"
+
+    def test_handle_merge_moves_directory_trees_and_renames_collisions(
+        self,
+        fake_config: TranscribeConfig,
+        fake_fs: FakeFileSystemService,
+        transcribe_bundle_factory: TranscribeBundleFactory,
+    ) -> None:
+        """A top-level directory moves intact under one collision-safe name."""
+        previous_bundle = transcribe_bundle_factory(
+            bundle_name="2025-01-15_previous",
+            audio_filename="Recording 20250115080000.mp3",
+            bundle_date=datetime(2025, 1, 15, 8, tzinfo=fake_config.general.timezone),
+        )
+        current_bundle = transcribe_bundle_factory(
+            bundle_name="2025-01-15_current",
+            audio_filename="Recording 20250115090000.mp3",
+            bundle_date=datetime(2025, 1, 15, 9, tzinfo=fake_config.general.timezone),
+            commands=["merge"],
+        )
+        assert current_bundle.commands is not None
+
+        target_dir = previous_bundle.get_bundle_dir()
+        source_dir = current_bundle.get_bundle_dir()
+        fake_fs.write_file(target_dir / "attachments" / "target.txt", "target attachment")
+        fake_fs.write_file(target_dir / "attachments_1" / "earlier.txt", "earlier collision")
+        fake_fs.write_file(source_dir / "attachments" / "nested" / "source.txt", "source attachment")
+        fake_fs.write_file(source_dir / "photos" / "image.jpg", "source photo")
+
+        with pytest.raises(AbortForMergeTargetException):
+            handle_merge(
+                current_bundle,
+                fake_config,
+                _bundle_cache(previous_bundle, current_bundle),
+                current_bundle.commands.commands[0],
+            )
+
+        assert fake_fs.read_file(target_dir / "attachments" / "target.txt") == "target attachment"
+        assert fake_fs.read_file(target_dir / "attachments_1" / "earlier.txt") == "earlier collision"
+        assert fake_fs.read_file(target_dir / "attachments_2" / "nested" / "source.txt") == "source attachment"
+        assert fake_fs.read_file(target_dir / "photos" / "image.jpg") == "source photo"
+
+    def test_handle_merge_does_not_move_managed_files_as_additional_files(
+        self,
+        fake_config: TranscribeConfig,
+        fake_fs: FakeFileSystemService,
+        transcribe_bundle_factory: TranscribeBundleFactory,
+    ) -> None:
+        """Application-owned files keep their semantic merge behavior."""
+        previous_bundle = transcribe_bundle_factory(
+            bundle_name="2025-01-15_previous",
+            audio_filename="Recording 20250115080000.mp3",
+            bundle_date=datetime(2025, 1, 15, 8, tzinfo=fake_config.general.timezone),
+            transcript_text="target transcript",
+            summary_text="target summary",
+            commands=["target command"],
+            custom_context="target context",
+        )
+        current_bundle = transcribe_bundle_factory(
+            bundle_name="2025-01-15_current",
+            audio_filename="Recording 20250115090000.mp3",
+            bundle_date=datetime(2025, 1, 15, 9, tzinfo=fake_config.general.timezone),
+            transcript_text="source transcript",
+            summary_text="source summary",
+            commands=["merge"],
+            custom_context="source context",
+        )
+        assert current_bundle.commands is not None
+
+        with pytest.raises(AbortForMergeTargetException):
+            handle_merge(
+                current_bundle,
+                fake_config,
+                _bundle_cache(previous_bundle, current_bundle),
+                current_bundle.commands.commands[0],
+            )
+
+        target_dir = previous_bundle.get_bundle_dir()
+        collision_copies = {
+            "_metadata_1.md",
+            "transcript_1.md",
+            "summary_1.md",
+            "_commands_1.md",
+            "custom_context_1.md",
+            "_merge_failed_1.md",
+        }
+        assert collision_copies.isdisjoint(path.name for path in fake_fs.list_directory(target_dir))
+
     def test_handle_merge_merges_transcript_model_and_keep_forever_edge_cases(
         self,
         fake_config: TranscribeConfig,
