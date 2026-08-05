@@ -666,9 +666,8 @@ class TranscribeBundle:
         transcript: str,
     ) -> None:
         """Set and write the transcript to memory and disk."""
-        # Record the transcript model on the first audio file's metadata.
-        if self.metadata.audio_files:
-            self.metadata.audio_files[0].transcript_model_used = [self.config.audio.model]
+        for audio_meta in self.metadata.audio_files:
+            audio_meta.transcript_model_used = [self.config.audio.model]
         self.metadata.write(self.get_bundle_dir(), self.fs_service)
         self.transcript = TranscriptFile(transcript)
         self.transcript.write(self.get_bundle_dir(), self.fs_service)

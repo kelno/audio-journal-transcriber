@@ -471,6 +471,23 @@ class TestTranscribeBundleWriteOperations:
         # Check metadata was updated
         assert fake_fs.file_exists(generic_bundle_dir / METADATA_FILENAME)
 
+    def test_set_and_write_transcript_records_model_for_every_audio(
+        self,
+        generic_bundle: TranscribeBundle,
+    ) -> None:
+        """A complete bundle transcription uses the configured model for every audio."""
+        generic_bundle.metadata.audio_files[0].transcript_model_used = ["old-model"]
+        generic_bundle.metadata.audio_files.append(
+            AudioFileMeta(filename="part-two.mp3", transcript_model_used=["other-model"]),
+        )
+
+        generic_bundle.set_and_write_transcript("regenerated transcript")
+
+        assert [
+            audio_meta.transcript_model_used
+            for audio_meta in generic_bundle.metadata.audio_files
+        ] == [[generic_bundle.config.audio.model], [generic_bundle.config.audio.model]]
+
     def test_set_and_write_summary(
         self,
         fake_fs: FakeFileSystemService,
