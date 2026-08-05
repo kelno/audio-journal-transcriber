@@ -5,7 +5,6 @@ Contains the implementation logic for each command type.
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import TYPE_CHECKING, final
 
 from transcriber.bundle_title import BundleTitleState
@@ -28,6 +27,8 @@ from transcriber.logger import logger
 from transcriber.transcribe_bundle import BundleCache, TranscribeBundle
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     from transcriber.commands.command import Command
     from transcriber.commands.command_definition import CommandHandler
     from transcriber.config import TranscribeConfig
@@ -61,6 +62,7 @@ def _move_audio_to_bundle(source: TranscribeBundle, target: TranscribeBundle) ->
     target_bundle_dir = target.get_bundle_dir()
 
     moved_audio_paths: list[Path] = []
+    moved_audio_names: dict[str, str] = {}
     for source_audio in source.source_audios:
         if not source.fs_service.file_exists(source_audio):
             msg = f"Audio file not found for merge: {source_audio}"
@@ -74,6 +76,7 @@ def _move_audio_to_bundle(source: TranscribeBundle, target: TranscribeBundle) ->
 
         source.fs_service.move_file(source_audio, target_audio)
         moved_audio_paths.append(target_audio)
+        moved_audio_names[source_audio.name] = target_audio.name
 
     target.source_audios.extend(moved_audio_paths)
     target.source_audios = TranscribeBundle.sort_audio_files_chronologically(
@@ -82,18 +85,13 @@ def _move_audio_to_bundle(source: TranscribeBundle, target: TranscribeBundle) ->
         target.fs_service,
     )
 
-    # Build a mapping of final filenames to their metadata (with renamed targets).
-    # This ensures metadata stays in sync with the sorted source_audios order.
-    moved_names = {p.name for p in moved_audio_paths}
+    # Associate metadata with the destination chosen for that exact source file.
+    # Inferring the destination from stems is ambiguous once a collision adds a suffix.
     source_meta_by_final_name: dict[str, AudioFileMeta] = {}
     for audio_meta in source.metadata.audio_files:
-        new_filename = audio_meta.filename
-        if audio_meta.filename in moved_names:
-            # Find the collision-renamed target name for this source file.
-            for moved in moved_audio_paths:
-                if moved.stem == Path(audio_meta.filename).stem:
-                    new_filename = moved.name
-                    break
+        new_filename = moved_audio_names.get(audio_meta.filename)
+        if new_filename is None:
+            continue
         source_meta_by_final_name[new_filename] = AudioFileMeta(
             filename=new_filename,
             transcript_model_used=list(audio_meta.transcript_model_used),

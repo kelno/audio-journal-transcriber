@@ -200,6 +200,53 @@ class TestHandleMerge:
         # Verify keep_forever is promoted to True when either source bundle is kept forever
         assert merged_bundle.metadata.keep_forever is True
 
+    def test_handle_merge_preserves_audio_metadata_when_filenames_collide(
+        self,
+        fake_config: TranscribeConfig,
+        fake_fs: FakeFileSystemService,
+        fake_audio_service: FakeAudioService,
+        transcribe_bundle_factory: TranscribeBundleFactory,
+    ) -> None:
+        """Each same-named audio keeps its own metadata after collision renaming."""
+        audio_filename = "Recording 20250115090000.mp3"
+        previous_bundle = transcribe_bundle_factory(
+            bundle_name="2025-01-15_previous",
+            audio_filename=audio_filename,
+            bundle_date=datetime(2025, 1, 15, 8, tzinfo=fake_config.general.timezone),
+            transcript_model_used="target-model",
+        )
+        current_bundle = transcribe_bundle_factory(
+            bundle_name="2025-01-15_current",
+            audio_filename=audio_filename,
+            bundle_date=datetime(2025, 1, 15, 9, tzinfo=fake_config.general.timezone),
+            transcript_model_used="source-model",
+            commands=["merge"],
+        )
+        assert current_bundle.commands is not None
+
+        with pytest.raises(AbortForMergeTargetException):
+            handle_merge(
+                current_bundle,
+                fake_config,
+                _bundle_cache(previous_bundle, current_bundle),
+                current_bundle.commands.commands[0],
+            )
+
+        merged_bundle = TranscribeBundle.from_existing_directory(
+            existing_dir=previous_bundle.get_bundle_dir(),
+            config=fake_config,
+            fs_service=fake_fs,
+            audio_service=fake_audio_service,
+        )
+
+        metadata_by_filename = {
+            audio_meta.filename: audio_meta.transcript_model_used for audio_meta in merged_bundle.metadata.audio_files
+        }
+        assert metadata_by_filename == {
+            audio_filename: ["target-model"],
+            "Recording 20250115090000_1.mp3": ["source-model"],
+        }
+
     def test_handle_merge_merges_transcript_model_and_keep_forever_edge_cases(
         self,
         fake_config: TranscribeConfig,
