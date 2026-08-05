@@ -6,7 +6,8 @@ from typing import TYPE_CHECKING
 
 from transcriber.actions.action import BundleTarget, DeleteAction, MergeAction, SetTitleAction
 from transcriber.actions.action_request import ActionEffects, ActionError, ActionFailed, ActionResult, ActionSucceeded
-from transcriber.commands.command_handlers import merge_bundles
+from transcriber.bundle_title import BundleTitleState
+from transcriber.commands.command_handlers import delete_bundle, merge_bundles
 from transcriber.logger import logger
 
 if TYPE_CHECKING:
@@ -25,13 +26,10 @@ class BundleActionExecutor:
         match action:
             case MergeAction():
                 return self._execute_merge(action)
-            case DeleteAction() | SetTitleAction():
-                return ActionFailed(
-                    error=ActionError(
-                        code="action_not_enabled",
-                        message=f"Action type {action.type!r} is not enabled through requests yet.",
-                    ),
-                )
+            case DeleteAction():
+                return self._execute_delete(action)
+            case SetTitleAction():
+                return self._execute_set_title(action)
 
     def _execute_merge(self, action: MergeAction) -> ActionResult:
         source = self._bundle_cache.get(action.source_bundle_id)
@@ -64,3 +62,21 @@ class BundleActionExecutor:
             target = self._bundle_cache.get(action.target.bundle_id)
             return target if target is not None and target.bundle_id != source.bundle_id else None
         return source.find_previous_bundle(source, self._bundle_cache.values())
+
+    def _execute_delete(self, action: DeleteAction) -> ActionResult:
+        bundle = self._bundle_cache.get(action.bundle_id)
+        if bundle is None:
+            return ActionFailed(
+                error=ActionError(code="bundle_not_found", message="The bundle no longer exists."),
+            )
+        delete_bundle(bundle, self._bundle_cache)
+        return ActionSucceeded(effects=ActionEffects(removed_bundle_ids=(action.bundle_id,)))
+
+    def _execute_set_title(self, action: SetTitleAction) -> ActionResult:
+        bundle = self._bundle_cache.get(action.bundle_id)
+        if bundle is None:
+            return ActionFailed(
+                error=ActionError(code="bundle_not_found", message="The bundle no longer exists."),
+            )
+        bundle.set_and_write_bundle_title(action.title, title_state=BundleTitleState.MANUAL)
+        return ActionSucceeded(effects=ActionEffects(changed_bundle_ids=(action.bundle_id,)))

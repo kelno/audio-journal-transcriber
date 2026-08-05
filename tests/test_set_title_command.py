@@ -7,6 +7,7 @@ import pytest
 from tests.bundle_fixtures import TranscribeBundleFactory
 from tests.fake_ai_manager import FakeAIManager
 from tests.fake_file_system import FakeFileSystemService
+from transcriber.actions.action_request_store import SQLiteActionRequestStore, default_action_request_database_path
 from transcriber.audio_transcriber import AudioTranscriber
 from transcriber.bundle_title import BundleTitleState
 from transcriber.commands.command_handlers import AbortForMergeTargetException
@@ -16,6 +17,7 @@ from transcriber.commands.command_interpretation import (
     SetTitleCommandArguments,
     SetTitleCommandInterpretation,
 )
+from transcriber.commands.command_resolution import ActionRequestCommandResolution
 from transcriber.commands.command_type import CommandType
 from transcriber.config import TranscribeConfig
 from transcriber.transcribe_bundle_job import RunCommandsJob
@@ -115,3 +117,11 @@ class TestSetTitleCommand:
         assert merged_target.metadata.bundle_title_state is BundleTitleState.MANUAL
         assert merged_target.commands is not None
         assert all(command.executed for command in merged_target.commands.commands)
+        title_command = next(command for command in merged_target.commands.commands if command.text == final_title)
+        assert isinstance(title_command.resolution, ActionRequestCommandResolution)
+        assert title_command.resolution.outcome == "succeeded"
+        request = SQLiteActionRequestStore(
+            default_action_request_database_path(fake_config.general.store_dir),
+        ).get(title_command.resolution.request_id)
+        assert request is not None
+        assert request.acknowledged_at is not None

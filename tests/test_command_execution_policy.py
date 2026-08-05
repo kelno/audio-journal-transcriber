@@ -6,6 +6,7 @@ import pytest
 
 from tests.bundle_fixtures import TranscribeBundleFactory
 from tests.fake_ai_manager import FakeAIManager
+from transcriber.actions.action_request_store import SQLiteActionRequestStore, default_action_request_database_path
 from transcriber.commands.command import Command
 from transcriber.commands.command_execution_policy import CommandExecutionPolicy
 from transcriber.commands.command_interpretation import (
@@ -13,8 +14,10 @@ from transcriber.commands.command_interpretation import (
     ArgumentlessCommandType,
 )
 from transcriber.commands.command_registry import COMMAND_REGISTRY
+from transcriber.commands.command_resolution import ActionRequestCommandResolution
 from transcriber.commands.command_type import CommandType
 from transcriber.config import TranscribeConfig
+from transcriber.exception import AbortRemainingBundleJobsException
 from transcriber.transcribe_bundle import BundleCache, TranscribeBundle
 from transcriber.transcribe_bundle_job import RunCommandsJob
 
@@ -110,3 +113,36 @@ class TestCommandExecutionPolicy:
     def test_set_title_uses_latest_pending_policy(self) -> None:
         """The title command opts into revision-style deduplication."""
         assert COMMAND_REGISTRY[CommandType.SET_TITLE].execution_policy is CommandExecutionPolicy.LATEST_PENDING
+
+    def test_delete_acknowledges_request_when_command_origin_is_removed(
+        self,
+        fake_ai_manager: FakeAIManager,
+        fake_config: TranscribeConfig,
+        transcribe_bundle_factory: TranscribeBundleFactory,
+    ) -> None:
+        """A successful delete can acknowledge without writing a terminal command receipt."""
+        bundle = transcribe_bundle_factory(
+            bundle_name="2025-01-15_delete-action",
+            audio_filename="recording.mp3",
+            commands=["delete this recording"],
+        )
+        _set_all_command_types(bundle, CommandType.DELETE)
+        assert bundle.commands is not None
+        command = bundle.commands.commands[0]
+        bundle_cache = {bundle.bundle_id: bundle}
+
+        with pytest.raises(AbortRemainingBundleJobsException):
+            RunCommandsJob(bundle, dry_run=False).run(
+                fake_ai_manager,
+                fake_config,
+                bundle_cache,
+            )
+
+        assert bundle.bundle_id not in bundle_cache
+        assert isinstance(command.resolution, ActionRequestCommandResolution)
+        request = SQLiteActionRequestStore(
+            default_action_request_database_path(fake_config.general.store_dir),
+        ).get(command.resolution.request_id)
+        assert request is not None
+        assert request.status == "succeeded"
+        assert request.acknowledged_at is not None

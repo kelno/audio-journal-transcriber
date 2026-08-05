@@ -431,12 +431,17 @@ def handle_delete(bundle: TranscribeBundle, _config: TranscribeConfig, bundles_c
     """
     logger.debug(f"Running delete command for {bundle} (command text: {cmd.text})")
     bundle.set_command_executed(cmd.id)
-    bundle.fs_service.delete_directory(bundle.get_bundle_dir())
-    bundles_cache.pop(bundle.bundle_id)
+    delete_bundle(bundle, bundles_cache)
     logger.info(f"Removed bundle {bundle} (command text: {cmd.text})")
 
     msg = "Skip remaining jobs after delete command"
     raise AbortRemainingBundleJobsException(msg)
+
+
+def delete_bundle(bundle: TranscribeBundle, bundles_cache: BundleCache) -> None:
+    """Remove one explicitly selected bundle from disk and the loaded cache."""
+    bundle.fs_service.delete_directory(bundle.get_bundle_dir())
+    bundles_cache.pop(bundle.bundle_id)
 
 
 @command_handler

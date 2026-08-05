@@ -876,6 +876,12 @@ Validation:
 - Reuse the same processor and terminal acknowledgement mechanism.
 - Keep `ignore` and unknown-command handling in command processing.
 
+Implementation note: voice delete and set-title now use the same
+`BundleActionExecutor` as filesystem requests. Direct handlers remain as thin
+compatibility entry points around the shared mutation functions. A successful
+delete acknowledges its canonical request even though deleting the bundle also
+removes the command file that would otherwise receive the terminal receipt.
+
 Validation:
 
 - existing delete and set-title behavior remains unchanged;

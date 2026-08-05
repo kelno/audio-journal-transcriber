@@ -5,7 +5,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import override
 
-from transcriber.actions.action import MergeAction, PreviousBundleTarget
+from transcriber.actions.action import Action, DeleteAction, MergeAction, PreviousBundleTarget, SetTitleAction
 from transcriber.actions.action_executors import BundleActionExecutor
 from transcriber.actions.action_request import (
     ActionBlocked,
@@ -22,6 +22,7 @@ from transcriber.bundle_title import BundleTitleState
 from transcriber.commands.command import Command
 from transcriber.commands.command_execution_policy import CommandExecutionPolicy
 from transcriber.commands.command_handlers import AbortForMergeTargetException
+from transcriber.commands.command_interpretation import SetTitleCommandArguments
 from transcriber.commands.command_registry import COMMAND_REGISTRY
 from transcriber.commands.command_resolution import ActionRequestCommandResolution
 from transcriber.commands.command_type import CommandType
@@ -545,8 +546,8 @@ class RunCommandsJob(TranscribeBundleJob):
 
                 logger.info(f"Executing {matched_type.value} command for bundle {self.bundle}")
 
-                if matched_type is CommandType.MERGE:
-                    self._execute_merge_action(cmd, config, bundle_cache)
+                if matched_type in {CommandType.MERGE, CommandType.DELETE, CommandType.SET_TITLE}:
+                    self._execute_action_request(cmd, matched_type, config, bundle_cache)
                     continue
 
                 handler = definition.handler
@@ -573,17 +574,15 @@ class RunCommandsJob(TranscribeBundleJob):
                 self.bundle.add_command_attempt(cmd_id=cmd.id)
                 raise
 
-    def _execute_merge_action(
+    def _execute_action_request(
         self,
         command: Command,
+        command_type: CommandType,
         config: TranscribeConfig,
         bundle_cache: BundleCache,
     ) -> None:
-        """Submit, execute, and acknowledge a merge through the request boundary."""
-        action = MergeAction(
-            source_bundle_id=self.bundle.bundle_id,
-            target=PreviousBundleTarget(),
-        )
+        """Submit, execute, and acknowledge one state-changing command."""
+        action = self._action_from_command(command, command_type)
         origin = CommandActionOrigin(bundle_id=self.bundle.bundle_id, command_id=command.id)
         resolution = command.resolution
         if isinstance(resolution, ActionRequestCommandResolution):
@@ -611,22 +610,65 @@ class RunCommandsJob(TranscribeBundleJob):
 
         request = service.get_request(request_id)
         assert request is not None
-        self._acknowledge_command_result(command.id, request, result, service, bundle_cache, config)
+        self._acknowledge_command_result(
+            command.id,
+            request,
+            result,
+            service,
+            bundle_cache,
+            config,
+            origin_may_be_removed=isinstance(action, DeleteAction) and isinstance(result, ActionSucceeded),
+        )
+        self._handle_action_result(action, result, request_id, command.id, bundle_cache)
 
+    def _action_from_command(self, command: Command, command_type: CommandType) -> Action:
+        """Translate a validated command into immutable action intent."""
+        match command_type:
+            case CommandType.MERGE:
+                return MergeAction(
+                    source_bundle_id=self.bundle.bundle_id,
+                    target=PreviousBundleTarget(),
+                )
+            case CommandType.DELETE:
+                return DeleteAction(bundle_id=self.bundle.bundle_id)
+            case CommandType.SET_TITLE:
+                arguments = command.arguments
+                if not isinstance(arguments, SetTitleCommandArguments):
+                    msg = f"SET_TITLE command has invalid arguments: {command.text}"
+                    raise TypeError(msg)
+                return SetTitleAction(bundle_id=self.bundle.bundle_id, title=arguments.title)
+            case _:
+                msg = f"Command type does not create an action request: {command_type}"
+                raise ValueError(msg)
+
+    def _handle_action_result(
+        self,
+        action: Action,
+        result: ActionResult,
+        request_id: str,
+        command_id: str,
+        bundle_cache: BundleCache,
+    ) -> None:
+        """Translate a terminal action result into the existing job-loop control flow."""
         if isinstance(result, ActionSucceeded):
-            target = next(
-                (bundle_cache.get(bundle_id) for bundle_id in result.effects.changed_bundle_ids if bundle_cache.get(bundle_id)),
-                None,
-            )
+            if isinstance(action, DeleteAction):
+                msg = "Skip remaining jobs after delete action"
+                raise AbortRemainingBundleJobsException(msg)
+            if isinstance(action, SetTitleAction):
+                return
+            target = next((bundle_cache[bundle_id] for bundle_id in result.effects.changed_bundle_ids if bundle_id in bundle_cache), None)
             if target is None:
-                target = self._find_command_bundle(command.id, bundle_cache)
+                target = self._find_command_bundle(command_id, bundle_cache)
             if target is None:
                 msg = "Merge succeeded but its surviving target could not be located"
                 raise RuntimeError(msg)
             raise AbortForMergeTargetException(target, f"Merged bundle {self.bundle} into {target}")
         if isinstance(result, ActionBlocked):
-            raise MergeBlockedException(result.error.message)
-        logger.error(f"Merge request {request_id} failed: {result.error.message}")
+            if isinstance(action, MergeAction):
+                raise MergeBlockedException(result.error.message)
+            msg = f"Action request {request_id} blocked: {result.error.message}"
+            raise AbortRemainingBundleJobsException(msg)
+        logger.error(f"Action request {request_id} failed: {result.error.message}")
 
     @staticmethod
     def _result_from_request(request: ActionRequest) -> ActionResult:
@@ -653,10 +695,15 @@ class RunCommandsJob(TranscribeBundleJob):
         service: ActionService,
         bundle_cache: BundleCache,
         config: TranscribeConfig,
+        *,
+        origin_may_be_removed: bool,
     ) -> None:
         """Persist the terminal receipt before acknowledging its request row."""
         owner = cls._find_command_bundle(command_id, bundle_cache)
         if owner is None:
+            if origin_may_be_removed:
+                service.acknowledge(request.request_id)
+                return
             msg = f"Could not locate command {command_id} while acknowledging request {request.request_id}"
             raise ValueError(msg)
         resolved_at = request.finished_at or datetime.now(config.general.timezone)
