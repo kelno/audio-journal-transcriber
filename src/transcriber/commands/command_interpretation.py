@@ -2,8 +2,9 @@
 
 from typing import Annotated, ClassVar, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, field_validator
+from pydantic import BaseModel, ConfigDict, Field, TypeAdapter
 
+from transcriber.bundle_title import RequestedBundleTitle
 from transcriber.commands.command_type import CommandType
 
 
@@ -20,16 +21,7 @@ class EmptyCommandArguments(StrictCommandModel):
 class SetTitleCommandArguments(StrictCommandModel):
     """Arguments extracted for a SET_TITLE command."""
 
-    title: str
-
-    @field_validator("title")
-    @classmethod
-    def validate_title(cls, title: str) -> str:
-        """Reject titles containing only whitespace while preserving user text."""
-        if not title.strip():
-            msg = "SET_TITLE requires a non-empty arguments.title string"
-            raise ValueError(msg)
-        return title
+    title: RequestedBundleTitle
 
 
 type CommandArguments = EmptyCommandArguments | SetTitleCommandArguments
