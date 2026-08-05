@@ -4,7 +4,7 @@ from datetime import UTC, datetime
 from typing import Annotated, ClassVar, Literal
 from uuid import uuid4
 
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints, TypeAdapter
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, StringConstraints, TypeAdapter
 
 from transcriber.actions.action import Action
 from transcriber.bundle_id import BundleId
@@ -131,9 +131,9 @@ class ActionRequest(BaseModel):
     origin: ActionOrigin = Field(frozen=True)
     status: ActionRequestStatus = "pending"
     attempt_count: int = Field(default=0, ge=0)
-    created_at: datetime = Field(default_factory=_utc_now, frozen=True)
-    started_at: datetime | None = None
-    finished_at: datetime | None = None
-    expires_at: datetime | None = None
+    created_at: AwareDatetime = Field(default_factory=_utc_now, frozen=True)
+    started_at: AwareDatetime | None = None
+    finished_at: AwareDatetime | None = None
+    expires_at: AwareDatetime | None = None
     error: ActionError | None = None
-    acknowledged_at: datetime | None = None
+    acknowledged_at: AwareDatetime | None = None

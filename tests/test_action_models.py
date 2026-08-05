@@ -156,6 +156,15 @@ class TestActionRequestSerialization:
                 attempt_count=-1,
             )
 
+    def test_request_rejects_naive_timestamps(self) -> None:
+        """Durable lifecycle timestamps must identify an unambiguous instant."""
+        with pytest.raises(ValidationError):
+            ActionRequest(
+                action=DeleteAction(bundle_id=SOURCE_BUNDLE_ID),
+                origin=FilesystemActionOrigin(),
+                created_at=datetime(2026, 8, 5, 10),  # noqa: DTZ001 - deliberately invalid input
+            )
+
 
 class TestActionResultSerialization:
     """Terminal executor results use outcome-specific schemas."""
