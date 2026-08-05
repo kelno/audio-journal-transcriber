@@ -2,15 +2,12 @@
 
 from datetime import datetime, timedelta
 
-import pytest
-
 from tests.bundle_fixtures import TranscribeBundleFactory
 from tests.fake_ai_manager import FakeAIManager
 from tests.fake_file_system import FakeFileSystemService
 from transcriber.actions.action_request_store import SQLiteActionRequestStore, default_action_request_database_path
 from transcriber.audio_transcriber import AudioTranscriber
 from transcriber.bundle_title import BundleTitleState
-from transcriber.commands.command_handlers import AbortForMergeTargetException
 from transcriber.commands.command_interpretation import (
     ArgumentlessCommandInterpretation,
     CommandInterpretation,
@@ -106,10 +103,11 @@ class TestSetTitleCommand:
             source.bundle_id: source,
         }
 
-        with pytest.raises(AbortForMergeTargetException) as merge_result:
-            RunCommandsJob(source, dry_run=False).run(fake_ai_manager, fake_config, bundle_cache)
+        merge_effects = RunCommandsJob(source, dry_run=False).run(fake_ai_manager, fake_config, bundle_cache)
 
-        merged_target = merge_result.value.bundle
+        assert merge_effects is not None
+        assert len(merge_effects.changed_bundle_ids) == 1
+        merged_target = bundle_cache[merge_effects.changed_bundle_ids[0]]
         RunCommandsJob(merged_target, dry_run=False).run(fake_ai_manager, fake_config, bundle_cache)
 
         assert source.bundle_id not in bundle_cache

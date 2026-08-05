@@ -1,10 +1,10 @@
 from dataclasses import dataclass
 from pathlib import Path
 
+from transcriber.actions.action_request import ActionEffects
 from transcriber.actions.filesystem_action_requests import FilesystemActionRequestAdapter
 from transcriber.ai_manager import AIManager
 from transcriber.audio_service import AudioService, RealAudioService
-from transcriber.commands.command_handlers import AbortForMergeTargetException
 from transcriber.commands.command_registry import COMMAND_REGISTRY
 from transcriber.config import TranscribeConfig
 from transcriber.exception import (
@@ -85,13 +85,12 @@ class AudioTranscriber:
             f"{type(self).__name__} initialized with\nGeneral configuration: {self.config.general}",
         )
 
-    def _handle_process_jobs_exception(self, job: TranscribeBundleJob, e: Exception, queue: BundleJobQueue) -> bool:
-        """Handle a job exception and update the ID-keyed work queue.
+    def _handle_process_jobs_exception(self, job: TranscribeBundleJob, e: Exception) -> bool:
+        """Classify a job exception for logging and error reporting.
 
         Args:
             job: Job whose execution raised the exception.
             e: Exception raised by the job.
-            queue: Remaining jobs indexed by persistent bundle ID.
 
         Returns:
             Whether the exception represents an error for reporting purposes.
@@ -110,31 +109,6 @@ class AudioTranscriber:
                 f"Skipping remaining jobs for current bundle, requested by job {job}: {e}",
             )
             return False
-        elif isinstance(e, AbortForMergeTargetException):
-            logger.debug(f"Merge finished, re-processing target bundle: {e.bundle.bundle_name}")
-            # Drop the target's still-queued (stale) jobs.
-            # Re-gather fresh jobs from the merged target
-            existing = queue.pop(e.bundle.bundle_id, None)
-            requeue_count = (existing.requeue_count + 1) if existing is not None else 1
-            target_name = e.bundle.bundle_name
-            if requeue_count > MAX_REQUEUE_PER_BUNDLE:
-                logger.error(
-                    f"Bundle {target_name} re-queued too many times; stopping to avoid a loop.",
-                )
-                # Then we're done, at this point we've already removed any remaining jobs for the target
-                return True
-
-            # Recompute remaining jobs for target
-            queue[e.bundle.bundle_id] = BundleJobQueueEntry(
-                jobs=self.gather_bundle_jobs(
-                    e.bundle,
-                    self.config.general.store_dir,
-                    self.dry_run,
-                    config=self.config,
-                ),
-                requeue_count=requeue_count,
-            )
-            return False
         elif isinstance(e, MergeBlockedException):
             # A previous merge into the target failed and left a marker. Stop
             # processing this bundle and do NOT re-enqueue it, so the failed
@@ -145,6 +119,78 @@ class AudioTranscriber:
         else:
             logger.exception(f"Error processing {job} (skipping any remaining jobs for this bundle).")
             return True
+
+    def _apply_action_effects(
+        self,
+        effects: ActionEffects,
+        queue: BundleJobQueue,
+        bundle_cache: BundleCache,
+        current_bundle_id: str,
+        current_entry: BundleJobQueueEntry,
+    ) -> bool:
+        """Invalidate affected queue entries and derive fresh work for changed bundles."""
+        for removed_bundle_id in effects.removed_bundle_ids:
+            queue.pop(removed_bundle_id, None)
+
+        had_error = False
+        removed_ids = set(effects.removed_bundle_ids)
+        for changed_bundle_id in effects.changed_bundle_ids:
+            if changed_bundle_id in removed_ids:
+                continue
+            bundle = bundle_cache.get(changed_bundle_id)
+            if bundle is None:
+                logger.error(f"Action reported changed bundle {changed_bundle_id}, but it is absent from the bundle cache.")
+                had_error = True
+                continue
+
+            existing = queue.pop(changed_bundle_id, None)
+            previous_requeues = existing.requeue_count if existing is not None else 0
+            if changed_bundle_id == current_bundle_id:
+                previous_requeues = max(previous_requeues, current_entry.requeue_count)
+            requeue_count = previous_requeues + 1
+            if requeue_count > MAX_REQUEUE_PER_BUNDLE:
+                logger.error(
+                    f"Bundle {bundle.bundle_name} re-queued too many times; stopping to avoid a loop.",
+                )
+                had_error = True
+                continue
+
+            fresh_jobs = self.gather_bundle_jobs(
+                bundle,
+                self.config.general.store_dir,
+                self.dry_run,
+                config=self.config,
+            )
+            if fresh_jobs:
+                queue[changed_bundle_id] = BundleJobQueueEntry(
+                    jobs=fresh_jobs,
+                    requeue_count=requeue_count,
+                )
+        return had_error
+
+    @staticmethod
+    def _select_oldest_ready_bundle(queue: BundleJobQueue) -> str | None:
+        """Select the oldest bundle whose next job satisfies global readiness."""
+        has_command_work = any(
+            isinstance(queued_job, (GatherCommandsJob, RunCommandsJob))
+            for entry in queue.values()
+            for queued_job in entry.jobs
+        )
+        ready_ids = [
+            bundle_id
+            for bundle_id, entry in queue.items()
+            if entry.jobs
+            and not (
+                has_command_work
+                and isinstance(entry.jobs[0], (SummaryJob, BundleNameJob))
+            )
+        ]
+        if not ready_ids:
+            return None
+        return min(
+            ready_ids,
+            key=lambda bundle_id: (queue[bundle_id].jobs[0].bundle.get_bundle_date(), bundle_id),
+        )
 
     def process_jobs(self, all_jobs_bundles: list[BundleJobs], bundle_cache: BundleCache) -> list[BundleJobs]:
         """Process audio files from the pending directory.
@@ -164,27 +210,41 @@ class AudioTranscriber:
 
         errored_bundles = list[BundleJobs]()
         while queue:
-            # Process one bundle at a time; popitem() yields an arbitrary bundle.
-            _bundle_id, entry = queue.popitem()
-            jobs_bundle = entry.jobs
-            if not jobs_bundle:
-                continue
-            remaining_jobs_in_bundle = jobs_bundle.copy()
-            for job in jobs_bundle:
-                try:
-                    logger.debug(f"Processing job: {job}")
-                    job.run(
-                        ai_manager=self.ai_manager,
-                        config=self.config,
-                        bundle_cache=bundle_cache,
+            # Derived jobs do not have their own creation timestamp. The bundle's
+            # recording date is the stable age signal for oldest-ready-first work.
+            bundle_id = self._select_oldest_ready_bundle(queue)
+            if bundle_id is None:
+                logger.error("No queued bundle job is ready; stopping to avoid a scheduler loop.")
+                errored_bundles.extend(entry.jobs for entry in queue.values() if entry.jobs)
+                break
+
+            entry = queue[bundle_id]
+            job = entry.jobs[0]
+            try:
+                logger.debug(f"Processing job: {job}")
+                effects = job.run(
+                    ai_manager=self.ai_manager,
+                    config=self.config,
+                    bundle_cache=bundle_cache,
+                )
+                entry.jobs.pop(0)
+                if not entry.jobs:
+                    queue.pop(bundle_id)
+                if effects is not None and (effects.changed_bundle_ids or effects.removed_bundle_ids):
+                    errored = self._apply_action_effects(
+                        effects,
+                        queue,
+                        bundle_cache,
+                        bundle_id,
+                        entry,
                     )
-                    # Remove job from jobs bundle on successful execution
-                    remaining_jobs_in_bundle.remove(job)
-                except Exception as e:  # pylint: disable=broad-exception-caught
-                    errored = self._handle_process_jobs_exception(job, e, queue)
-                    if errored and len(remaining_jobs_in_bundle) > 0:
-                        errored_bundles.append(remaining_jobs_in_bundle)
-                    break  # skip remaining jobs in this bundle
+                    if errored and entry.jobs:
+                        errored_bundles.append(entry.jobs)
+            except Exception as e:  # pylint: disable=broad-exception-caught
+                errored = self._handle_process_jobs_exception(job, e)
+                queue.pop(bundle_id, None)
+                if errored and entry.jobs:
+                    errored_bundles.append(entry.jobs)
 
         return errored_bundles
 

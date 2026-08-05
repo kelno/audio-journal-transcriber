@@ -57,8 +57,22 @@ class FilesystemActionRequestAdapter:
             for path in self._fs_service.list_directory(self.request_directory)
             if path.suffix.casefold() == ".md" and self._fs_service.file_exists(path)
         ]
-        for request_file in request_files:
-            self._process_file(request_file, service, processor)
+        submitted_files = [
+            (request_file, request_id)
+            for request_file in request_files
+            if (request_id := self._submit_file(request_file, service)) is not None
+        ]
+
+        # SQLite creation time, not directory enumeration, is the canonical
+        # ordering for accepted requests. Command-origin requests are reconciled
+        # by their owning command job because only that adapter can write the
+        # terminal receipt back to the command file.
+        for request in store.list_pending():
+            if isinstance(request.origin, FilesystemActionOrigin):
+                processor.process(request.request_id)
+
+        for request_file, request_id in submitted_files:
+            self._project_file(request_file, request_id, service)
 
         deleted_ids = set(service.prune_expired())
         if deleted_ids:
@@ -67,14 +81,15 @@ class FilesystemActionRequestAdapter:
                 if request_id in deleted_ids and self._fs_service.file_exists(request_file):
                     self._fs_service.delete_file(request_file)
 
-    def _process_file(self, path: Path, service: ActionService, processor: ActionProcessor) -> None:
+    def _submit_file(self, path: Path, service: ActionService) -> ActionRequestId | None:
+        """Validate one draft and ensure its canonical row exists."""
         original = self._fs_service.read_file(path)
         try:
             frontmatter, body = self._parse_document(original)
             submission = _FilesystemSubmission.model_validate(frontmatter)
         except (TypeError, ValueError, yaml.YAMLError, ValidationError) as error:
             logger.warning(f"Invalid action request file {path}: {error}")
-            return
+            return None
 
         request_id = submission.request_id or new_action_request_id()
         if submission.request_id is None:
@@ -86,15 +101,21 @@ class FilesystemActionRequestAdapter:
             FilesystemActionOrigin(),
             request_id=request_id,
         )
+        return request_id
+
+    def _project_file(self, path: Path, request_id: ActionRequestId, service: ActionService) -> None:
+        """Refresh one valid draft from its canonical request state."""
+        original = self._fs_service.read_file(path)
+        try:
+            _frontmatter, body = self._parse_document(original)
+        except (TypeError, ValueError, yaml.YAMLError) as error:
+            logger.warning(f"Could not project action request file {path}: {error}")
+            return
         request = service.get_request(request_id)
         assert request is not None
-        if request.status == "pending":
-            processor.process(request_id)
-            request = service.get_request(request_id)
-            assert request is not None
 
         projection = self._request_projection(request)
-        self._write_if_changed(path, self._render_document(projection, body), self._fs_service.read_file(path))
+        self._write_if_changed(path, self._render_document(projection, body), original)
 
     def _read_request_id(self, path: Path) -> ActionRequestId | None:
         try:

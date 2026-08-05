@@ -904,6 +904,27 @@ Validation:
   action requests own execution attempts.
 - Update user documentation only after behavior is implemented.
 
+Implementation note: `RunCommandsJob` now returns `ActionEffects` to the
+synchronous `AudioTranscriber` coordinator. The coordinator removes stale work
+for removed IDs and re-derives work only for changed IDs; merge is no longer a
+special scheduler signal. The legacy direct merge handler keeps its exception
+only as a compatibility boundary for callers that invoke that handler directly.
+It selects one derived job at a time. Summary and naming jobs are not ready while
+any queued command extraction or execution work could still introduce an
+invalidating action, preventing an older target from being summarized just
+before a newer source merges into it.
+
+Accepted filesystem requests execute by canonical SQLite `created_at` order.
+Derived jobs do not have an independent creation timestamp, so the coordinator
+uses the bundle recording date (then stable bundle ID) as their oldest-first
+ordering key. This is intentionally not a work-type priority.
+
+Command attempt counts remain for interpretation or pre-executor failures, and
+the daemon retry manager remains its process-level backoff mechanism. Canonical
+action execution attempts belong to `ActionRequest.attempt_count`; the queue's
+re-derivation count remains only as an accidental-loop circuit breaker. No
+durable internal-task model was introduced.
+
 Validation:
 
 - targeted scheduler and daemon tests;

@@ -9,6 +9,7 @@ from transcriber.actions.action import Action, DeleteAction, MergeAction, Previo
 from transcriber.actions.action_executors import BundleActionExecutor
 from transcriber.actions.action_request import (
     ActionBlocked,
+    ActionEffects,
     ActionFailed,
     ActionRequest,
     ActionResult,
@@ -21,7 +22,6 @@ from transcriber.actions.action_service import ActionProcessor, ActionService
 from transcriber.bundle_title import BundleTitleState
 from transcriber.commands.command import Command
 from transcriber.commands.command_execution_policy import CommandExecutionPolicy
-from transcriber.commands.command_handlers import AbortForMergeTargetException
 from transcriber.commands.command_interpretation import SetTitleCommandArguments
 from transcriber.commands.command_registry import COMMAND_REGISTRY
 from transcriber.commands.command_resolution import ActionRequestCommandResolution
@@ -52,7 +52,7 @@ class TranscribeBundleJob(ABC):
     dry_run: bool
 
     @abstractmethod
-    def run(self, ai_manager: AIManager, config: TranscribeConfig, bundle_cache: BundleCache) -> None:
+    def run(self, ai_manager: AIManager, config: TranscribeConfig, bundle_cache: BundleCache) -> ActionEffects | None:
         """Perform the job's main work.
 
         Args:
@@ -404,7 +404,7 @@ class RunCommandsJob(TranscribeBundleJob):
         ai_manager: AIManager,
         config: TranscribeConfig,
         bundle_cache: BundleCache,
-    ) -> None:
+    ) -> ActionEffects | None:
         """Execute pending commands for the bundle.
 
         Processes commands in priority order and applies each type's execution
@@ -423,22 +423,22 @@ class RunCommandsJob(TranscribeBundleJob):
         if not self.bundle.commands:
             if self.dry_run:
                 logger.info(f"{self.bundle}: (dry-run) Skipping running commands as they are not gathered")
-                return  # expected in dry run as commands might not have been gathered
+                return None  # expected in dry run as commands might not have been gathered
 
             msg = f"{self}: Cannot run commands without commands file"
             raise ValueError(msg)
 
         if not self.bundle.commands.commands:
-            return  # no commands to run, that's valid
+            return None  # no commands to run, that's valid
 
         if not any(cmd.needs_processing for cmd in self.bundle.commands.commands):
             logger.debug(f"All commands already resolved or submitted for {self.bundle}")
-            return
+            return None
 
         logger.debug(f"Running commands for {self.bundle}")
 
         if self.dry_run:
-            return
+            return None
 
         commands = self.bundle.commands.commands
         pending_commands = self._prepare_commands(ai_manager, commands)
@@ -448,7 +448,7 @@ class RunCommandsJob(TranscribeBundleJob):
         # Keep this local until a more complex command ordering system is actually needed.
         pending_commands.sort(key=lambda cmd: self._command_priority(cmd.matched_type))
 
-        self._execute_commands(pending_commands, config, bundle_cache)
+        return self._execute_commands(pending_commands, config, bundle_cache)
 
     def _prepare_commands(
         self,
@@ -503,7 +503,7 @@ class RunCommandsJob(TranscribeBundleJob):
         pending_commands: list[Command],
         config: TranscribeConfig,
         bundle_cache: BundleCache,
-    ) -> None:
+    ) -> ActionEffects | None:
         """Execute commands according to retry and repetition policies.
 
         Once-per-bundle types skip later duplicates, while revision-style types
@@ -547,7 +547,9 @@ class RunCommandsJob(TranscribeBundleJob):
                 logger.info(f"Executing {matched_type.value} command for bundle {self.bundle}")
 
                 if matched_type in {CommandType.MERGE, CommandType.DELETE, CommandType.SET_TITLE}:
-                    self._execute_action_request(cmd, matched_type, config, bundle_cache)
+                    effects = self._execute_action_request(cmd, matched_type, config, bundle_cache)
+                    if effects is not None and (effects.changed_bundle_ids or effects.removed_bundle_ids):
+                        return effects
                     continue
 
                 handler = definition.handler
@@ -562,9 +564,6 @@ class RunCommandsJob(TranscribeBundleJob):
             except AbortRemainingBundleJobsException:
                 logger.debug(f"{cmd} requested aborting remaining jobs for bundle {self.bundle}")
                 raise  # raise it further to the job execution loop
-            except AbortForMergeTargetException:
-                logger.debug(f"{cmd} finished a merge, re-processing target bundle for {self.bundle}")
-                raise  # raise it further to the job execution loop
             except (UnknownCommandException, Exception) as e:
                 # On error, stop processing remaining commands to avoid partial state.
                 logger.exception(
@@ -573,6 +572,7 @@ class RunCommandsJob(TranscribeBundleJob):
                 self.bundle.set_last_error(cmd_id=cmd.id, error=str(e))
                 self.bundle.add_command_attempt(cmd_id=cmd.id)
                 raise
+        return None
 
     def _execute_action_request(
         self,
@@ -580,7 +580,7 @@ class RunCommandsJob(TranscribeBundleJob):
         command_type: CommandType,
         config: TranscribeConfig,
         bundle_cache: BundleCache,
-    ) -> None:
+    ) -> ActionEffects | None:
         """Submit, execute, and acknowledge one state-changing command."""
         action = self._action_from_command(command, command_type)
         origin = CommandActionOrigin(bundle_id=self.bundle.bundle_id, command_id=command.id)
@@ -619,7 +619,7 @@ class RunCommandsJob(TranscribeBundleJob):
             config,
             origin_may_be_removed=isinstance(action, DeleteAction) and isinstance(result, ActionSucceeded),
         )
-        self._handle_action_result(action, result, request_id, command.id, bundle_cache)
+        return self._handle_action_result(action, result, request_id)
 
     def _action_from_command(self, command: Command, command_type: CommandType) -> Action:
         """Translate a validated command into immutable action intent."""
@@ -646,29 +646,17 @@ class RunCommandsJob(TranscribeBundleJob):
         action: Action,
         result: ActionResult,
         request_id: str,
-        command_id: str,
-        bundle_cache: BundleCache,
-    ) -> None:
-        """Translate a terminal action result into the existing job-loop control flow."""
+    ) -> ActionEffects | None:
+        """Return scheduler effects or translate a non-successful result."""
         if isinstance(result, ActionSucceeded):
-            if isinstance(action, DeleteAction):
-                msg = "Skip remaining jobs after delete action"
-                raise AbortRemainingBundleJobsException(msg)
-            if isinstance(action, SetTitleAction):
-                return
-            target = next((bundle_cache[bundle_id] for bundle_id in result.effects.changed_bundle_ids if bundle_id in bundle_cache), None)
-            if target is None:
-                target = self._find_command_bundle(command_id, bundle_cache)
-            if target is None:
-                msg = "Merge succeeded but its surviving target could not be located"
-                raise RuntimeError(msg)
-            raise AbortForMergeTargetException(target, f"Merged bundle {self.bundle} into {target}")
+            return result.effects
         if isinstance(result, ActionBlocked):
             if isinstance(action, MergeAction):
                 raise MergeBlockedException(result.error.message)
             msg = f"Action request {request_id} blocked: {result.error.message}"
             raise AbortRemainingBundleJobsException(msg)
         logger.error(f"Action request {request_id} failed: {result.error.message}")
+        return None
 
     @staticmethod
     def _result_from_request(request: ActionRequest) -> ActionResult:

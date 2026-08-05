@@ -17,7 +17,6 @@ from transcriber.commands.command_registry import COMMAND_REGISTRY
 from transcriber.commands.command_resolution import ActionRequestCommandResolution
 from transcriber.commands.command_type import CommandType
 from transcriber.config import TranscribeConfig
-from transcriber.exception import AbortRemainingBundleJobsException
 from transcriber.transcribe_bundle import BundleCache, TranscribeBundle
 from transcriber.transcribe_bundle_job import RunCommandsJob
 
@@ -131,14 +130,15 @@ class TestCommandExecutionPolicy:
         command = bundle.commands.commands[0]
         bundle_cache = {bundle.bundle_id: bundle}
 
-        with pytest.raises(AbortRemainingBundleJobsException):
-            RunCommandsJob(bundle, dry_run=False).run(
-                fake_ai_manager,
-                fake_config,
-                bundle_cache,
-            )
+        effects = RunCommandsJob(bundle, dry_run=False).run(
+            fake_ai_manager,
+            fake_config,
+            bundle_cache,
+        )
 
         assert bundle.bundle_id not in bundle_cache
+        assert effects is not None
+        assert effects.removed_bundle_ids == (bundle.bundle_id,)
         assert isinstance(command.resolution, ActionRequestCommandResolution)
         request = SQLiteActionRequestStore(
             default_action_request_database_path(fake_config.general.store_dir),

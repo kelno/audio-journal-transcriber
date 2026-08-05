@@ -7,6 +7,9 @@ import yaml
 
 from tests.bundle_fixtures import TranscribeBundleFactory
 from tests.fake_file_system import FakeFileSystemService
+from transcriber.actions.action import SetTitleAction
+from transcriber.actions.action_request import ActionRequest, FilesystemActionOrigin
+from transcriber.actions.action_request_store import SQLiteActionRequestStore, default_action_request_database_path
 from transcriber.actions.filesystem_action_requests import ACTION_REQUESTS_DIRECTORY_NAME, FilesystemActionRequestAdapter
 from transcriber.config import TranscribeConfig
 
@@ -112,3 +115,62 @@ def test_dry_run_does_not_create_or_rewrite_request_directory(
     adapter.process_all({}, dry_run=True)
 
     assert not fake_fs.directory_exists(adapter.request_directory)
+
+
+def test_pending_filesystem_requests_execute_in_database_creation_order(
+    tmp_path: Path,
+    fake_config: TranscribeConfig,
+    fake_fs: FakeFileSystemService,
+    transcribe_bundle_factory: TranscribeBundleFactory,
+) -> None:
+    """Directory enumeration cannot override canonical oldest-first ordering."""
+    fake_config.general.store_dir = tmp_path
+    bundle = transcribe_bundle_factory(
+        bundle_name="recording",
+        audio_filename="recording.mp3",
+    )
+    bundle_cache = {bundle.bundle_id: bundle}
+    newer_id = "b" * 32
+    older_id = "a" * 32
+    created_at = datetime(2026, 8, 6, 9, tzinfo=fake_config.general.timezone)
+    store = SQLiteActionRequestStore(default_action_request_database_path(tmp_path))
+    store.create(
+        ActionRequest(
+            request_id=newer_id,
+            action=SetTitleAction(bundle_id=bundle.bundle_id, title="Newer title"),
+            origin=FilesystemActionOrigin(),
+            created_at=created_at + timedelta(minutes=1),
+        ),
+    )
+    store.create(
+        ActionRequest(
+            request_id=older_id,
+            action=SetTitleAction(bundle_id=bundle.bundle_id, title="Older title"),
+            origin=FilesystemActionOrigin(),
+            created_at=created_at,
+        ),
+    )
+    request_directory = tmp_path / ACTION_REQUESTS_DIRECTORY_NAME
+    # Insert the newer file first so filesystem enumeration has the opposite order.
+    for filename, request_id, title in (
+        ("newer.md", newer_id, "Newer title"),
+        ("older.md", older_id, "Older title"),
+    ):
+        fake_fs.write_file(
+            request_directory / filename,
+            f"""---
+schema_version: 1
+request_id: {request_id}
+action:
+  type: set_title
+  bundle_id: {bundle.bundle_id}
+  title: {title}
+---
+""",
+        )
+
+    FilesystemActionRequestAdapter(fake_config, fake_fs).process_all(bundle_cache, dry_run=False)
+
+    assert bundle.bundle_name.endswith("Newer title")
+    assert _frontmatter(fake_fs.read_file(request_directory / "older.md"))["status"] == "succeeded"
+    assert _frontmatter(fake_fs.read_file(request_directory / "newer.md"))["status"] == "succeeded"
