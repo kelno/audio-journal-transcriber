@@ -130,6 +130,7 @@ uv run transcriber --dry-run
 - [Voice commands](voice-commands.md): Command boundaries and supported recording operations.
 - [Container deployment](deployment.md): Docker and Podman builds and runtime configuration.
 - [Example phone sync setup](phone-sync-workflow.md): One way to send recordings automatically from a phone to the daemon.
+- [Maintenance utilities](maintenance.md): Tools for inspecting and maintaining the bundle store.
 
 ## Development
 
