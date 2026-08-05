@@ -285,19 +285,27 @@ class AbortForMergeTargetException(AudioTranscriberException):
         self.bundle = bundle
 
 
-@command_handler
-def handle_merge(source: TranscribeBundle, _config: TranscribeConfig, bundles_cache: BundleCache, merge_cmd: Command) -> None:
-    """Merge the current recording with the previous one.
+def merge_bundles(
+    source: TranscribeBundle,
+    target: TranscribeBundle,
+    bundles_cache: BundleCache,
+    merge_cmd: Command | None = None,
+) -> TranscribeBundle:
+    """Merge one explicitly selected source bundle into a target bundle.
 
     Args:
-        source: The transcribe bundle to operate on.
-        _config: The transcribe configuration, unused by this handler.
-        merge_cmd: The original command triggering the merge.
+        source: Bundle that will be removed after its contents are transferred.
+        target: Bundle that survives and receives the source contents.
         bundles_cache: Loaded bundles indexed by persistent ID.
+        merge_cmd: Optional command that triggered the merge. When provided, it is
+            marked executed in the surviving bundle after command files are combined.
+
+    Returns:
+        The surviving target bundle.
 
     Side effects / merge policy:
         - Audio, transcript, commands and transcript-model metadata are merged into
-          the previous (target) bundle.
+          the target bundle.
         - Other top-level files and complete directory trees move into the target
           with collision-safe names; application-managed files are excluded.
         - The per-bundle custom_context.md is concatenated into the target so the
@@ -309,26 +317,14 @@ def handle_merge(source: TranscribeBundle, _config: TranscribeConfig, bundles_ca
         - AI-generated titles are reset to pending so the name can be regenerated;
           manual titles are preserved.
         - ``keep_forever`` is promoted to True if either source bundle had it set.
-        - The current (source) bundle directory is deleted once the merge succeeds.
+        - The source bundle directory is deleted once the merge succeeds.
 
     """
-    logger.info(f"Running merge command for {source} (command text: {merge_cmd.text})")
+    if source.bundle_id == target.bundle_id:
+        msg = f"Cannot merge bundle {source.bundle_id} into itself"
+        raise ValueError(msg)
 
-    target = TranscribeBundle.find_previous_bundle(source, bundles_cache.values())
-    if target is None:
-        raise NoPreviousBundleException(
-            target_bundle=source.bundle_name,
-            search_pattern="previous bundles",
-            context="No previous bundle found to merge with",
-        )
-
-    # The merge target is chosen purely by recency within the merge window, not by
-    # explicit user intent. Surface the chosen target prominently (with the time
-    # gap) so a wrong-target merge is noticeable in the logs rather than silent.
-    gap_hours = (source.get_bundle_date() - target.get_bundle_date()).total_seconds() / 3600
-    logger.info(
-        f"{source}: Merge target selected -> {target}, gap = {gap_hours:.1f}h (merge window: {source.config.general.merge_max_hours:.1f}h)",
-    )
+    logger.info(f"Merging explicitly selected source {source} into target {target}")
 
     target_bundle_dir = target.get_bundle_dir()
     source_bundle_dir = source.get_bundle_dir()
@@ -368,12 +364,11 @@ def handle_merge(source: TranscribeBundle, _config: TranscribeConfig, bundles_ca
         # Rebuild target metadata now that the source audio is included, then commit.
         target.metadata.write(target_bundle_dir, target.fs_service)
 
-        # The merge command now lives in the target bundle (merged above), so mark it
-        # executed there. This must happen before the source is deleted, both to avoid
-        # writing to a removed directory and to stop the merged command from
-        # re-triggering a merge on the next run. Audio has already been moved into the
-        # target, so deleting the source loses no audio.
-        target.set_command_executed(merge_cmd.id)
+        if merge_cmd is not None:
+            # The triggering command now lives in the target bundle (merged above),
+            # so mark it executed before deleting the source. Reviewed migrations do
+            # not invent a command merely to use the same merge implementation.
+            target.set_command_executed(merge_cmd.id)
 
         # Source removed only after the merge is fully committed to the target.
         source.fs_service.delete_directory(source_bundle_dir)
@@ -390,7 +385,37 @@ def handle_merge(source: TranscribeBundle, _config: TranscribeConfig, bundles_ca
 
     msg = f"Merged bundle {source} into {target}"
     logger.info(msg)
-    raise AbortForMergeTargetException(target, msg)
+    return target
+
+
+@command_handler
+def handle_merge(source: TranscribeBundle, _config: TranscribeConfig, bundles_cache: BundleCache, merge_cmd: Command) -> None:
+    """Merge the current recording into its most recent eligible predecessor."""
+    logger.info(f"Running merge command for {source} (command text: {merge_cmd.text})")
+
+    target = TranscribeBundle.find_previous_bundle(source, bundles_cache.values())
+    if target is None:
+        raise NoPreviousBundleException(
+            target_bundle=source.bundle_name,
+            search_pattern="previous bundles",
+            context="No previous bundle found to merge with",
+        )
+
+    # The automatic target is chosen by recency rather than explicit user intent.
+    # Surface it prominently so a wrong-target merge is noticeable in the logs.
+    gap_hours = (source.get_bundle_date() - target.get_bundle_date()).total_seconds() / 3600
+    logger.info(
+        f"{source}: Merge target selected -> {target}, gap = {gap_hours:.1f}h (merge window: {source.config.general.merge_max_hours:.1f}h)",
+    )
+
+    merged_target = merge_bundles(
+        source=source,
+        target=target,
+        bundles_cache=bundles_cache,
+        merge_cmd=merge_cmd,
+    )
+    msg = f"Merged bundle {source} into {merged_target}"
+    raise AbortForMergeTargetException(merged_target, msg)
 
 
 @command_handler

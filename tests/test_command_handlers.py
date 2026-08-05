@@ -8,7 +8,13 @@ from tests.fake_audio_service import FakeAudioService
 from tests.fake_file_system import FakeFileSystemService
 from transcriber.bundle_title import BundleTitleState
 from transcriber.commands.command import Command
-from transcriber.commands.command_handlers import AbortForMergeTargetException, handle_merge, handle_set_title, handle_unknown
+from transcriber.commands.command_handlers import (
+    AbortForMergeTargetException,
+    handle_merge,
+    handle_set_title,
+    handle_unknown,
+    merge_bundles,
+)
 from transcriber.commands.command_interpretation import SetTitleCommandArguments
 from transcriber.config import TranscribeConfig
 from transcriber.constants import MERGE_FAILED_FILENAME, MULTIPLE_TRANSCRIPTS_SEPARATOR
@@ -34,6 +40,53 @@ def _bundle_cache(*bundles: TranscribeBundle) -> dict[str, TranscribeBundle]:
 
 
 class TestHandleMerge:
+    def test_merge_bundles_uses_explicit_target_without_a_command(
+        self,
+        fake_config: TranscribeConfig,
+        fake_fs: FakeFileSystemService,
+        fake_audio_service: FakeAudioService,
+        transcribe_bundle_factory: TranscribeBundleFactory,
+    ) -> None:
+        """A reviewed merge can target any distinct bundle and needs no fake command."""
+        source = transcribe_bundle_factory(
+            bundle_name="2025-01-15_older-source",
+            audio_filename="Recording 20250115090000.mp3",
+            bundle_date=datetime(2025, 1, 15, 9, tzinfo=fake_config.general.timezone),
+            transcript_text="source transcript",
+            commands=["leave this unexecuted"],
+        )
+        target = transcribe_bundle_factory(
+            bundle_name="2025-01-15_newer-target",
+            audio_filename="Recording 20250115100000.mp3",
+            bundle_date=datetime(2025, 1, 15, 10, tzinfo=fake_config.general.timezone),
+            transcript_text="target transcript",
+            summary_text="stale target summary",
+        )
+        target.metadata.bundle_title_state = BundleTitleState.GENERATED
+        target.metadata.write(target.get_bundle_dir(), fake_fs)
+        bundle_cache = _bundle_cache(source, target)
+
+        merged_target = merge_bundles(source, target, bundle_cache)
+
+        assert merged_target is target
+        assert source.bundle_id not in bundle_cache
+        assert target.bundle_id in bundle_cache
+        assert not fake_fs.directory_exists(source.get_bundle_dir())
+
+        reloaded = TranscribeBundle.from_existing_directory(
+            existing_dir=target.get_bundle_dir(),
+            config=fake_config,
+            fs_service=fake_fs,
+            audio_service=fake_audio_service,
+        )
+        assert reloaded.bundle_id == target.bundle_id
+        assert reloaded.transcript is not None
+        assert reloaded.transcript.text == ("target transcript" + MULTIPLE_TRANSCRIPTS_SEPARATOR + "source transcript")
+        assert reloaded.summary is None
+        assert reloaded.metadata.bundle_title_state is BundleTitleState.PENDING
+        assert reloaded.commands is not None
+        assert reloaded.commands.commands[0].executed is False
+
     def test_handle_merge_dedupes_commands_with_same_id(
         self,
         fake_config: TranscribeConfig,
@@ -239,9 +292,7 @@ class TestHandleMerge:
             audio_service=fake_audio_service,
         )
 
-        metadata_by_filename = {
-            audio_meta.filename: audio_meta.transcript_model_used for audio_meta in merged_bundle.metadata.audio_files
-        }
+        metadata_by_filename = {audio_meta.filename: audio_meta.transcript_model_used for audio_meta in merged_bundle.metadata.audio_files}
         assert metadata_by_filename == {
             audio_filename: ["target-model"],
             "Recording 20250115090000_1.mp3": ["source-model"],
