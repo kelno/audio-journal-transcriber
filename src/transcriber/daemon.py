@@ -4,6 +4,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
+from transcriber.actions.http_api import ActionHttpServer
 from transcriber.audio_transcriber import AudioTranscriber
 from transcriber.config import TranscribeConfig
 from transcriber.files.file_watcher import FileWatcher
@@ -100,6 +101,16 @@ class TranscriptionDaemon:
             self._on_files_changed,
             stable_delay=5.0,
         )
+        self.http_server: ActionHttpServer | None = (
+            ActionHttpServer(
+                config.http.host,
+                config.http.port,
+                transcriber.action_runtime.service,
+                self._on_http_submission,
+            )
+            if config.http.enabled
+            else None
+        )
 
     def run(self) -> None:
         """Start the daemon lifecycle.
@@ -109,6 +120,8 @@ class TranscriptionDaemon:
         logger.info("Starting daemon mode")
 
         self.watcher.start()
+        if self.http_server is not None:
+            self.http_server.start()
 
         try:
             while not self.stop_event.is_set():
@@ -122,6 +135,8 @@ class TranscriptionDaemon:
         finally:
             logger.info("Stopping daemon mode...")
             self.watcher.stop()
+            if self.http_server is not None:
+                self.http_server.stop()
 
     def stop(self) -> None:
         """Request daemon shutdown."""
@@ -137,6 +152,10 @@ class TranscriptionDaemon:
         The callback only signals that work may be available. Processing is
         performed by the daemon loop.
         """
+        self.work_event.set()
+
+    def _on_http_submission(self) -> None:
+        """Wake the single execution loop after durable HTTP submission."""
         self.work_event.set()
 
     def _wait_for_work(self) -> bool:

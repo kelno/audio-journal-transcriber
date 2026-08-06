@@ -16,6 +16,12 @@ timezone = "Europe/Brussels"
 # Move deleted files to <store_dir>/_deleted instead of deleting them from filesystem
 safe_delete = true
 
+[http]
+# Local action-request API. Available only in daemon mode.
+enabled = false
+host = "127.0.0.1"
+port = 8765
+
 [text]
 # Whether to generate summaries from transcripts
 summary_enabled = true

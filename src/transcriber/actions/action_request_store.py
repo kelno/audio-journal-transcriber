@@ -135,7 +135,7 @@ def default_action_request_database_path(store_dir: Path) -> Path:
 
 
 class SQLiteActionRequestStore(ActionRequestStore):
-    """SQLite-backed action-request repository for the single-writer daemon."""
+    """SQLite-backed action-request repository for one application process."""
 
     def __init__(self, database_path: Path, *, dry_run: bool = False) -> None:
         """Open or initialize a request store at an explicit path.
