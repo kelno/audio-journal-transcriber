@@ -6,7 +6,6 @@ from pathlib import Path
 from typing import override
 
 from transcriber.actions.action import Action, DeleteAction, MergeAction, PreviousBundleTarget, SetTitleAction
-from transcriber.actions.action_executors import BundleActionExecutor
 from transcriber.actions.action_request import (
     ActionBlocked,
     ActionEffects,
@@ -17,8 +16,8 @@ from transcriber.actions.action_request import (
     CommandActionOrigin,
     new_action_request_id,
 )
-from transcriber.actions.action_request_store import SQLiteActionRequestStore, default_action_request_database_path
-from transcriber.actions.action_service import ActionProcessor, ActionService
+from transcriber.actions.action_runtime import ActionRuntime
+from transcriber.actions.action_service import ActionService
 from transcriber.bundle_title import BundleTitleState
 from transcriber.commands.command import Command
 from transcriber.commands.command_execution_policy import CommandExecutionPolicy
@@ -398,6 +397,8 @@ class GatherCommandsJob(TranscribeBundleJob):
 class RunCommandsJob(TranscribeBundleJob):
     """Try to run non-executed commands for a bundle."""
 
+    action_runtime: ActionRuntime
+
     @override
     def run(
         self,
@@ -595,10 +596,8 @@ class RunCommandsJob(TranscribeBundleJob):
                 ActionRequestCommandResolution(request_id=request_id),
             )
 
-        store = SQLiteActionRequestStore(default_action_request_database_path(config.general.store_dir))
-        service = ActionService(store)
-        processor = ActionProcessor(store, BundleActionExecutor(bundle_cache))
-        processor.block_interrupted_request()
+        service = self.action_runtime.service
+        processor = self.action_runtime.processor(bundle_cache)
         service.submit(action, origin, request_id=request_id)
 
         request = service.get_request(request_id)

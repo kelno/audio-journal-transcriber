@@ -54,14 +54,14 @@ class CommandActionOrigin(ImmutableRequestModel):
     command_id: str = Field(min_length=1)
 
 
-class FilesystemActionOrigin(ImmutableRequestModel):
-    """Identify an action submitted through the global filesystem inbox."""
+class HttpActionOrigin(ImmutableRequestModel):
+    """Identify an action submitted through the local HTTP API."""
 
-    type: Literal["filesystem"] = "filesystem"
+    type: Literal["http"] = "http"
 
 
 type ActionOrigin = Annotated[
-    CommandActionOrigin | FilesystemActionOrigin,
+    CommandActionOrigin | HttpActionOrigin,
     Field(discriminator="type"),
 ]
 

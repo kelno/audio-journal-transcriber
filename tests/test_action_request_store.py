@@ -13,7 +13,7 @@ from transcriber.actions.action_request import (
     ActionError,
     ActionRequest,
     CommandActionOrigin,
-    FilesystemActionOrigin,
+    HttpActionOrigin,
 )
 from transcriber.actions.action_request_store import (
     ACTION_REQUEST_DATABASE_FILENAME,
@@ -54,7 +54,7 @@ def _pending_request(
     return ActionRequest(
         request_id=request_id,
         action=DeleteAction(bundle_id=FIRST_BUNDLE_ID),
-        origin=FilesystemActionOrigin(),
+        origin=HttpActionOrigin(),
         created_at=created_at or datetime(2026, 8, 5, 10, tzinfo=UTC),
     )
 
@@ -207,7 +207,7 @@ class TestSQLiteActionRequestStorePersistence:
         running = ActionRequest(
             request_id="f" * 32,
             action=DeleteAction(bundle_id=SECOND_BUNDLE_ID),
-            origin=FilesystemActionOrigin(),
+            origin=HttpActionOrigin(),
             status="running",
             created_at=first_created_at - timedelta(minutes=1),
         )
@@ -332,7 +332,7 @@ class TestSQLiteActionRequestStoreTransactions:
         duplicate = ActionRequest(
             request_id=original.request_id,
             action=DeleteAction(bundle_id=SECOND_BUNDLE_ID),
-            origin=FilesystemActionOrigin(),
+            origin=HttpActionOrigin(),
         )
         store.create(original)
 

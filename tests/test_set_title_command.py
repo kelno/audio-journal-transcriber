@@ -6,6 +6,7 @@ from tests.bundle_fixtures import TranscribeBundleFactory
 from tests.fake_ai_manager import FakeAIManager
 from tests.fake_file_system import FakeFileSystemService
 from transcriber.actions.action_request_store import SQLiteActionRequestStore, default_action_request_database_path
+from transcriber.actions.action_runtime import ActionRuntime
 from transcriber.audio_transcriber import AudioTranscriber
 from transcriber.bundle_title import BundleTitleState
 from transcriber.commands.command_interpretation import (
@@ -102,13 +103,22 @@ class TestSetTitleCommand:
             target.bundle_id: target,
             source.bundle_id: source,
         }
+        action_runtime = ActionRuntime.from_config(fake_config, dry_run=False)
 
-        merge_effects = RunCommandsJob(source, dry_run=False).run(fake_ai_manager, fake_config, bundle_cache)
+        merge_effects = RunCommandsJob(source, dry_run=False, action_runtime=action_runtime).run(
+            fake_ai_manager,
+            fake_config,
+            bundle_cache,
+        )
 
         assert merge_effects is not None
         assert len(merge_effects.changed_bundle_ids) == 1
         merged_target = bundle_cache[merge_effects.changed_bundle_ids[0]]
-        RunCommandsJob(merged_target, dry_run=False).run(fake_ai_manager, fake_config, bundle_cache)
+        RunCommandsJob(merged_target, dry_run=False, action_runtime=action_runtime).run(
+            fake_ai_manager,
+            fake_config,
+            bundle_cache,
+        )
 
         assert source.bundle_id not in bundle_cache
         assert merged_target.bundle_name.endswith("Combined planning")

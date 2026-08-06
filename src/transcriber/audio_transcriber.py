@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from transcriber.actions.action_request import ActionEffects
-from transcriber.actions.filesystem_action_requests import FilesystemActionRequestAdapter
+from transcriber.actions.action_runtime import ActionRuntime
 from transcriber.ai_manager import AIManager
 from transcriber.audio_service import AudioService, RealAudioService
 from transcriber.commands.command_registry import COMMAND_REGISTRY
@@ -59,6 +59,7 @@ class AudioTranscriber:
     config: TranscribeConfig
     fs_service: FileSystemService
     audio_service: AudioService
+    action_runtime: ActionRuntime
 
     def __init__(
         self,
@@ -68,6 +69,7 @@ class AudioTranscriber:
         only_one_bundle: bool = False,
         fs_service: FileSystemService | None = None,
         audio_service: AudioService | None = None,
+        action_runtime: ActionRuntime | None = None,
     ) -> None:
         """Initialize the audio transcriber."""
         self.dry_run = dry_run
@@ -76,6 +78,7 @@ class AudioTranscriber:
         self.config = config
         self.fs_service = fs_service or RealFileSystemService(config)
         self.audio_service = audio_service or RealAudioService()
+        self.action_runtime = action_runtime or ActionRuntime.from_config(config, dry_run=dry_run)
 
     def __post_init__(self) -> None:
         """Initialize the audio transcriber."""
@@ -405,13 +408,13 @@ class AudioTranscriber:
         if not bundle.commands:
             return [
                 GatherCommandsJob(bundle, dry_run),
-                RunCommandsJob(bundle, dry_run),
+                RunCommandsJob(bundle, dry_run, self.action_runtime),
             ]
 
         if bundle.commands.has_commands_needing_processing(
             max_attempts_for=lambda cmd_type: COMMAND_REGISTRY[cmd_type].max_attempts,
         ):
-            return [RunCommandsJob(bundle, dry_run)]
+            return [RunCommandsJob(bundle, dry_run, self.action_runtime)]
 
         return []
 
@@ -477,10 +480,7 @@ class AudioTranscriber:
         # Keep a cache of loaded bundles for the time of this run.
         bundle_cache = self.gather_bundles(input_dir, store_dir)
 
-        FilesystemActionRequestAdapter(self.config, self.fs_service).process_all(
-            bundle_cache,
-            dry_run=self.dry_run,
-        )
+        self.action_runtime.process_external_requests(bundle_cache)
 
         self.log_section_header("Gathering Jobs")
         all_bundle_jobs = self.gather_jobs(bundle_cache)

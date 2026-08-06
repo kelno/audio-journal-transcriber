@@ -7,6 +7,7 @@ import pytest
 from tests.bundle_fixtures import TranscribeBundleFactory
 from tests.fake_ai_manager import FakeAIManager
 from transcriber.actions.action_request_store import SQLiteActionRequestStore, default_action_request_database_path
+from transcriber.actions.action_runtime import ActionRuntime
 from transcriber.commands.command import Command
 from transcriber.commands.command_execution_policy import CommandExecutionPolicy
 from transcriber.commands.command_interpretation import (
@@ -76,7 +77,7 @@ class TestCommandExecutionPolicy:
         definition = COMMAND_REGISTRY[CommandType.IGNORE]
         monkeypatch.setattr(definition, "handler", _recording_handler(calls))
 
-        RunCommandsJob(bundle, dry_run=False).run(
+        RunCommandsJob(bundle, dry_run=False, action_runtime=ActionRuntime.from_config(fake_config, dry_run=False)).run(
             fake_ai_manager,
             fake_config,
             {bundle.bundle_id: bundle},
@@ -108,7 +109,7 @@ class TestCommandExecutionPolicy:
         monkeypatch.setattr(definition, "execution_policy", CommandExecutionPolicy.LATEST_PENDING)
         monkeypatch.setattr(definition, "handler", _recording_handler(calls))
 
-        RunCommandsJob(bundle, dry_run=False).run(
+        RunCommandsJob(bundle, dry_run=False, action_runtime=ActionRuntime.from_config(fake_config, dry_run=False)).run(
             fake_ai_manager,
             fake_config,
             {bundle.bundle_id: bundle},
@@ -138,7 +139,7 @@ class TestCommandExecutionPolicy:
         command = bundle.commands.commands[0]
         bundle_cache = {bundle.bundle_id: bundle}
 
-        effects = RunCommandsJob(bundle, dry_run=False).run(
+        effects = RunCommandsJob(bundle, dry_run=False, action_runtime=ActionRuntime.from_config(fake_config, dry_run=False)).run(
             fake_ai_manager,
             fake_config,
             bundle_cache,

@@ -17,7 +17,7 @@ from transcriber.actions.action_request import (
     ActionRequest,
     ActionResult,
     ActionSucceeded,
-    FilesystemActionOrigin,
+    HttpActionOrigin,
 )
 from transcriber.actions.action_request_store import (
     ActionRequestNotFoundError,
@@ -91,7 +91,7 @@ def _running_request() -> ActionRequest:
     return ActionRequest(
         request_id=FIRST_REQUEST_ID,
         action=_delete_action(),
-        origin=FilesystemActionOrigin(),
+        origin=HttpActionOrigin(),
         status="running",
         attempt_count=1,
         created_at=INITIAL_TIME,
@@ -107,7 +107,7 @@ class TestActionService:
         store = SQLiteActionRequestStore(tmp_path / "requests.sqlite3")
         service = ActionService(store, clock=FakeClock())
         action = _delete_action()
-        origin = FilesystemActionOrigin()
+        origin = HttpActionOrigin()
 
         request_id = service.submit(action, origin)
 
@@ -124,7 +124,7 @@ class TestActionService:
         store = SQLiteActionRequestStore(tmp_path / "requests.sqlite3")
         service = ActionService(store, clock=FakeClock())
         action = _delete_action()
-        origin = FilesystemActionOrigin()
+        origin = HttpActionOrigin()
 
         first_request_id = service.submit(action, origin)
         second_request_id = service.submit(action, origin)
@@ -141,7 +141,7 @@ class TestActionService:
         terminal = ActionRequest(
             request_id=FIRST_REQUEST_ID,
             action=_delete_action(),
-            origin=FilesystemActionOrigin(),
+            origin=HttpActionOrigin(),
             status="succeeded",
             created_at=INITIAL_TIME,
             finished_at=INITIAL_TIME,
@@ -164,7 +164,7 @@ class TestActionProcessor:
         result = ActionSucceeded(effects=ActionEffects(changed_bundle_ids=(FIRST_BUNDLE_ID,)))
         executor = FakeActionExecutor(result, on_execute=lambda: clock.advance(timedelta(minutes=2)))
         processor = ActionProcessor(store, executor, clock=clock)
-        request_id = service.submit(_delete_action(), FilesystemActionOrigin())
+        request_id = service.submit(_delete_action(), HttpActionOrigin())
 
         actual_result = processor.process(request_id)
 
@@ -196,7 +196,7 @@ class TestActionProcessor:
         store = SQLiteActionRequestStore(tmp_path / "requests.sqlite3")
         service = ActionService(store, clock=FakeClock())
         processor = ActionProcessor(store, FakeActionExecutor(result), clock=FakeClock())
-        request_id = service.submit(_delete_action(), FilesystemActionOrigin())
+        request_id = service.submit(_delete_action(), HttpActionOrigin())
 
         assert processor.process(request_id) == result
 
@@ -212,7 +212,7 @@ class TestActionProcessor:
         service = ActionService(store, clock=FakeClock())
         executor = FakeActionExecutor()
         processor = ActionProcessor(store, executor, clock=FakeClock())
-        request_id = service.submit(_delete_action(), FilesystemActionOrigin())
+        request_id = service.submit(_delete_action(), HttpActionOrigin())
         processor.process(request_id)
 
         assert processor.process(request_id) is None
@@ -236,7 +236,7 @@ class TestActionProcessor:
         pending = ActionRequest(
             request_id=SECOND_REQUEST_ID,
             action=DeleteAction(bundle_id=SECOND_BUNDLE_ID),
-            origin=FilesystemActionOrigin(),
+            origin=HttpActionOrigin(),
             created_at=INITIAL_TIME,
         )
         store.create(pending)
@@ -259,7 +259,7 @@ class TestActionProcessor:
         service = ActionService(store, clock=FakeClock())
         executor = FakeActionExecutor(exception=RuntimeError("internal diagnostic detail"))
         processor = ActionProcessor(store, executor, clock=FakeClock())
-        request_id = service.submit(_delete_action(), FilesystemActionOrigin())
+        request_id = service.submit(_delete_action(), HttpActionOrigin())
 
         with caplog.at_level(logging.ERROR):
             result = processor.process(request_id)

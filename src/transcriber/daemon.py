@@ -4,7 +4,6 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
-from transcriber.actions.filesystem_action_requests import ACTION_REQUESTS_DIRECTORY_NAME
 from transcriber.audio_transcriber import AudioTranscriber
 from transcriber.config import TranscribeConfig
 from transcriber.files.file_watcher import FileWatcher
@@ -101,16 +100,6 @@ class TranscriptionDaemon:
             self._on_files_changed,
             stable_delay=5.0,
         )
-        request_directory = config.general.store_dir / ACTION_REQUESTS_DIRECTORY_NAME
-        self.request_watcher: FileWatcher | None = (
-            FileWatcher(
-                request_directory,
-                self._on_request_file_changed,
-                stable_delay=5.0,
-            )
-            if request_directory.is_dir()
-            else None
-        )
 
     def run(self) -> None:
         """Start the daemon lifecycle.
@@ -120,8 +109,6 @@ class TranscriptionDaemon:
         logger.info("Starting daemon mode")
 
         self.watcher.start()
-        if self.request_watcher is not None:
-            self.request_watcher.start()
 
         try:
             while not self.stop_event.is_set():
@@ -135,8 +122,6 @@ class TranscriptionDaemon:
         finally:
             logger.info("Stopping daemon mode...")
             self.watcher.stop()
-            if self.request_watcher is not None:
-                self.request_watcher.stop()
 
     def stop(self) -> None:
         """Request daemon shutdown."""
@@ -153,11 +138,6 @@ class TranscriptionDaemon:
         performed by the daemon loop.
         """
         self.work_event.set()
-
-    def _on_request_file_changed(self, file_path: Path) -> None:
-        """Wake processing only for Markdown files in the request inbox."""
-        if file_path.suffix.casefold() == ".md":
-            self.work_event.set()
 
     def _wait_for_work(self) -> bool:
         """Wait until filesystem activity occurs or a scheduled deadline expires.

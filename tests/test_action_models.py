@@ -21,7 +21,7 @@ from transcriber.actions.action_request import (
     ActionRequest,
     ActionSucceeded,
     CommandActionOrigin,
-    FilesystemActionOrigin,
+    HttpActionOrigin,
     parse_action_result,
 )
 
@@ -114,7 +114,7 @@ class TestActionRequestSerialization:
         """A newly submitted request starts pending with no attempts."""
         request = ActionRequest(
             action=DeleteAction(bundle_id=SOURCE_BUNDLE_ID),
-            origin=FilesystemActionOrigin(),
+            origin=HttpActionOrigin(),
         )
 
         assert len(request.request_id) == 32
@@ -152,7 +152,7 @@ class TestActionRequestSerialization:
         with pytest.raises(ValidationError):
             ActionRequest(
                 action=DeleteAction(bundle_id=SOURCE_BUNDLE_ID),
-                origin=FilesystemActionOrigin(),
+                origin=HttpActionOrigin(),
                 attempt_count=-1,
             )
 
@@ -161,7 +161,7 @@ class TestActionRequestSerialization:
         with pytest.raises(ValidationError):
             ActionRequest(
                 action=DeleteAction(bundle_id=SOURCE_BUNDLE_ID),
-                origin=FilesystemActionOrigin(),
+                origin=HttpActionOrigin(),
                 created_at=datetime(2026, 8, 5, 10),  # noqa: DTZ001 - deliberately invalid input
             )
 
