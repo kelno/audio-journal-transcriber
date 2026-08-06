@@ -2,9 +2,7 @@
 
 from pathlib import Path
 
-import pytest
 import requests
-from pydantic import ValidationError
 
 from transcriber.actions.action_request_store import SQLiteActionRequestStore
 from transcriber.actions.action_service import ActionService
@@ -12,10 +10,9 @@ from transcriber.actions.http_api import ActionHttpServer
 from transcriber.config import HttpConfig
 
 
-def test_http_config_rejects_non_loopback_host() -> None:
-    """The unauthenticated API must not accidentally become network-accessible."""
-    with pytest.raises(ValidationError, match=r"127\.0\.0\.1"):
-        HttpConfig(enabled=True, host="192.0.2.1")
+def test_http_config_accepts_non_loopback_host() -> None:
+    """Deployments may expose the API through a container network interface."""
+    assert HttpConfig(enabled=True, host="0.0.0.0").host == "0.0.0.0"  # noqa: S104 - intended container bind
 
 
 def test_http_submit_is_idempotent_and_status_is_queryable(tmp_path: Path) -> None:

@@ -1,4 +1,4 @@
-"""FastAPI transport for durable action requests on the loopback interface."""
+"""FastAPI transport for durable action requests."""
 
 from __future__ import annotations
 
@@ -137,7 +137,7 @@ class ActionHttpServer:
         """Configure an embedded Uvicorn server without starting its thread.
 
         Args:
-            host: Validated loopback interface to bind.
+            host: Network interface to bind.
             port: Listening port, or zero to let the OS select one for tests.
             service: Transport-neutral action-request service.
             on_submission: Callback that wakes the single processing loop.

@@ -31,6 +31,9 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 FROM python:3.14-slim-trixie
 
 ENV PATH="/app/.venv/bin:$PATH"
+# Containers accept connections on every interface by default. docker run -e
+# can override this image setting without changing the packaged application default.
+ENV TRANSCRIBER_HTTP__HOST="0.0.0.0"
 
 # Install ffmpeg and any minimal dependencies. (Improve me: It has a lot of unecessary stuff for our purpose and bloats the image size)
 RUN apt-get update && \
@@ -48,6 +51,9 @@ RUN mkdir -p /app \
 COPY --from=builder /app/.venv /app/.venv
 # (OpenShift) Change permissions to group 0 (root) and allow users in the root group to access files in /app
 RUN chgrp -R 0 /app && chmod -R g=u /app
+
+# Document the FastAPI port used by the default continuous mode.
+EXPOSE 8765/tcp
 
 # Continuous watching and local HTTP serving are the transcriber's default mode.
 ENTRYPOINT ["transcriber"]

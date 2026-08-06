@@ -19,8 +19,9 @@ safe_delete = true
 [http]
 # Expose the local action-request API in the default continuous mode.
 enabled = true
-# The first API version is deliberately restricted to loopback hosts.
+# Listening host.
 host = "127.0.0.1"
+# Listening TCP port
 port = 8765
 
 [text]

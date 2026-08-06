@@ -19,7 +19,7 @@ Then start the default continuous mode:
 uv run transcriber
 ```
 
-This first version is intentionally bound to `127.0.0.1` and has no authentication. Other hosts are rejected by configuration validation.
+The packaged configuration listens on `127.0.0.1`. Set `host = "0.0.0.0"` to accept connections through other network interfaces. The container image applies that override automatically. The API currently has no authentication, so restrict access at the host, container, or network level.
 
 ## Submit a request
 

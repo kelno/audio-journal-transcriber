@@ -57,7 +57,7 @@ The text connection values are currently required by the configuration model eve
 | Setting   | Packaged default | Description                                                                                  |
 | --------- | ---------------- | -------------------------------------------------------------------------------------------- |
 | `enabled` | `true`           | Expose the action-request API during the default continuous mode.                            |
-| `host`    | `127.0.0.1`      | Listening host. Only `127.0.0.1` is accepted until authentication is implemented.             |
+| `host`    | `127.0.0.1`      | Listening interface. The container image overrides this with `0.0.0.0`.                       |
 | `port`    | `8765`           | Listening TCP port.                                                                          |
 
 The HTTP API accepts durable actions and reports their status; it does not execute bundle

@@ -2,7 +2,7 @@ from pathlib import Path
 from typing import ClassVar, override
 from zoneinfo import ZoneInfo
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, Field, model_validator
 from pydantic_settings import (
     BaseSettings,
     PydanticBaseSettingsSource,
@@ -91,15 +91,6 @@ class HttpConfig(BaseModel):
     enabled: bool = True
     host: str = "127.0.0.1"
     port: int = Field(default=8765, ge=1, le=65535)
-
-    @field_validator("host")
-    @classmethod
-    def require_loopback_host(cls, host: str) -> str:
-        """Keep the unauthenticated first API version local to this machine."""
-        if host != "127.0.0.1":
-            msg = "HTTP action requests must bind to 127.0.0.1 until authentication is implemented"
-            raise ValueError(msg)
-        return host
 
 
 default_toml_file = Path(__file__).parent / "config.default.toml"

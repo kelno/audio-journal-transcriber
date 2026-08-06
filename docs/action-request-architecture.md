@@ -15,7 +15,6 @@ This document describes the current action-request design. Terminology is define
 - Parallel action execution, leases, distributed workers, or bundle locks.
 - Automatic action retry and backoff.
 - A permanent audit log beyond the request retention window.
-- Authentication or remote HTTP exposure in the first API version.
 - Persisting derived transcription, summary, or command-interpretation jobs.
 
 ## Main flow
@@ -207,4 +206,4 @@ The HTTP layer is a FastAPI application served by Uvicorn. FastAPI handles route
 
 Uvicorn runs on one transport thread so submissions can arrive while the daemon waits. The route functions perform their short synchronous request-store operations directly on that thread, which keeps HTTP submissions serialized. The thread writes only request rows and signals the daemon event; it never processes a bundle. SQLite coordinates those submission transactions with lifecycle updates from the processing loop.
 
-The API is enabled in the default continuous mode and restricted to `127.0.0.1` until authentication exists. When callers repeat the same action with the same request ID, the API returns the existing request instead of creating a duplicate. `--once` runs one update cycle without starting the watcher or HTTP transport.
+The API is enabled in the default continuous mode. The packaged configuration binds to `127.0.0.1`, while the container image overrides the host with `0.0.0.0` so its port can be published. When callers repeat the same action with the same request ID, the API returns the existing request instead of creating a duplicate. `--once` runs one update cycle without starting the watcher or HTTP transport.
