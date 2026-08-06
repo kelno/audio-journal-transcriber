@@ -37,16 +37,24 @@ class ActionRuntime:
         return ActionProcessor(self.store, BundleActionExecutor(bundle_cache))
 
     def process_external_requests(self, bundle_cache: BundleCache) -> list[ActionResult]:
-        """Recover interrupted work and execute pending non-command requests oldest first."""
+        """Execute pending HTTP requests before deriving this cycle's bundle jobs.
+
+        Command requests are skipped because `RunCommandsJob` must execute them
+        and write their result back to the originating bundle.
+        """
         if self.store.dry_run:
             return []
 
         processor = self.processor(bundle_cache)
         results: list[ActionResult] = []
+
+        # Repeating an action interrupted in `running` state may be unsafe.
         if interrupted := processor.block_interrupted_request():
             results.append(interrupted)
 
         for request in self.store.list_pending():
+            # Command requests must return through RunCommandsJob so their
+            # terminal result is also written to the bundle's command file.
             if isinstance(request.origin, CommandActionOrigin):
                 continue
             if result := processor.process(request.request_id):

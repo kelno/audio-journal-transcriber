@@ -80,18 +80,22 @@ Origins are:
 
 ### Results and effects
 
-Terminal results are `ActionSucceeded`, `ActionFailed`, and `ActionBlocked`. Every result can carry:
+An effect is the scheduler-facing description of which bundle identities need their derived work reconsidered after an action runs.
+
+Terminal results are `ActionSucceeded`, `ActionFailed`, and `ActionBlocked`. Every result can carry effects containing:
 
 ```text
 changed_bundle_ids
 removed_bundle_ids
 ```
 
+`changed_bundle_ids` identifies bundles that still exist but may need fresh jobs. `removed_bundle_ids` identifies bundles whose queued jobs are no longer valid.
+
 The coordinator only understands these effects. It does not branch on merge, delete, or title action types.
 
 Effects are not persisted. After restart, bundles are loaded from durable filesystem state and jobs are derived again. Persisting effects would add audit information but is not needed for recovery correctness.
 
-## Lifecycle
+## Request lifecycle
 
 ```text
 pending -> running -> succeeded
