@@ -127,12 +127,17 @@ uv run transcriber --dry-run
 ## Guides
 
 - [Configuration](configuration.md): TOML files, environment variables, and setting reference.
+- [HTTP action requests](http-api.md): Submit durable actions and inspect their status locally.
 - [Voice commands](voice-commands.md): Command boundaries and supported recording operations.
+- [Glossary](glossary.md): Definitions for the processing and action-request model.
 - [Container deployment](deployment.md): Docker and Podman builds and runtime configuration.
 - [Example phone sync setup](phone-sync-workflow.md): One way to send recordings automatically from a phone to the daemon.
 - [Maintenance utilities](maintenance.md): Tools for inspecting and maintaining the bundle store.
 
 ## Development
+
+The current action-request design and its remaining decisions are documented in
+[Action-request architecture](action-request-architecture.md).
 
 Run the full test suite from the repository root:
 
