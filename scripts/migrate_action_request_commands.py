@@ -1,7 +1,13 @@
 """Migrate bundle command files to resolution-only action-request state.
 
-The migration scans and validates the complete store before writing anything.
-It is a dry run by default; pass ``--apply`` after reviewing the report.
+This one-time migration converts former ``executed: true`` state into an
+explicit terminal ``migrated`` resolution, assigns stable IDs to older commands
+that lack one, and removes obsolete execution and retry fields.
+
+The migration scans and validates every active and safely deleted bundle before
+writing anything. It is a dry run by default; pass ``--apply`` after reviewing
+the report. Run the dry run again after applying to confirm that it reports zero
+files to rewrite.
 
 Changed command files are copied below
 ``<store>/_migration_backups/action-request-commands-v1`` before replacement.
