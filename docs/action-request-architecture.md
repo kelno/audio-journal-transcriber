@@ -124,13 +124,9 @@ A command resolution records what command processing decided to do. It may point
 to an action request, or record a terminal non-action outcome such as ignored or
 superseded.
 
-For a merge, the current and proposed responsibilities differ as follows:
+For a merge, the responsibilities now flow as follows:
 
 ```text
-Current:
-transcript -> interpreted merge command -> handle_merge() -> mutate bundles
-
-Proposed:
 transcript -> interpreted merge command -> MergeAction -> ActionService.submit()
                                                      |
                                                      v
@@ -907,8 +903,8 @@ Validation:
 Implementation note: `RunCommandsJob` now returns `ActionEffects` to the
 synchronous `AudioTranscriber` coordinator. The coordinator removes stale work
 for removed IDs and re-derives work only for changed IDs; merge is no longer a
-special scheduler signal. The legacy direct merge handler keeps its exception
-only as a compatibility boundary for callers that invoke that handler directly.
+special scheduler signal. State-changing commands have no direct-handler
+fallback; their sole execution path is the action layer.
 It selects one derived job at a time. Summary and naming jobs are not ready while
 any queued command extraction or execution work could still introduce an
 invalidating action, preventing an older target from being summarized just

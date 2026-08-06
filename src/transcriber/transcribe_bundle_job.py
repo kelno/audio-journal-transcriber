@@ -553,6 +553,7 @@ class RunCommandsJob(TranscribeBundleJob):
                     continue
 
                 handler = definition.handler
+                assert handler is not None, f"Command type {matched_type.value} has no direct handler"
                 handler(self.bundle, config, bundle_cache, cmd)
 
                 if matched_type is CommandType.IGNORE:

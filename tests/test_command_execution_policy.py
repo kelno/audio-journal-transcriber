@@ -50,6 +50,14 @@ def _set_all_command_types(bundle: TranscribeBundle, command_type: ArgumentlessC
 class TestCommandExecutionPolicy:
     """Verify command selection without relying on a specific command handler."""
 
+    @pytest.mark.parametrize(
+        "command_type",
+        [CommandType.MERGE, CommandType.DELETE, CommandType.SET_TITLE],
+    )
+    def test_action_backed_commands_have_no_direct_handler(self, command_type: CommandType) -> None:
+        """State-changing commands cannot bypass the action-request boundary."""
+        assert COMMAND_REGISTRY[command_type].handler is None
+
     def test_once_per_bundle_keeps_existing_first_command_behavior(
         self,
         monkeypatch: pytest.MonkeyPatch,

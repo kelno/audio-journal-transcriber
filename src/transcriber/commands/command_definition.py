@@ -23,7 +23,8 @@ class CommandDefinition:
 
     Attributes:
         command_type: The type of command to execute.
-        handler: Function to execute the command. Takes bundle and config.
+        handler: Function for command types executed directly. Action-backed
+            command types leave this unset and are dispatched by the action layer.
         description: Description for LLM to understand the command's purpose.
         max_attempts: How many times the command can be attempted before being considered failed.
         aliases: Optional list of alternative names for this command.
@@ -34,7 +35,7 @@ class CommandDefinition:
     """
 
     command_type: CommandType
-    handler: CommandHandler
+    handler: CommandHandler | None
     description: str
     max_attempts: int
     aliases: list[str] = field(default_factory=list)

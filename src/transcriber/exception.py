@@ -74,19 +74,6 @@ class DuplicateBundleIdException(AudioTranscriberException):
 
 
 @final
-class NoPreviousBundleException(AudioTranscriberException):
-    """Failed to find a previous bundle for merge command."""
-
-    def __init__(self, target_bundle: str, search_pattern: str, context: str | None = None):
-        message = f"No previous bundle found for {target_bundle} using pattern: {search_pattern}"
-        if context:
-            message = f"{message}: {context}"
-        super().__init__(message)
-        self.target_bundle = target_bundle
-        self.search_pattern = search_pattern
-
-
-@final
 class MergeBlockedException(AudioTranscriberException):
     """A previous merge into the target bundle failed and left a failure marker.
 
