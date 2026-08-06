@@ -17,8 +17,8 @@ timezone = "Europe/Brussels"
 safe_delete = true
 
 [http]
-# Expose the local action-request API while running with --daemon.
-enabled = false
+# Expose the local action-request API in the default continuous mode.
+enabled = true
 # The first API version is deliberately restricted to loopback hosts.
 host = "127.0.0.1"
 port = 8765

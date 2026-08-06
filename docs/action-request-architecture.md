@@ -42,7 +42,7 @@ HTTP or interpreted command
  coordinator invalidates only affected bundle work
 ```
 
-The HTTP server never executes actions. It validates and submits intent, then wakes the daemon. The daemon remains the only bundle execution context.
+The HTTP server never executes actions. It validates and submits intent, then wakes the continuous coordinator, which remains the only bundle execution context.
 
 ## Domain models
 
@@ -201,7 +201,7 @@ The first HTTP layer uses Python's standard-library HTTP server to avoid a web-f
 
 It runs on one transport thread so submissions can arrive while the daemon waits. The thread writes only request rows and signals the daemon event; it never processes a bundle. SQLite serializes the short submission transaction with lifecycle updates.
 
-The API is disabled by default and restricted to `127.0.0.1` until authentication exists. Caller-provided request IDs make repeated HTTP submissions idempotent.
+The API is enabled in the default continuous mode and restricted to `127.0.0.1` until authentication exists. Caller-provided request IDs make repeated HTTP submissions idempotent. `--once` runs one update cycle without starting the watcher or HTTP transport.
 
 ## Complexity deliberately removed
 

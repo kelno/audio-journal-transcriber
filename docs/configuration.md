@@ -56,7 +56,7 @@ The text connection values are currently required by the configuration model eve
 
 | Setting   | Packaged default | Description                                                                                  |
 | --------- | ---------------- | -------------------------------------------------------------------------------------------- |
-| `enabled` | `false`          | Expose the action-request API while running in daemon mode.                                  |
+| `enabled` | `true`           | Expose the action-request API during the default continuous mode.                            |
 | `host`    | `127.0.0.1`      | Listening host. Only `127.0.0.1` is accepted until authentication is implemented.             |
 | `port`    | `8765`           | Listening TCP port.                                                                          |
 

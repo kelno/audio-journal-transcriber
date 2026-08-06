@@ -13,11 +13,11 @@ A bundle is a self-contained directory that keeps a recording together with its 
 3. The audio is sent to the configured transcription API and saved as `transcript.md`.
 4. The transcript is inspected for spoken commands, such as merging with the previous recording or assigning a title.
 5. When summaries are enabled, a chat model creates `summary.md` and a short directory title.
-6. In daemon mode, the input directory remains watched and failed work is retried automatically.
+6. The default continuous mode keeps watching the input directory, serves the local action API, and retries failed work automatically.
 
 ## Features
 
-- Run once or continuously as a filesystem-watching daemon.
+- Watch continuously and serve the local action API by default, or run one update cycle with `--once`.
 - Discover `.mp3`, `.wav`, `.m4a`, `.flac`, `.ogg`, `.aac`, `.mkv`, and `.mp4` recordings. Processing also depends on FFmpeg being able to inspect the file and the configured transcription service accepting its format.
 - Use separately configurable OpenAI-compatible APIs and models for transcription and text processing.
 - Produce plain Markdown transcripts and structured summaries with topics, a narrative summary, and action items.
@@ -25,7 +25,7 @@ A bundle is a self-contained directory that keeps a recording together with its 
 - Generate chronological, readable directory names from the recording date and summary.
 - Optionally add your own recording-specific context in `custom_context.md`; changing that context triggers summary regeneration.
 - Use spoken commands to merge recordings, delete a recording, or assign a persistent manual title.
-- Resume incomplete bundles and retry failures with increasing delays in daemon mode.
+- Resume incomplete bundles and retry failures with increasing delays in continuous mode.
 - Filter recordings by duration and optionally remove processed source audio after a retention period.
 - Preview processing without modifying bundles with `--dry-run`.
 - Move user-deleted bundles to a recoverable `_deleted` directory with safe deletion.
@@ -50,7 +50,7 @@ Copy the example configuration to the working directory:
 cp docs/config.custom.toml.example config.custom.toml
 ```
 
-Edit `config.custom.toml` with your directories, API endpoints, credentials, and model names. Ensure that the configured input directory already exists, then process all pending recordings:
+Edit `config.custom.toml` with your directories, API endpoints, credentials, and model names. Ensure that the configured input directory already exists, then start continuous processing and the local action API:
 
 ```bash
 uv run transcriber
@@ -114,14 +114,14 @@ uv run transcriber --help
 Common modes:
 
 ```bash
-# Process pending work and exit
+# Watch, process, retry, and serve HTTP requests continuously
 uv run transcriber
 
-# Continue watching the input directory
-uv run transcriber --daemon
+# Run one update cycle and exit
+uv run transcriber --once
 
-# Show intended work without modifying bundle files
-uv run transcriber --dry-run
+# Preview one update cycle without modifying bundle files
+uv run transcriber --once --dry-run
 ```
 
 ## Guides

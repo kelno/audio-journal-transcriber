@@ -60,4 +60,4 @@ Titles are normalized for NTFS and ext4 compatibility, whitespace is collapsed, 
 
 Extracted commands and their execution state are stored in `_commands.md`. This prevents completed commands from running again when an existing bundle is revisited.
 
-Commands that cannot be interpreted or executed are retried only up to their configured attempt limit. In daemon mode, bundle-level failures are retried with increasing delays. The underscore-prefixed command file is application state and should normally not be edited manually.
+Temporary interpretation failures use the continuous coordinator's retry delay. Successfully interpreted but unsupported commands receive a terminal `rejected` resolution, while action execution outcomes are recorded on their durable requests. The underscore-prefixed command file is application state and should normally not be edited manually.

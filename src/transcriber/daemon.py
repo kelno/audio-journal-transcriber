@@ -6,7 +6,7 @@ from pathlib import Path
 
 from transcriber.actions.http_api import ActionHttpServer
 from transcriber.audio_transcriber import AudioTranscriber
-from transcriber.config import TranscribeConfig
+from transcriber.config import HttpConfig, TranscribeConfig
 from transcriber.files.file_watcher import FileWatcher
 from transcriber.logger import logger
 from transcriber.retry_manager import RetryManager
@@ -44,6 +44,7 @@ class TranscriptionDaemon:
 
     Processing can be triggered by:
     - Filesystem activity
+    - HTTP action submission
     - Retry deadlines after failed processing
     - Hourly fallback deadlines
 
@@ -55,7 +56,6 @@ class TranscriptionDaemon:
     def __init__(
         self,
         transcriber: AudioTranscriber,
-        unprocessed_bundles: list[BundleJobs],
         config: TranscribeConfig,
         *,
         clock: Callable[[], float] = time.monotonic,
@@ -64,7 +64,6 @@ class TranscriptionDaemon:
 
         Args:
             transcriber: Transcriber instance used to process pending bundles.
-            unprocessed_bundles: Bundles that should be retried when the daemon starts.
             config: Daemon configuration, including the input directory to watch.
             clock:
                 Function returning the current monotonic time in seconds.
@@ -78,7 +77,7 @@ class TranscriptionDaemon:
         self.clock: Callable[[], float] = clock
 
         self.state: DaemonState = DaemonState(
-            unprocessed=unprocessed_bundles,
+            unprocessed=[],
             retry_manager=RetryManager(
                 initial_delay=1.0,
                 max_delay=MAX_RETRY_DELAY,
@@ -86,7 +85,7 @@ class TranscriptionDaemon:
             next_hourly_run=clock() + MAX_PROCESSING_INTERVAL,
         )
 
-        # Signals that filesystem activity has occurred.
+        # Signals that filesystem or HTTP activity has occurred.
         #
         # The event is only used for communication between threads. Processing
         # itself remains in the daemon loop so that state updates happen in a
@@ -101,29 +100,31 @@ class TranscriptionDaemon:
             self._on_files_changed,
             stable_delay=5.0,
         )
-        self.http_server: ActionHttpServer | None = (
-            ActionHttpServer(
-                config.http.host,
-                config.http.port,
-                transcriber.action_runtime.service,
-                self._on_http_submission,
-            )
-            if config.http.enabled
-            else None
-        )
+        self.http_config: HttpConfig = config.http
+        self.http_server: ActionHttpServer | None = None
 
     def run(self) -> None:
         """Start the daemon lifecycle.
 
         The method blocks until stop() is called or the process is interrupted.
         """
-        logger.info("Starting daemon mode")
+        logger.info("Starting continuous mode")
 
-        self.watcher.start()
-        if self.http_server is not None:
-            self.http_server.start()
-
+        watcher_started = False
         try:
+            if self.http_config.enabled:
+                self.http_server = ActionHttpServer(
+                    self.http_config.host,
+                    self.http_config.port,
+                    self.transcriber.action_runtime.service,
+                    self._on_http_submission,
+                )
+                self.http_server.start()
+
+            self.watcher.start()
+            watcher_started = True
+            self._process("Running initial processing")
+
             while not self.stop_event.is_set():
                 work_triggered: bool = self._wait_for_work()
 
@@ -133,8 +134,9 @@ class TranscriptionDaemon:
                 self._process_if_needed(work_triggered)
 
         finally:
-            logger.info("Stopping daemon mode...")
-            self.watcher.stop()
+            logger.info("Stopping continuous mode...")
+            if watcher_started:
+                self.watcher.stop()
             if self.http_server is not None:
                 self.http_server.stop()
 
@@ -162,7 +164,7 @@ class TranscriptionDaemon:
         """Wait until filesystem activity occurs or a scheduled deadline expires.
 
         Returns:
-            Whether filesystem activity triggered the wake-up.
+            Whether new work triggered the wake-up.
 
         """
         triggered: bool = self.work_event.wait(
@@ -175,14 +177,13 @@ class TranscriptionDaemon:
     def _process_if_needed(self, work_triggered: bool) -> None:
         """Decide whether processing should happen.
 
-        Filesystem activity takes priority because it represents new input.
-        Retry and hourly processing happen when their respective deadlines are
-        reached.
+        New filesystem or HTTP work takes priority. Retry and hourly processing
+        happen when their respective deadlines are reached.
         """
         now: float = self.clock()
 
         if work_triggered:
-            self._process("Filesystem changes detected")
+            self._process("New work detected")
 
         elif self.state.unprocessed:
             self._process(f"Retrying {len(self.state.unprocessed)} failed bundles...")

@@ -49,6 +49,6 @@ COPY --from=builder /app/.venv /app/.venv
 # (OpenShift) Change permissions to group 0 (root) and allow users in the root group to access files in /app
 RUN chgrp -R 0 /app && chmod -R g=u /app
 
-# Entrypoint: run the transcriber module (maybe can call transcriber directly?)
-ENTRYPOINT ["transcriber", "--daemon"]
+# Continuous watching and local HTTP serving are the transcriber's default mode.
+ENTRYPOINT ["transcriber"]
 CMD []

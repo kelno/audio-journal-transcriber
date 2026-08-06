@@ -53,7 +53,6 @@ class AudioTranscriber:
     """Main class for transcribing audio files."""
 
     dry_run: bool
-    only_one_bundle: bool
     ai_manager: AIManager
     config: TranscribeConfig
     fs_service: FileSystemService
@@ -65,14 +64,12 @@ class AudioTranscriber:
         dry_run: bool,
         ai_manager: AIManager,
         config: TranscribeConfig,
-        only_one_bundle: bool = False,
         fs_service: FileSystemService | None = None,
         audio_service: AudioService | None = None,
         action_runtime: ActionRuntime | None = None,
     ) -> None:
         """Initialize the audio transcriber."""
         self.dry_run = dry_run
-        self.only_one_bundle = only_one_bundle
         self.ai_manager = ai_manager
         self.config = config
         self.fs_service = fs_service or RealFileSystemService(config)
@@ -326,8 +323,7 @@ class AudioTranscriber:
         """Generate the job queue for processing all bundles.
 
         Creates a list of BundleJobs, one per bundle, containing all the
-        tasks needed to complete transcription for each bundle. When
-        only_one_bundle mode is enabled, returns only the first bundle's jobs.
+        tasks needed to complete transcription for each bundle.
 
         Args:
             bundle_cache: Bundles indexed by persistent ID to generate jobs for.
@@ -351,9 +347,6 @@ class AudioTranscriber:
                 )
             )
         ]
-        if self.only_one_bundle:
-            jobs = jobs[:1]
-
         return jobs
 
     # Moved here to avoid circular imports

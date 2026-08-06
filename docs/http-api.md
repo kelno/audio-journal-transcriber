@@ -1,10 +1,10 @@
 # Action request HTTP API
 
-The daemon can expose a small local HTTP API for submitting and inspecting action requests. The API only accepts and reads durable intent; bundle execution remains in the daemon's synchronous coordinator.
+The transcriber's default continuous mode exposes a small local HTTP API for submitting and inspecting action requests. The API only accepts and reads durable intent; bundle execution remains in the synchronous coordinator.
 
-## Enable it
+## Configuration
 
-In `config.custom.toml`:
+The API is enabled by default. Its settings can be overridden in `config.custom.toml`:
 
 ```toml
 [http]
@@ -13,10 +13,10 @@ host = "127.0.0.1"
 port = 8765
 ```
 
-Then start daemon mode:
+Then start the default continuous mode:
 
 ```bash
-uv run transcriber --daemon
+uv run transcriber
 ```
 
 This first version is intentionally bound to `127.0.0.1` and has no authentication. Other hosts are rejected by configuration validation.

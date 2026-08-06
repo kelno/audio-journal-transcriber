@@ -1,6 +1,6 @@
 # Container deployment
 
-The provided multi-stage container build installs the project with uv, includes FFmpeg, and runs the transcriber in daemon mode by default.
+The provided multi-stage container build installs the project with uv, includes FFmpeg, and runs the transcriber continuously by default.
 
 ## Build with Docker
 
@@ -51,7 +51,9 @@ docker run --rm \
 
 Use `podman run` with the same arguments when running under Podman.
 
-The image entry point is `transcriber --daemon`, so the container watches for new recordings until it is stopped. `SIGTERM` and `SIGINT` request a clean shutdown.
+The image entry point is `transcriber`, whose default mode watches for new recordings until it is stopped. `SIGTERM` and `SIGINT` request a clean shutdown.
+
+The first HTTP API version binds to loopback only. Inside a container, that means it is not reachable from the host or other containers, even if the port is published. Container HTTP exposure remains deferred until the API has authentication and permits a non-loopback bind address.
 
 ## Override values with environment variables
 
@@ -74,15 +76,14 @@ See [Configuration](configuration.md) for the complete environment-variable form
 
 ## Run once instead of watching
 
-Override the image entry point to process pending work and exit:
+Pass `--once` to process pending work and exit:
 
 ```bash
 docker run --rm \
-  --entrypoint transcriber \
   -v /host/audio-inbox:/data/input \
   -v /host/audio-journal:/data/store \
   -v /host/config.custom.toml:/app/config.custom.toml:ro \
-  audio-journal-transcriber:latest
+  audio-journal-transcriber:latest --once
 ```
 
-Add `--dry-run` after the image name to preview processing without writing bundle changes.
+Use `--once --dry-run` after the image name to preview processing without writing bundle changes.

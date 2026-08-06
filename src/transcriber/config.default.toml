@@ -17,8 +17,8 @@ timezone = "Europe/Brussels"
 safe_delete = true
 
 [http]
-# Local action-request API. Available only in daemon mode.
-enabled = false
+# Local action-request API for the default continuous mode.
+enabled = true
 host = "127.0.0.1"
 port = 8765
 

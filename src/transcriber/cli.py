@@ -9,11 +9,8 @@ from transcriber.daemon import TranscriptionDaemon
 from transcriber.logger import configure_logger, logger
 
 
-def main() -> None:
-    """Main entry point for the audio transcriber CLI.
-
-    Parses command line arguments and runs the appropriate transcription mode.
-    """
+def create_argument_parser() -> argparse.ArgumentParser:
+    """Create the command-line interface without executing the application."""
     parser = argparse.ArgumentParser(
         description="Move, transcribe and summarize audio files into processed bundles.",
     )
@@ -28,21 +25,23 @@ def main() -> None:
         help="Enable debug logging output.",
     )
     parser.add_argument(
-        "--daemon",
+        "--once",
         action="store_true",
-        help="Run in daemon mode, watching file changes and processing continuously.",
+        help="Run one update cycle and exit instead of watching and serving continuously.",
     )
-    parser.add_argument(
-        "--one",
-        action="store_true",
-        help="Only process one bundle (for testing).",
-    )
-    args = parser.parse_args()
+    return parser
+
+
+def main() -> None:
+    """Main entry point for the audio transcriber CLI.
+
+    Parses command line arguments and runs the appropriate transcription mode.
+    """
+    args = create_argument_parser().parse_args()
 
     dry_run = args.dry_run
     debug = args.debug
-    daemon_mode = args.daemon
-    one_bundle = args.one
+    run_once = args.once
 
     configure_logger(debug)
 
@@ -64,17 +63,18 @@ def main() -> None:
         dry_run=dry_run,
         ai_manager=ai_manager,
         config=config,
-        only_one_bundle=one_bundle,
     )
-    unprocessed = transcriber.run()
-    if daemon_mode:
-        daemon = TranscriptionDaemon(transcriber, unprocessed, config)
+    if run_once:
+        transcriber.run()
+        return
 
-        def shutdown(_signum: int, _frame: object) -> None:
-            logger.info("Shutdown signal received")
-            daemon.stop()
+    daemon = TranscriptionDaemon(transcriber, config)
 
-        signal.signal(signal.SIGTERM, shutdown)
-        signal.signal(signal.SIGINT, shutdown)
+    def shutdown(_signum: int, _frame: object) -> None:
+        logger.info("Shutdown signal received")
+        daemon.stop()
 
-        daemon.run()
+    signal.signal(signal.SIGTERM, shutdown)
+    signal.signal(signal.SIGINT, shutdown)
+
+    daemon.run()

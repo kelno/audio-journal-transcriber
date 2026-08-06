@@ -88,7 +88,7 @@ class AudioConfig(BaseModel):
 class HttpConfig(BaseModel):
     """Configuration for the local action-request HTTP transport."""
 
-    enabled: bool = False
+    enabled: bool = True
     host: str = "127.0.0.1"
     port: int = Field(default=8765, ge=1, le=65535)
 
