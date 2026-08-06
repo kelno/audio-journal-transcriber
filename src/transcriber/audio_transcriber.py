@@ -193,9 +193,7 @@ class AudioTranscriber:
         # title action. Globally postponing summary and naming work avoids doing
         # expensive post-processing immediately before such an action invalidates it.
         has_command_work = any(
-            isinstance(queued_job, (GatherCommandsJob, RunCommandsJob))
-            for entry in queue.values()
-            for queued_job in entry.jobs
+            isinstance(queued_job, (GatherCommandsJob, RunCommandsJob)) for entry in queue.values() for queued_job in entry.jobs
         )
 
         # Jobs within one bundle are already dependency ordered, so only its head
@@ -203,17 +201,13 @@ class AudioTranscriber:
         ready_ids = [
             bundle_id
             for bundle_id, entry in queue.items()
-            if entry.jobs
-            and not (
-                has_command_work
-                and isinstance(entry.jobs[0], (SummaryJob, BundleNameJob))
-            )
+            if entry.jobs and not (has_command_work and isinstance(entry.jobs[0], (SummaryJob, BundleNameJob)))
         ]
         if not ready_ids:
             return None
 
         # Derived jobs have no enqueue timestamp of their own. Recording date is
-        # therefore the closest durable age key; bundle ID makes ties deterministic.
+        # therefore the closest durable age key; or if those are also identical, bundle ID is used to makes ties deterministic.
         return min(
             ready_ids,
             key=lambda bundle_id: (queue[bundle_id].jobs[0].bundle.get_bundle_date(), bundle_id),
@@ -547,8 +541,7 @@ class AudioTranscriber:
             self.log_section_header("Processing Jobs")
             errored_bundles = self.process_jobs(all_bundle_jobs, bundle_cache)
 
-        # Step 5: remove input directories emptied by successful imports. This is
-        # cleanup only and must not run during a dry-run preview.
+        # Step 5: remove input directories emptied by successful imports.
         if not self.dry_run:
             remove_empty_subdirs(input_dir)
 

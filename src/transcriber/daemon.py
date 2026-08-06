@@ -114,10 +114,10 @@ class TranscriptionDaemon:
         try:
             if self.http_config.enabled:
                 self.http_server = ActionHttpServer(
-                    self.http_config.host,
-                    self.http_config.port,
-                    self.transcriber.action_runtime.service,
-                    self._on_http_submission,
+                    host=self.http_config.host,
+                    port=self.http_config.port,
+                    service=self.transcriber.action_runtime.service,
+                    on_submission=self._on_http_submission,
                 )
                 self.http_server.start()
 

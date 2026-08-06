@@ -131,6 +131,7 @@ class _ActionRequestHandler(BaseHTTPRequestHandler):
             self._write_json(HTTPStatus.INTERNAL_SERVER_ERROR, {"error": "request_store_error"})
             return
 
+        # request has been submitted, notify the action server so it can work on it
         self._action_server.on_submission()
         self._write_json(
             HTTPStatus.ACCEPTED,
