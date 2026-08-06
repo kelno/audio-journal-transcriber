@@ -124,6 +124,8 @@ SQLite is used directly through a repository boundary. Domain models and databas
 - updates may change lifecycle fields, but the store verifies that the original request ID, action, origin, schema version, and creation time did not change;
 - schema migrations record their current version in SQLite's application-defined `PRAGMA user_version` field.
 
+The database has a fixed location at `<store_dir>/_state/transcriber.sqlite3`. There is currently no automatic backup mechanism for this database.
+
 The earlier SQLModel experiment was rejected because it coupled constructor/database behavior to domain validation, made frozen immutable fields awkward, and added more code and dependencies than explicit `sqlite3` for this small schema.
 
 ### Why commands remain bundle files
@@ -197,24 +199,12 @@ The loop limits how many times it can recreate jobs for the same bundle during o
 
 ## HTTP transport
 
-The first HTTP layer currently uses Python's standard-library HTTP server for three endpoints:
+The HTTP layer is a FastAPI application served by Uvicorn. FastAPI handles route matching, JSON parsing, Pydantic validation, response serialization, and the generated OpenAPI documentation. The application defines three action API endpoints:
 
 - `POST /requests`;
 - `GET /requests/{request_id}`;
 - `GET /health`.
 
-It runs on one transport thread so submissions can arrive while the daemon waits. The thread writes only request rows and signals the daemon event; it never processes a bundle. SQLite serializes the short submission transaction with lifecycle updates.
+Uvicorn runs on one transport thread so submissions can arrive while the daemon waits. The route functions perform their short synchronous request-store operations directly on that thread, which keeps HTTP submissions serialized. The thread writes only request rows and signals the daemon event; it never processes a bundle. SQLite coordinates those submission transactions with lifecycle updates from the processing loop.
 
 The API is enabled in the default continuous mode and restricted to `127.0.0.1` until authentication exists. When callers repeat the same action with the same request ID, the API returns the existing request instead of creating a duplicate. `--once` runs one update cycle without starting the watcher or HTTP transport.
-
-## Decisions still open
-
-- Authentication and authorization before any non-loopback HTTP exposure.
-- Whether to keep the standard-library HTTP server or adopt a web framework as the API grows.
-- Whether HTTP needs list, cancellation, or explicit resubmission endpoints.
-- Whether effects from finished requests should be persisted for auditing.
-- Whether request retention and database backup location should be configurable.
-- Whether global summary readiness becomes measurably too conservative.
-- Whether a future permanent activity history is distinct from short-lived request status.
-
-None of these are required for the current synchronous local API.

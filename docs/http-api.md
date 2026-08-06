@@ -91,9 +91,10 @@ The response is the canonical action request, including status, timestamps, orig
 curl --request GET http://127.0.0.1:8765/health
 ```
 
+FastAPI also provides interactive OpenAPI documentation at `http://127.0.0.1:8765/docs` and the generated schema at `http://127.0.0.1:8765/openapi.json`.
+
 ## Initial API limits
 
 - No request listing, cancellation, authentication, or automatic retry endpoint.
 - Requests in `succeeded`, `failed`, or `blocked` state are retained for 30 days.
-- The maximum request body is 64 KiB.
 - HTTP submission can occur while a job is running, but the new request executes only after the coordinator regains control.

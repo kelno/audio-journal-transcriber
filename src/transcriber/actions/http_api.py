@@ -1,18 +1,19 @@
-"""Small loopback HTTP transport for durable action requests."""
+"""FastAPI transport for durable action requests on the loopback interface."""
 
 from __future__ import annotations
 
-import json
 import logging
 import threading
-from http import HTTPStatus
-from http.server import BaseHTTPRequestHandler, HTTPServer
-from typing import TYPE_CHECKING, ClassVar, cast, final, override
+import time
+from typing import TYPE_CHECKING, ClassVar, final
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+import uvicorn
+from fastapi import FastAPI, Response, status
+from fastapi.responses import JSONResponse
+from pydantic import BaseModel, ConfigDict, Field
 
 from transcriber.actions.action import Action  # noqa: TC001 - discriminator resolution needs runtime types.
-from transcriber.actions.action_request import ActionRequestId, HttpActionOrigin
+from transcriber.actions.action_request import ActionRequest, ActionRequestId, HttpActionOrigin
 from transcriber.actions.action_request_store import ActionRequestAlreadyExistsError, ActionRequestStoreError
 
 if TYPE_CHECKING:
@@ -20,7 +21,9 @@ if TYPE_CHECKING:
 
     from transcriber.actions.action_service import ActionService
 
-MAX_REQUEST_BODY_BYTES = 64 * 1024
+_SERVER_START_TIMEOUT_SECONDS = 5.0
+_SERVER_STOP_TIMEOUT_SECONDS = 5.0
+_SERVER_FORCE_STOP_TIMEOUT_SECONDS = 1.0
 _LOGGER = logging.getLogger(__name__)
 
 
@@ -32,162 +35,97 @@ class HttpActionSubmission(BaseModel):
 
     # Optional caller-generated identity that makes an HTTP retry idempotent.
     request_id: ActionRequestId | None = None
-    # Typed immutable intent selected through its serialized discriminator.
+    # Typed immutable action selected through its serialized discriminator.
     action: Action = Field(discriminator="type")
 
 
-@final
-class _ActionRequestHttpServer(HTTPServer):
-    """HTTP server carrying transport dependencies for its request handler."""
+def create_action_http_app(
+    service: ActionService,
+    on_submission: Callable[[], None],
+) -> FastAPI:
+    """Create the HTTP application around transport-neutral request operations.
 
-    def __init__(
-        self,
-        address: tuple[str, int],
-        service: ActionService,
-        on_submission: Callable[[], None],
-    ) -> None:
-        """Bind the transport address to request services and daemon wake-up.
+    Args:
+        service: Durable action-request submission and lookup boundary.
+        on_submission: Callback that wakes the single action-processing loop.
 
-        Args:
-            address: Loopback host and listening port.
-            service: Transport-neutral request submission and lookup boundary.
-            on_submission: Callback that wakes the single execution loop.
+    Returns:
+        A configured FastAPI application that never executes actions itself.
 
-        """
-        self.service = service
-        self.on_submission = on_submission
-        super().__init__(address, _ActionRequestHandler)
+    """
+    app = FastAPI(title="Transcriber Action API", version="1")
 
+    async def get_health() -> dict[str, str]:
+        """Return a minimal response showing that the HTTP process is ready."""
+        return {"status": "ok"}
 
-@final
-class _ActionRequestHandler(BaseHTTPRequestHandler):
-    """Translate HTTP messages into transport-neutral service calls."""
-
-    server_version: str = "TranscriberActionAPI/1"
-
-    def do_GET(self) -> None:
-        """Return health or one canonical request."""
-        if self.path == "/health":
-            self._write_json(HTTPStatus.OK, {"status": "ok"})
-            return
-
-        prefix = "/requests/"
-        if not self.path.startswith(prefix):
-            self._write_json(HTTPStatus.NOT_FOUND, {"error": "not_found"})
-            return
-
-        request_id = self.path.removeprefix(prefix)
+    async def get_request(request_id: ActionRequestId) -> ActionRequest | Response:
+        """Return canonical durable state for one request ID."""
         try:
-            request = self._action_server.service.get_request(request_id)
+            action_request = service.get_request(request_id)
         except ActionRequestStoreError:
             _LOGGER.exception("Could not read action request through HTTP")
-            self._write_json(HTTPStatus.INTERNAL_SERVER_ERROR, {"error": "request_store_error"})
-            return
-        if request is None:
-            self._write_json(HTTPStatus.NOT_FOUND, {"error": "request_not_found"})
-            return
-        self._write_json(HTTPStatus.OK, request.model_dump(mode="json"))
-
-    def do_POST(self) -> None:
-        """Validate and durably submit one action request."""
-        if self.path != "/requests":
-            self._write_json(HTTPStatus.NOT_FOUND, {"error": "not_found"})
-            return
-
-        submission = self._read_submission()
-        if submission is not None:
-            self._submit(submission)
-
-    def _read_submission(self) -> HttpActionSubmission | None:
-        """Read and validate one bounded JSON submission body."""
-        if self.headers.get_content_type() != "application/json":
-            self._write_json(HTTPStatus.UNSUPPORTED_MEDIA_TYPE, {"error": "application_json_required"})
-            return None
-
-        try:
-            content_length = int(self.headers.get("Content-Length", ""))
-        except ValueError:
-            self._write_json(HTTPStatus.BAD_REQUEST, {"error": "invalid_content_length"})
-            return None
-        if content_length <= 0 or content_length > MAX_REQUEST_BODY_BYTES:
-            self._write_json(HTTPStatus.REQUEST_ENTITY_TOO_LARGE, {"error": "invalid_body_size"})
-            return None
-
-        try:
-            payload = json.loads(self.rfile.read(content_length))
-            return HttpActionSubmission.model_validate(payload)
-        except (json.JSONDecodeError, UnicodeDecodeError):
-            self._write_json(HTTPStatus.BAD_REQUEST, {"error": "invalid_json"})
-            return None
-        except ValidationError as error:
-            self._write_json(
-                HTTPStatus.UNPROCESSABLE_ENTITY,
-                {"error": "invalid_request", "details": error.errors(include_url=False, include_context=False)},
+            return JSONResponse(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                content={"error": "request_store_error"},
             )
-            return None
+        if action_request is None:
+            return JSONResponse(
+                status_code=status.HTTP_404_NOT_FOUND,
+                content={"error": "request_not_found"},
+            )
+        return action_request
 
-    def _submit(self, submission: HttpActionSubmission) -> None:
-        """Submit validated intent and return its canonical request state."""
+    async def submit_request(
+        submission: HttpActionSubmission,
+        response: Response,
+    ) -> ActionRequest | Response:
+        """Durably submit one action, then wake the separate processing loop."""
         try:
-            request = self._action_server.service.submit(
+            action_request = service.submit(
                 submission.action,
                 HttpActionOrigin(),
                 request_id=submission.request_id,
             )
         except ActionRequestAlreadyExistsError as error:
-            self._write_json(HTTPStatus.CONFLICT, {"error": "request_id_conflict", "message": str(error)})
-            return
+            return JSONResponse(
+                status_code=status.HTTP_409_CONFLICT,
+                content={"error": "request_id_conflict", "message": str(error)},
+            )
         except ActionRequestStoreError:
             _LOGGER.exception("Could not submit action request through HTTP")
-            self._write_json(HTTPStatus.INTERNAL_SERVER_ERROR, {"error": "request_store_error"})
-            return
+            return JSONResponse(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                content={"error": "request_store_error"},
+            )
+        response.headers["Location"] = f"/requests/{action_request.request_id}"
 
-        # request has been submitted, notify the action server so it can work on it
-        self._action_server.on_submission()
-        self._write_json(
-            HTTPStatus.ACCEPTED,
-            request.model_dump(mode="json"),
-            extra_headers={"Location": f"/requests/{request.request_id}"},
-        )
+        # Submission only records durable intent. The daemon remains the sole
+        # action executor, so wake it after the transaction has completed.
+        on_submission()
+        return action_request
 
-    @property
-    def _action_server(self) -> _ActionRequestHttpServer:
-        """Return the handler's server narrowed to its dependency-carrying type."""
-        return cast("_ActionRequestHttpServer", self.server)
+    app.add_api_route("/health", get_health, methods=["GET"])
+    app.add_api_route(
+        "/requests/{request_id}",
+        get_request,
+        methods=["GET"],
+        response_model=ActionRequest,
+    )
+    app.add_api_route(
+        "/requests",
+        submit_request,
+        methods=["POST"],
+        response_model=ActionRequest,
+        status_code=status.HTTP_202_ACCEPTED,
+    )
 
-    def _write_json(
-        self,
-        status: HTTPStatus,
-        payload: object,
-        *,
-        extra_headers: dict[str, str] | None = None,
-    ) -> None:
-        """Write one compact UTF-8 JSON response with optional transport headers.
-
-        Args:
-            status: HTTP response status sent to the client.
-            payload: JSON-serializable response body.
-            extra_headers: Additional headers such as a request location.
-
-        """
-        encoded = json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode()
-        self.send_response(status)
-        self.send_header("Content-Type", "application/json; charset=utf-8")
-        self.send_header("Content-Length", str(len(encoded)))
-        for name, value in (extra_headers or {}).items():
-            self.send_header(name, value)
-        self.end_headers()
-        self.wfile.write(encoded)
-
-    @override
-    def log_message(self, format: str, *args: object) -> None:
-        """Route HTTP access messages through application logging."""
-        _LOGGER.debug("HTTP %s - %s", self.address_string(), format % args)
+    return app
 
 
 @final
 class ActionHttpServer:
-    """Lifecycle wrapper for the loopback action-request HTTP server."""
+    """Run the FastAPI action transport beside the synchronous daemon loop."""
 
     def __init__(
         self,
@@ -196,43 +134,80 @@ class ActionHttpServer:
         service: ActionService,
         on_submission: Callable[[], None],
     ) -> None:
-        """Configure a loopback server without starting its background thread.
+        """Configure an embedded Uvicorn server without starting its thread.
 
         Args:
             host: Validated loopback interface to bind.
             port: Listening port, or zero to let the OS select one for tests.
             service: Transport-neutral action-request service.
-            on_submission: Callback that wakes the single execution loop.
+            on_submission: Callback that wakes the single processing loop.
 
         """
-        self._server = _ActionRequestHttpServer((host, port), service, on_submission)
+        app = create_action_http_app(service, on_submission)
+        config = uvicorn.Config(
+            app,
+            host=host,
+            port=port,
+            access_log=False,
+            log_config=None,
+        )
+        # Requested address retained until Uvicorn exposes its bound socket.
+        self._configured_address = (host, port)
+        # Embedded ASGI server controlled by the daemon lifecycle.
+        self._server = uvicorn.Server(config)
+        # Background transport thread; action execution stays on the daemon thread.
         self._thread: threading.Thread | None = None
 
     @property
     def address(self) -> tuple[str, int]:
-        """Return the actual bound address, including an OS-selected test port."""
-        address = self._server.server_address
-        return str(address[0]), int(address[1])
+        """Return the bound address, including an OS-selected test port."""
+        if not self._server.started:
+            return self._configured_address
+        for running_server in self._server.servers:
+            if running_server.sockets:
+                host, port, *_ = running_server.sockets[0].getsockname()
+                return str(host), int(port)
+        return self._configured_address
 
     def start(self) -> None:
-        """Start accepting HTTP requests on one transport-only thread."""
+        """Start Uvicorn and wait until its listening socket is ready."""
         if self._thread is not None:
             return
+
+        self._server.should_exit = False
+        self._server.force_exit = False
         self._thread = threading.Thread(
-            target=self._server.serve_forever,
+            target=self._server.run,
             name="action-http-server",
             daemon=True,
         )
         self._thread.start()
+
+        deadline = time.monotonic() + _SERVER_START_TIMEOUT_SECONDS
+        while not self._server.started:
+            if not self._thread.is_alive():
+                self._thread = None
+                msg = "Action request HTTP server stopped during startup"
+                raise RuntimeError(msg)
+            if time.monotonic() >= deadline:
+                self.stop()
+                msg = "Action request HTTP server did not start in time"
+                raise TimeoutError(msg)
+            time.sleep(0.01)
+
         host, port = self.address
         _LOGGER.info("Action request HTTP API listening on http://%s:%s", host, port)
 
     def stop(self) -> None:
-        """Stop accepting requests and release the listening socket."""
+        """Ask Uvicorn to finish active requests and stop its server thread."""
         if self._thread is None:
-            self._server.server_close()
             return
-        self._server.shutdown()
-        self._server.server_close()
-        self._thread.join(timeout=5)
+
+        self._server.should_exit = True
+        self._thread.join(timeout=_SERVER_STOP_TIMEOUT_SECONDS)
+        if self._thread.is_alive():
+            self._server.force_exit = True
+            self._thread.join(timeout=_SERVER_FORCE_STOP_TIMEOUT_SECONDS)
+        if self._thread.is_alive():
+            _LOGGER.error("Action request HTTP server did not stop cleanly")
         self._thread = None

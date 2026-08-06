@@ -1,4 +1,4 @@
-"""Integration tests for the loopback action-request HTTP transport."""
+"""Integration tests for the FastAPI action-request transport."""
 
 from pathlib import Path
 
@@ -37,12 +37,15 @@ def test_http_submit_is_idempotent_and_status_is_queryable(tmp_path: Path) -> No
     }
 
     try:
+        health = requests.get(f"{base_url}/health", timeout=5)
         first = requests.post(f"{base_url}/requests", json=payload, timeout=5)
         repeated = requests.post(f"{base_url}/requests", json=payload, timeout=5)
         status = requests.get(f"{base_url}/requests/{request_id}", timeout=5)
     finally:
         server.stop()
 
+    assert health.status_code == 200
+    assert health.json() == {"status": "ok"}
     assert first.status_code == 202
     assert first.headers["Location"] == f"/requests/{request_id}"
     assert repeated.status_code == 202
@@ -84,7 +87,7 @@ def test_http_rejects_invalid_action_and_request_id_conflicts(tmp_path: Path) ->
         server.stop()
 
     assert invalid.status_code == 422
-    assert invalid.json()["error"] == "invalid_request"
+    assert invalid.json()["detail"]
     assert accepted.status_code == 202
     assert conflict.status_code == 409
     assert conflict.json()["error"] == "request_id_conflict"

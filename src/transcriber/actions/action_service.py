@@ -212,5 +212,7 @@ class ActionProcessor:
             terminal.error = None
         else:
             terminal.error = result.error
+        # Effects remain temporary instructions for the current processing loop.
+        # Persist them here only if request status or the API should expose affected bundles later.
         self._store.update(terminal)
         return result
