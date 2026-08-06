@@ -574,10 +574,7 @@ class RunCommandsJob(TranscribeBundleJob):
 
         service = self.action_runtime.service
         processor = self.action_runtime.processor(bundle_cache)
-        service.submit(action, origin, request_id=request_id)
-
-        request = service.get_request(request_id)
-        assert request is not None
+        request = service.submit(action, origin, request_id=request_id)
         result = processor.process(request_id) if request.status == "pending" else self._result_from_request(request)
         if result is None:
             request = service.get_request(request_id)

@@ -109,15 +109,14 @@ class TestActionService:
         action = _delete_action()
         origin = HttpActionOrigin()
 
-        request_id = service.submit(action, origin)
+        request = service.submit(action, origin)
 
-        request = service.get_request(request_id)
-        assert request is not None
         assert request.action == action
         assert request.origin == origin
         assert request.status == "pending"
         assert request.attempt_count == 0
         assert request.created_at == INITIAL_TIME
+        assert service.get_request(request.request_id) == request
 
     def test_repeating_the_same_action_creates_new_intent(self, tmp_path: Path) -> None:
         """Equivalent user submissions remain distinct durable requests."""
@@ -126,12 +125,27 @@ class TestActionService:
         action = _delete_action()
         origin = HttpActionOrigin()
 
-        first_request_id = service.submit(action, origin)
-        second_request_id = service.submit(action, origin)
+        first_request = service.submit(action, origin)
+        second_request = service.submit(action, origin)
 
-        assert first_request_id != second_request_id
-        assert service.get_request(first_request_id) is not None
-        assert service.get_request(second_request_id) is not None
+        assert first_request.request_id != second_request.request_id
+        assert service.get_request(first_request.request_id) == first_request
+        assert service.get_request(second_request.request_id) == second_request
+
+    def test_repeating_an_explicit_id_returns_the_existing_request(self, tmp_path: Path) -> None:
+        """An idempotent retry returns the canonical object already in storage."""
+        store = SQLiteActionRequestStore(tmp_path / "requests.sqlite3")
+        clock = FakeClock()
+        service = ActionService(store, clock=clock)
+        action = _delete_action()
+        origin = HttpActionOrigin()
+
+        first_request = service.submit(action, origin, request_id=FIRST_REQUEST_ID)
+        clock.advance(timedelta(hours=1))
+        repeated_request = service.submit(action, origin, request_id=FIRST_REQUEST_ID)
+
+        assert repeated_request == first_request
+        assert repeated_request.created_at == INITIAL_TIME
 
     def test_prune_expired_returns_removed_request_ids(self, tmp_path: Path) -> None:
         """Service cleanup exposes IDs needed by later status projections."""
@@ -164,7 +178,7 @@ class TestActionProcessor:
         result = ActionSucceeded(effects=ActionEffects(changed_bundle_ids=(FIRST_BUNDLE_ID,)))
         executor = FakeActionExecutor(result, on_execute=lambda: clock.advance(timedelta(minutes=2)))
         processor = ActionProcessor(store, executor, clock=clock)
-        request_id = service.submit(_delete_action(), HttpActionOrigin())
+        request_id = service.submit(_delete_action(), HttpActionOrigin()).request_id
 
         actual_result = processor.process(request_id)
 
@@ -196,7 +210,7 @@ class TestActionProcessor:
         store = SQLiteActionRequestStore(tmp_path / "requests.sqlite3")
         service = ActionService(store, clock=FakeClock())
         processor = ActionProcessor(store, FakeActionExecutor(result), clock=FakeClock())
-        request_id = service.submit(_delete_action(), HttpActionOrigin())
+        request_id = service.submit(_delete_action(), HttpActionOrigin()).request_id
 
         assert processor.process(request_id) == result
 
@@ -212,7 +226,7 @@ class TestActionProcessor:
         service = ActionService(store, clock=FakeClock())
         executor = FakeActionExecutor()
         processor = ActionProcessor(store, executor, clock=FakeClock())
-        request_id = service.submit(_delete_action(), HttpActionOrigin())
+        request_id = service.submit(_delete_action(), HttpActionOrigin()).request_id
         processor.process(request_id)
 
         assert processor.process(request_id) is None
@@ -259,7 +273,7 @@ class TestActionProcessor:
         service = ActionService(store, clock=FakeClock())
         executor = FakeActionExecutor(exception=RuntimeError("internal diagnostic detail"))
         processor = ActionProcessor(store, executor, clock=FakeClock())
-        request_id = service.submit(_delete_action(), HttpActionOrigin())
+        request_id = service.submit(_delete_action(), HttpActionOrigin()).request_id
 
         with caplog.at_level(logging.ERROR):
             result = processor.process(request_id)

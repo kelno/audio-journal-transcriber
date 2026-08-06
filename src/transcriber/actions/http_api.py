@@ -116,15 +116,13 @@ class _ActionRequestHandler(BaseHTTPRequestHandler):
             return None
 
     def _submit(self, submission: HttpActionSubmission) -> None:
-        """Submit validated intent and return its canonical pending state."""
+        """Submit validated intent and return its canonical request state."""
         try:
-            request_id = self._action_server.service.submit(
+            request = self._action_server.service.submit(
                 submission.action,
                 HttpActionOrigin(),
                 request_id=submission.request_id,
             )
-            request = self._action_server.service.get_request(request_id)
-            assert request is not None
         except ActionRequestAlreadyExistsError as error:
             self._write_json(HTTPStatus.CONFLICT, {"error": "request_id_conflict", "message": str(error)})
             return
@@ -137,7 +135,7 @@ class _ActionRequestHandler(BaseHTTPRequestHandler):
         self._write_json(
             HTTPStatus.ACCEPTED,
             request.model_dump(mode="json"),
-            extra_headers={"Location": f"/requests/{request_id}"},
+            extra_headers={"Location": f"/requests/{request.request_id}"},
         )
 
     @property

@@ -75,11 +75,11 @@ class ActionService:
         origin: ActionOrigin,
         *,
         request_id: ActionRequestId | None = None,
-    ) -> ActionRequestId:
-        """Durably submit intent, idempotently when a caller records its ID first."""
+    ) -> ActionRequest:
+        """Durably submit intent and return its canonical request."""
         if request_id is not None and (existing := self._store.get(request_id)) is not None:
             if existing.action == action and existing.origin == origin:
-                return request_id
+                return existing
             msg = f"Action request ID already belongs to different intent: {request_id}"
             raise ActionRequestAlreadyExistsError(msg)
 
@@ -92,7 +92,7 @@ class ActionService:
             request_values["request_id"] = request_id
         request = ActionRequest.model_validate(request_values)
         self._store.create(request)
-        return request.request_id
+        return request
 
     def get_request(self, request_id: ActionRequestId) -> ActionRequest | None:
         """Return canonical request status, or ``None`` after absence or expiry."""
