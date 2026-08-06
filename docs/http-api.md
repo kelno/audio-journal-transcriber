@@ -1,6 +1,6 @@
 # Action request HTTP API
 
-The transcriber's default continuous mode exposes a small local HTTP API for submitting and inspecting action requests. The API only accepts and reads durable intent; bundle execution remains in the synchronous coordinator.
+The transcriber's default continuous mode exposes a small local HTTP API for submitting and inspecting action requests. The API only accepts and reads durable intent; the main processing loop executes bundle changes.
 
 ## Configuration
 
@@ -97,4 +97,4 @@ FastAPI also provides interactive OpenAPI documentation at `http://127.0.0.1:876
 
 - No request listing, cancellation, authentication, or automatic retry endpoint.
 - Requests in `succeeded`, `failed`, or `blocked` state are retained for 30 days.
-- HTTP submission can occur while a job is running, but the new request executes only after the coordinator regains control.
+- HTTP submission can occur while a job is running, but the new request executes only after that job finishes and the main processing loop selects the request.

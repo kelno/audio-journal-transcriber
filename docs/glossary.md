@@ -15,7 +15,7 @@ The bundle IDs whose derived work must be reconsidered after an action runs.
 - `changed_bundle_ids` identifies bundles that still exist but may need fresh jobs.
 - `removed_bundle_ids` identifies bundles whose queued jobs are now invalid.
 
-Effects keep the coordinator independent from individual action types.
+Effects let the main processing loop handle results without knowing individual action types.
 
 ## Action executor
 
@@ -67,7 +67,7 @@ The durable record of what command processing decided.
 
 For a state-changing command, the resolution links to an action-request ID and later records its terminal outcome. Non-action resolutions include `ignored`, `superseded`, and `rejected`. A `migrated` resolution records a command completed before action requests existed, without inventing a request or action history.
 
-## Coordinator
+## Main processing loop
 
 The synchronous job loop in `AudioTranscriber`.
 
