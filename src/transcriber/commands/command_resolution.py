@@ -51,6 +51,14 @@ class SupersededCommandResolution(CommandResolutionModel):
     resolved_at: AwareDatetime
 
 
+class RejectedCommandResolution(CommandResolutionModel):
+    """Record that interpretation produced no supported command."""
+
+    type: Literal["rejected"] = "rejected"
+    reason: str = Field(min_length=1, max_length=1_000)
+    resolved_at: AwareDatetime
+
+
 class LegacyExecutedCommandResolution(CommandResolutionModel):
     """Compatibility receipt reconstructed from the former executed fields."""
 
@@ -62,6 +70,7 @@ type CommandResolution = Annotated[
     ActionRequestCommandResolution
     | IgnoredCommandResolution
     | SupersededCommandResolution
+    | RejectedCommandResolution
     | LegacyExecutedCommandResolution,
     Field(discriminator="type"),
 ]

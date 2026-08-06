@@ -11,16 +11,10 @@ from transcriber.actions.action_executors import BundleActionExecutor
 from transcriber.actions.action_request import ActionFailed, ActionResult
 from transcriber.bundle_title import BundleTitleState
 from transcriber.commands.command import Command
-from transcriber.commands.command_handlers import (
-    handle_unknown,
-    merge_bundles,
-)
+from transcriber.commands.command_handlers import merge_bundles
 from transcriber.config import TranscribeConfig
 from transcriber.constants import MERGE_FAILED_FILENAME, MULTIPLE_TRANSCRIPTS_SEPARATOR
-from transcriber.exception import (
-    MergeBlockedException,
-    UnknownCommandException,
-)
+from transcriber.exception import MergeBlockedException
 from transcriber.transcribe_bundle import TranscribeBundle
 
 
@@ -1043,22 +1037,3 @@ class TestSetTitleActionExecutor:
 
         assert bundle.bundle_name.endswith("Quarterly Planning")
         assert bundle.metadata.bundle_title_state is BundleTitleState.MANUAL
-
-
-class TestHandleUnknown:
-    """Tests for handle_unknown raising UnknownCommandException."""
-
-    def test_handle_unknown_raises(
-        self,
-        fake_config: TranscribeConfig,
-        transcribe_bundle_factory: TranscribeBundleFactory,
-    ) -> None:
-        """An unknown command type cannot be executed and raises."""
-        bundle = transcribe_bundle_factory(
-            bundle_name="2025-01-15_meeting",
-            audio_filename="meeting.mp3",
-        )
-        cmd = Command(text="do something weird")
-
-        with pytest.raises(UnknownCommandException):
-            handle_unknown(bundle, fake_config, {bundle.bundle_id: bundle}, cmd)

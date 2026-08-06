@@ -36,7 +36,6 @@ from .exception import (
     EmptyTranscriptException,
     MergeBlockedException,
     TooShortException,
-    UnknownCommandException,
 )
 from .files.metadata import AudioFileMeta
 from .logger import logger
@@ -522,58 +521,35 @@ class RunCommandsJob(TranscribeBundleJob):
         }
 
         for cmd in pending_commands:
-            try:
-                matched_type = cmd.matched_type
-                assert matched_type is not None
-                definition = COMMAND_REGISTRY[matched_type]
+            matched_type = cmd.matched_type
+            assert matched_type is not None
+            definition = COMMAND_REGISTRY[matched_type]
 
-                if (
-                    definition.execution_policy is CommandExecutionPolicy.ONCE_PER_BUNDLE
-                    and matched_type in seen_executed_types
-                ):
-                    logger.info(
-                        f"Skipping duplicate {matched_type.value} command: {cmd.text}",
-                    )
-
-                    self.bundle.set_command_superseded(cmd.id)
-                    continue
-
-                max_attemps = definition.max_attempts
-                if cmd.attempt_count >= max_attemps:
-                    logger.debug(
-                        f"{self.bundle}: Skipping command {cmd.text} as max attempt count ({max_attemps}) has been reached",
-                    )
-                    continue
-
-                logger.info(f"Executing {matched_type.value} command for bundle {self.bundle}")
-
-                if matched_type in {CommandType.MERGE, CommandType.DELETE, CommandType.SET_TITLE}:
-                    effects = self._execute_action_request(cmd, matched_type, config, bundle_cache)
-                    if effects is not None and (effects.changed_bundle_ids or effects.removed_bundle_ids):
-                        return effects
-                    continue
-
-                handler = definition.handler
-                assert handler is not None, f"Command type {matched_type.value} has no direct handler"
-                handler(self.bundle, config, bundle_cache, cmd)
-
-                if matched_type is CommandType.IGNORE:
-                    self.bundle.set_command_ignored(cmd.id)
-                else:
-                    self.bundle.set_command_executed(cmd.id)
-                seen_executed_types.add(matched_type)
-
-            except AbortRemainingBundleJobsException:
-                logger.debug(f"{cmd} requested aborting remaining jobs for bundle {self.bundle}")
-                raise  # raise it further to the job execution loop
-            except (UnknownCommandException, Exception) as e:
-                # On error, stop processing remaining commands to avoid partial state.
-                logger.exception(
-                    f"{self.bundle}: Failed to process bundle command '{cmd.text}'",
+            if definition.execution_policy is CommandExecutionPolicy.ONCE_PER_BUNDLE and matched_type in seen_executed_types:
+                logger.info(
+                    f"Skipping duplicate {matched_type.value} command: {cmd.text}",
                 )
-                self.bundle.set_last_error(cmd_id=cmd.id, error=str(e))
-                self.bundle.add_command_attempt(cmd_id=cmd.id)
-                raise
+                self.bundle.set_command_superseded(cmd.id)
+                continue
+
+            logger.info(f"Executing {matched_type.value} command for bundle {self.bundle}")
+
+            if matched_type in {CommandType.MERGE, CommandType.DELETE, CommandType.SET_TITLE}:
+                effects = self._execute_action_request(cmd, matched_type, config, bundle_cache)
+                if effects is not None and (effects.changed_bundle_ids or effects.removed_bundle_ids):
+                    return effects
+                continue
+            if matched_type is CommandType.IGNORE:
+                self.bundle.set_command_ignored(cmd.id)
+                seen_executed_types.add(matched_type)
+                continue
+            if matched_type is CommandType.UNKNOWN:
+                self.bundle.set_command_rejected(cmd.id, "Interpretation produced no supported command type.")
+                seen_executed_types.add(matched_type)
+                continue
+
+            msg = f"Unsupported command type: {matched_type}"
+            raise AssertionError(msg)
         return None
 
     def _execute_action_request(

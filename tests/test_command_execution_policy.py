@@ -1,41 +1,27 @@
 """Tests for policy-driven handling of repeated command types."""
 
-from collections.abc import Callable
-
 import pytest
 
 from tests.bundle_fixtures import TranscribeBundleFactory
 from tests.fake_ai_manager import FakeAIManager
 from transcriber.actions.action_request_store import SQLiteActionRequestStore, default_action_request_database_path
 from transcriber.actions.action_runtime import ActionRuntime
-from transcriber.commands.command import Command
 from transcriber.commands.command_execution_policy import CommandExecutionPolicy
 from transcriber.commands.command_interpretation import (
     ArgumentlessCommandInterpretation,
     ArgumentlessCommandType,
 )
 from transcriber.commands.command_registry import COMMAND_REGISTRY
-from transcriber.commands.command_resolution import ActionRequestCommandResolution
+from transcriber.commands.command_resolution import (
+    ActionRequestCommandResolution,
+    IgnoredCommandResolution,
+    RejectedCommandResolution,
+    SupersededCommandResolution,
+)
 from transcriber.commands.command_type import CommandType
 from transcriber.config import TranscribeConfig
-from transcriber.transcribe_bundle import BundleCache, TranscribeBundle
+from transcriber.transcribe_bundle import TranscribeBundle
 from transcriber.transcribe_bundle_job import RunCommandsJob
-
-CommandRecorder = Callable[[TranscribeBundle, TranscribeConfig, BundleCache, Command], None]
-
-
-def _recording_handler(calls: list[str]) -> CommandRecorder:
-    """Return a handler that records command text without external side effects."""
-
-    def handler(
-        _bundle: TranscribeBundle,
-        _config: TranscribeConfig,
-        _bundle_cache: BundleCache,
-        command: Command,
-    ) -> None:
-        calls.append(command.text)
-
-    return handler
 
 
 def _set_all_command_types(bundle: TranscribeBundle, command_type: ArgumentlessCommandType) -> None:
@@ -51,17 +37,8 @@ def _set_all_command_types(bundle: TranscribeBundle, command_type: ArgumentlessC
 class TestCommandExecutionPolicy:
     """Verify command selection without relying on a specific command handler."""
 
-    @pytest.mark.parametrize(
-        "command_type",
-        [CommandType.MERGE, CommandType.DELETE, CommandType.SET_TITLE],
-    )
-    def test_action_backed_commands_have_no_direct_handler(self, command_type: CommandType) -> None:
-        """State-changing commands cannot bypass the action-request boundary."""
-        assert COMMAND_REGISTRY[command_type].handler is None
-
     def test_once_per_bundle_keeps_existing_first_command_behavior(
         self,
-        monkeypatch: pytest.MonkeyPatch,
         fake_ai_manager: FakeAIManager,
         fake_config: TranscribeConfig,
         transcribe_bundle_factory: TranscribeBundleFactory,
@@ -73,9 +50,6 @@ class TestCommandExecutionPolicy:
             commands=["first", "second", "third"],
         )
         _set_all_command_types(bundle, CommandType.IGNORE)
-        calls: list[str] = []
-        definition = COMMAND_REGISTRY[CommandType.IGNORE]
-        monkeypatch.setattr(definition, "handler", _recording_handler(calls))
 
         RunCommandsJob(bundle, dry_run=False, action_runtime=ActionRuntime.from_config(fake_config, dry_run=False)).run(
             fake_ai_manager,
@@ -83,9 +57,10 @@ class TestCommandExecutionPolicy:
             {bundle.bundle_id: bundle},
         )
 
-        assert calls == ["first"]
         assert bundle.commands is not None
-        assert all(command.executed for command in bundle.commands.commands)
+        resolutions = [command.resolution for command in bundle.commands.commands]
+        assert isinstance(resolutions[0], IgnoredCommandResolution)
+        assert all(isinstance(resolution, SupersededCommandResolution) for resolution in resolutions[1:])
 
     def test_latest_pending_executes_only_last_pending_command(
         self,
@@ -104,10 +79,8 @@ class TestCommandExecutionPolicy:
         assert bundle.commands is not None
         bundle.set_command_executed(bundle.commands.commands[0].id)
 
-        calls: list[str] = []
         definition = COMMAND_REGISTRY[CommandType.IGNORE]
         monkeypatch.setattr(definition, "execution_policy", CommandExecutionPolicy.LATEST_PENDING)
-        monkeypatch.setattr(definition, "handler", _recording_handler(calls))
 
         RunCommandsJob(bundle, dry_run=False, action_runtime=ActionRuntime.from_config(fake_config, dry_run=False)).run(
             fake_ai_manager,
@@ -115,8 +88,31 @@ class TestCommandExecutionPolicy:
             {bundle.bundle_id: bundle},
         )
 
-        assert calls == ["final choice"]
-        assert all(command.executed for command in bundle.commands.commands)
+        assert isinstance(bundle.commands.commands[1].resolution, SupersededCommandResolution)
+        assert isinstance(bundle.commands.commands[2].resolution, IgnoredCommandResolution)
+
+    def test_unknown_interpretation_is_terminally_rejected(
+        self,
+        fake_ai_manager: FakeAIManager,
+        fake_config: TranscribeConfig,
+        transcribe_bundle_factory: TranscribeBundleFactory,
+    ) -> None:
+        """Unsupported interpreted text is recorded once instead of retried by a counter."""
+        bundle = transcribe_bundle_factory(
+            bundle_name="2025-01-15_unknown",
+            audio_filename="recording.mp3",
+            commands=["do something unsupported"],
+        )
+        _set_all_command_types(bundle, CommandType.UNKNOWN)
+
+        RunCommandsJob(bundle, dry_run=False, action_runtime=ActionRuntime.from_config(fake_config, dry_run=False)).run(
+            fake_ai_manager,
+            fake_config,
+            {bundle.bundle_id: bundle},
+        )
+
+        assert bundle.commands is not None
+        assert isinstance(bundle.commands.commands[0].resolution, RejectedCommandResolution)
 
     def test_set_title_uses_latest_pending_policy(self) -> None:
         """The title command opts into revision-style deduplication."""

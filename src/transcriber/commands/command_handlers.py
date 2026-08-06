@@ -14,7 +14,7 @@ from transcriber.constants import (
     MULTIPLE_TRANSCRIPTS_SEPARATOR,
     SUMMARY_FILENAME,
 )
-from transcriber.exception import MergeBlockedException, UnknownCommandException
+from transcriber.exception import MergeBlockedException
 from transcriber.files.metadata import AudioFileMeta
 from transcriber.files.text_file import CustomContextFile, TranscriptFile
 from transcriber.globals import is_handled_audio_file
@@ -25,14 +25,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from transcriber.commands.command import Command
-    from transcriber.commands.command_definition import CommandHandler
-    from transcriber.config import TranscribeConfig
     from transcriber.files.file_system import FileSystemService
-
-
-def command_handler(func: CommandHandler) -> CommandHandler:
-    """Decorator to enforce CommandHandler interface compliance."""
-    return func
 
 
 def _get_collision_free_destination(
@@ -361,35 +354,3 @@ def delete_bundle(bundle: TranscribeBundle, bundles_cache: BundleCache) -> None:
     """Remove one explicitly selected bundle from disk and the loaded cache."""
     bundle.fs_service.delete_directory(bundle.get_bundle_dir())
     bundles_cache.pop(bundle.bundle_id)
-
-
-@command_handler
-def handle_unknown(_bundle: TranscribeBundle, _config: TranscribeConfig, _bundles_cache: BundleCache, cmd: Command) -> None:
-    """Handle unknown command type.
-
-    Args:
-        _bundle: The transcribe bundle, unused by this handler.
-        _config: The transcribe configuration, unused by this handler.
-        cmd: The original command triggering this.
-        _bundles_cache: Loaded bundles indexed by persistent ID, unused here.
-
-    Raises:
-        ValueError: Always raised as the command type is unknown.
-
-    """
-    msg = f"Unknown command type cannot be executed (command text: {cmd.text})"
-    raise UnknownCommandException(msg)
-
-
-@command_handler
-def handle_ignore(_bundle: TranscribeBundle, _config: TranscribeConfig, _bundles_cache: BundleCache, cmd: Command) -> None:
-    """Handle ignore command type.
-
-    Args:
-        _bundle: The transcribe bundle, unused by this handler.
-        _config: The transcribe configuration, unused by this handler.
-        cmd: The original command triggering this.
-        _bundles_cache: Loaded bundles indexed by persistent ID, unused here.
-
-    """
-    logger.debug(f"Command {cmd.text} is ignored.")

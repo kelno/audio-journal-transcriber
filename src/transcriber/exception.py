@@ -83,11 +83,6 @@ class MergeBlockedException(AudioTranscriberException):
 
 
 @final
-class UnknownCommandException(AudioTranscriberException):
-    """Command text couldn't be matched to a know command type."""
-
-
-@final
 class EmptyChatClientAnswerException(AudioTranscriberException):
     """Chat client returned an empty answer."""
 

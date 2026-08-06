@@ -35,8 +35,6 @@ class Command(BaseModel):
     matched_type: command_type.CommandType | None = None
     arguments: CommandArguments = Field(default_factory=EmptyCommandArguments)
     resolution: CommandResolution | None = None
-    last_error: str | None = None  # Error string to help with debugging
-    attempt_count: int = Field(default=0, ge=0)  # we stop trying if reaching the max retries for that command type
 
     @field_serializer("executed_at")
     def serialize_executed_at(self, value: datetime | None) -> str | None:

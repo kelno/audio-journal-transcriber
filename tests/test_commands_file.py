@@ -7,20 +7,11 @@ import pytest
 import yaml
 from pydantic import ValidationError
 
-from tests.bundle_fixtures import TranscribeBundleFactory
 from tests.fake_file_system import FakeFileSystemService
 from transcriber.commands.command import Command
 from transcriber.commands.command_interpretation import EmptyCommandArguments, SetTitleCommandArguments
-from transcriber.commands.command_registry import COMMAND_REGISTRY
-from transcriber.commands.command_type import CommandType
-from transcriber.constants import COMMANDS_FILENAME
 from transcriber.exception import InvalidCommandFileException
 from transcriber.files.commands_file import CommandsFile
-
-
-def max_attempts_for(cmd_type: CommandType) -> int:
-    """Return the configured max attempts for a command type (mirrors the registry)."""
-    return COMMAND_REGISTRY[cmd_type].max_attempts
 
 
 class TestCommandCreation:
@@ -263,50 +254,36 @@ class TestCommandsFileWriteRead:
 
 
 class TestCommandsFileNeedsProcessing:
-    """Test has_commands_needing_processing (executed + retry-budget aware)."""
+    """Test resolution-based command work detection."""
 
     def test_empty_file_needs_no_processing(self) -> None:
         """An empty commands file needs no processing."""
         cmd_file = CommandsFile(text="")
-        assert cmd_file.has_commands_needing_processing(max_attempts_for) is False
+        assert cmd_file.has_commands_needing_processing() is False
 
     def test_unexecuted_command_needs_processing(self) -> None:
         """A fresh, unexecuted command needs processing."""
         cmd_file = CommandsFile.from_command_list(["play music"])
-        assert cmd_file.has_commands_needing_processing(max_attempts_for) is True
+        assert cmd_file.has_commands_needing_processing() is True
 
     def test_executed_command_needs_no_processing(self) -> None:
         """An executed command no longer needs processing."""
         cmd_file = CommandsFile.from_command_list(["play music"])
         cmd_file.mark_executed(0, UTC)
-        assert cmd_file.has_commands_needing_processing(max_attempts_for) is False
-
-    def test_exhausted_command_needs_no_processing(self) -> None:
-        """A command that failed max_attempts times is given up, not re-enqueued."""
-        cmd = Command(text="delete", executed=False, matched_type=CommandType.DELETE, attempt_count=2)
-        cmd_file = CommandsFile(text="", commands=[cmd])
-        assert cmd_file.has_commands_needing_processing(max_attempts_for) is False
-
-    def test_uninterpreted_command_needs_processing(self) -> None:
-        """A command without a matched type has not been attempted, so it needs processing."""
-        cmd = Command(text="delete", executed=False, matched_type=None, attempt_count=2)
-        cmd_file = CommandsFile(text="", commands=[cmd])
-        assert cmd_file.has_commands_needing_processing(max_attempts_for) is True
+        assert cmd_file.has_commands_needing_processing() is False
 
     def test_mixed_commands(self) -> None:
-        """Only non-executed, non-exhausted commands count as needing processing."""
-        exhausted = Command(text="a", executed=False, matched_type=CommandType.DELETE, attempt_count=2)
-        pending = Command(text="b", executed=False, matched_type=CommandType.DELETE, attempt_count=0)
-        done = Command(text="c", executed=True, matched_type=CommandType.DELETE, attempt_count=1)
-        cmd_file = CommandsFile(text="", commands=[exhausted, pending, done])
-        assert cmd_file.has_commands_needing_processing(max_attempts_for) is True
+        """A pending command keeps a mixed file actionable."""
+        pending = Command(text="pending")
+        done = Command(text="done", executed=True)
+        cmd_file = CommandsFile(text="", commands=[pending, done])
+        assert cmd_file.has_commands_needing_processing() is True
 
-    def test_all_exhausted_or_done_needs_no_processing(self) -> None:
-        """A bundle with only exhausted or done commands needs no processing."""
-        exhausted = Command(text="a", executed=False, matched_type=CommandType.DELETE, attempt_count=2)
-        done = Command(text="c", executed=True, matched_type=CommandType.DELETE, attempt_count=1)
-        cmd_file = CommandsFile(text="", commands=[exhausted, done])
-        assert cmd_file.has_commands_needing_processing(max_attempts_for) is False
+    def test_all_done_needs_no_processing(self) -> None:
+        """A bundle with only terminal commands needs no processing."""
+        done = Command(text="done", executed=True)
+        cmd_file = CommandsFile(text="", commands=[done])
+        assert cmd_file.has_commands_needing_processing() is False
 
 
 class TestCommandsFileMarkExecuted:
@@ -351,31 +328,3 @@ class TestCommandsFileMarkExecuted:
         after = datetime.now(UTC)
         assert cmd_file.commands[0].executed_at is not None
         assert before <= cmd_file.commands[0].executed_at <= after
-
-    def test_set_last_error_writes_to_commands_file(
-        self,
-        transcribe_bundle_factory: TranscribeBundleFactory,
-        fake_fs: FakeFileSystemService,
-    ) -> None:
-        """Verify that `set_last_error` records error text in the commands file."""
-        bundle_name = "2025-01-15_set_last_error"
-
-        # Create bundle with a single command and write initial files
-        bundle = transcribe_bundle_factory(
-            bundle_name=bundle_name,
-            audio_filename="audio.mp3",
-            commands=["do something"],
-        )
-        assert bundle.commands
-        cmd = bundle.commands.commands[0]
-
-        # Set a debug error for the command
-        error_msg = "something failed during execution"
-        bundle.set_last_error(cmd.id, error_msg)
-
-        # Read commands file and assert the last_error was recorded
-        commands_file_path = bundle.get_bundle_dir() / COMMANDS_FILENAME
-        commands_file = CommandsFile.from_file(commands_file_path, fake_fs)
-
-        assert commands_file.commands, "Commands file should contain at least one command"
-        assert commands_file.commands[0].last_error == error_msg
