@@ -170,6 +170,7 @@ class SQLiteActionRequestStore(ActionRequestStore):
         self._database_available = True
 
     def _connect(self, *, read_only: bool) -> sqlite3.Connection:
+        """Open a row-addressable connection in writable or enforced read-only mode."""
         if read_only:
             database_uri = f"{self.database_path.resolve().as_uri()}?mode=ro"
             connection = sqlite3.connect(database_uri, uri=True)
@@ -181,6 +182,7 @@ class SQLiteActionRequestStore(ActionRequestStore):
 
     @staticmethod
     def _database_schema_version(connection: sqlite3.Connection) -> int:
+        """Read the application-controlled schema version from SQLite metadata."""
         row = connection.execute("PRAGMA user_version").fetchone()
         if row is None:
             msg = "SQLite did not return an action-request schema version"
@@ -188,6 +190,7 @@ class SQLiteActionRequestStore(ActionRequestStore):
         return int(row[0])
 
     def _require_current_schema(self, connection: sqlite3.Connection) -> None:
+        """Reject a read-only database that does not match the current schema."""
         schema_version = self._database_schema_version(connection)
         if schema_version != ACTION_REQUEST_DATABASE_SCHEMA_VERSION:
             msg = (
@@ -197,6 +200,7 @@ class SQLiteActionRequestStore(ActionRequestStore):
             raise UnsupportedActionRequestStoreSchemaError(msg)
 
     def _migrate(self, connection: sqlite3.Connection) -> None:
+        """Apply every missing schema migration in its own immediate transaction."""
         schema_version = self._database_schema_version(connection)
         if schema_version > ACTION_REQUEST_DATABASE_SCHEMA_VERSION:
             msg = (
@@ -217,6 +221,7 @@ class SQLiteActionRequestStore(ActionRequestStore):
 
     @staticmethod
     def _verify_request_table(connection: sqlite3.Connection) -> None:
+        """Verify that the expected canonical request table can be queried."""
         try:
             connection.execute("SELECT request_id FROM action_requests LIMIT 0")
         except sqlite3.Error as error:
@@ -224,12 +229,14 @@ class SQLiteActionRequestStore(ActionRequestStore):
             raise InvalidActionRequestStoreDataError(msg) from error
 
     def _require_writable(self) -> None:
+        """Reject mutation when the store was opened for a dry run."""
         if self.dry_run:
             msg = "Action-request store is read-only during dry-run"
             raise ActionRequestStoreReadOnlyError(msg)
 
     @staticmethod
     def _json_payload(model: BaseModel) -> str:
+        """Serialize an immutable request value to deterministic compact JSON."""
         return json.dumps(
             model.model_dump(mode="json"),
             ensure_ascii=False,
@@ -239,12 +246,14 @@ class SQLiteActionRequestStore(ActionRequestStore):
 
     @staticmethod
     def _stored_datetime(value: datetime | None) -> str | None:
+        """Normalize an optional aware timestamp to its UTC database form."""
         if value is None:
             return None
         return value.astimezone(UTC).isoformat()
 
     @classmethod
     def _request_insert_values(cls, request: ActionRequest) -> tuple[object, ...]:
+        """Flatten a complete request into the action_requests insert order."""
         error = request.error
         return (
             request.request_id,
@@ -265,6 +274,7 @@ class SQLiteActionRequestStore(ActionRequestStore):
 
     @classmethod
     def _request_update_values(cls, request: ActionRequest) -> tuple[object, ...]:
+        """Flatten mutable lifecycle state into the action_requests update order."""
         error = request.error
         return (
             request.status,
@@ -281,11 +291,13 @@ class SQLiteActionRequestStore(ActionRequestStore):
 
     @staticmethod
     def _changed_immutable_fields(stored: ActionRequest, updated: ActionRequest) -> list[str]:
+        """Return immutable fields that disagree with the canonical stored request."""
         immutable_fields = ("schema_version", "action", "origin", "created_at")
         return [field_name for field_name in immutable_fields if getattr(stored, field_name) != getattr(updated, field_name)]
 
     @staticmethod
     def _row_to_request(row: sqlite3.Row) -> ActionRequest:
+        """Reconstruct and validate one canonical request from a SQLite row."""
         try:
             error = None
             if row["error_code"] is not None:

@@ -19,10 +19,24 @@ class BundleActionExecutor:
     """Dispatch actions against the daemon's current ID-keyed bundle cache."""
 
     def __init__(self, bundle_cache: BundleCache) -> None:
+        """Bind action execution to the currently loaded bundle state.
+
+        Args:
+            bundle_cache: Mutable bundles indexed by persistent identity.
+
+        """
         self._bundle_cache: BundleCache = bundle_cache
 
     def execute(self, action: Action, /) -> ActionResult:
-        """Dispatch a supported action to its sole mutation implementation."""
+        """Dispatch a supported action to its sole mutation implementation.
+
+        Args:
+            action: Immutable intent to apply to the loaded bundle state.
+
+        Returns:
+            The terminal outcome and scheduler-visible bundle effects.
+
+        """
         match action:
             case MergeAction():
                 return self._execute_merge(action)
@@ -32,6 +46,16 @@ class BundleActionExecutor:
                 return self._execute_set_title(action)
 
     def _execute_merge(self, action: MergeAction) -> ActionResult:
+        """Resolve and merge two bundles without recreating command logic.
+
+        Args:
+            action: Source identity and target-selection rule to apply.
+
+        Returns:
+            Success with changed/removed bundle effects, or a bounded failure
+            when the source or an eligible target no longer exists.
+
+        """
         source = self._bundle_cache.get(action.source_bundle_id)
         if source is None:
             return ActionFailed(
@@ -58,12 +82,31 @@ class BundleActionExecutor:
         )
 
     def _resolve_merge_target(self, source: TranscribeBundle, action: MergeAction) -> TranscribeBundle | None:
+        """Resolve an explicit or chronology-based target for a merge.
+
+        Args:
+            source: Loaded bundle that will be merged into the target.
+            action: Merge intent containing the target-selection rule.
+
+        Returns:
+            A distinct loaded target, or ``None`` when no eligible target exists.
+
+        """
         if isinstance(action.target, BundleTarget):
             target = self._bundle_cache.get(action.target.bundle_id)
             return target if target is not None and target.bundle_id != source.bundle_id else None
         return source.find_previous_bundle(source, self._bundle_cache.values())
 
     def _execute_delete(self, action: DeleteAction) -> ActionResult:
+        """Delete the identified bundle through the shared mutation function.
+
+        Args:
+            action: Persistent identity of the bundle to remove.
+
+        Returns:
+            Success with a removal effect, or a bounded not-found failure.
+
+        """
         bundle = self._bundle_cache.get(action.bundle_id)
         if bundle is None:
             return ActionFailed(
@@ -73,6 +116,15 @@ class BundleActionExecutor:
         return ActionSucceeded(effects=ActionEffects(removed_bundle_ids=(action.bundle_id,)))
 
     def _execute_set_title(self, action: SetTitleAction) -> ActionResult:
+        """Apply a requested manual title through the shared title logic.
+
+        Args:
+            action: Bundle identity and validated requested title.
+
+        Returns:
+            Success with a changed-bundle effect, or a bounded not-found failure.
+
+        """
         bundle = self._bundle_cache.get(action.bundle_id)
         if bundle is None:
             return ActionFailed(

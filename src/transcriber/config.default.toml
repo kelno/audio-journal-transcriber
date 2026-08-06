@@ -17,9 +17,11 @@ timezone = "Europe/Brussels"
 safe_delete = true
 
 [http]
-# Local action-request API for the default continuous mode.
+# Local action-request API for the default continuous mode
 enabled = true
+# Listening host
 host = "127.0.0.1"
+# Listening TCP port
 port = 8765
 
 [text]

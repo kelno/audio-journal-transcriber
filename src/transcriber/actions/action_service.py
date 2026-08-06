@@ -66,6 +66,13 @@ class ActionService:
     """Transport-neutral application boundary for request submission and lookup."""
 
     def __init__(self, store: ActionRequestStore, *, clock: UtcClock = _utc_now) -> None:
+        """Bind request operations to canonical persistence and an aware UTC clock.
+
+        Args:
+            store: Persistence boundary for canonical action requests.
+            clock: Time source used for durable lifecycle timestamps.
+
+        """
         self._store: ActionRequestStore = store
         self._clock: UtcClock = clock
 
@@ -137,6 +144,14 @@ class ActionProcessor:
         *,
         clock: UtcClock = _utc_now,
     ) -> None:
+        """Bind lifecycle transitions to persistence and one action executor.
+
+        Args:
+            store: Persistence boundary updated around execution.
+            executor: Mutation boundary that applies typed action intent.
+            clock: Time source used for running and terminal timestamps.
+
+        """
         self._store: ActionRequestStore = store
         self._executor: ActionExecutor = executor
         self._clock: UtcClock = clock

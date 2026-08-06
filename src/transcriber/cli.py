@@ -71,6 +71,7 @@ def main() -> None:
     daemon = TranscriptionDaemon(transcriber, config)
 
     def shutdown(_signum: int, _frame: object) -> None:
+        """Stop daemon services after an operating-system termination signal."""
         logger.info("Shutdown signal received")
         daemon.stop()
 

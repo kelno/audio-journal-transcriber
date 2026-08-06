@@ -27,9 +27,12 @@ _LOGGER = logging.getLogger(__name__)
 class HttpActionSubmission(BaseModel):
     """Validated HTTP body for idempotent request submission."""
 
+    # Reject transport fields outside the public submission contract.
     model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
+    # Optional caller-generated identity that makes an HTTP retry idempotent.
     request_id: ActionRequestId | None = None
+    # Typed immutable intent selected through its serialized discriminator.
     action: Action = Field(discriminator="type")
 
 
@@ -43,6 +46,14 @@ class _ActionRequestHttpServer(HTTPServer):
         service: ActionService,
         on_submission: Callable[[], None],
     ) -> None:
+        """Bind the transport address to request services and daemon wake-up.
+
+        Args:
+            address: Loopback host and listening port.
+            service: Transport-neutral request submission and lookup boundary.
+            on_submission: Callback that wakes the single execution loop.
+
+        """
         self.service = service
         self.on_submission = on_submission
         super().__init__(address, _ActionRequestHandler)
@@ -141,6 +152,7 @@ class _ActionRequestHandler(BaseHTTPRequestHandler):
 
     @property
     def _action_server(self) -> _ActionRequestHttpServer:
+        """Return the handler's server narrowed to its dependency-carrying type."""
         return cast("_ActionRequestHttpServer", self.server)
 
     def _write_json(
@@ -150,6 +162,14 @@ class _ActionRequestHandler(BaseHTTPRequestHandler):
         *,
         extra_headers: dict[str, str] | None = None,
     ) -> None:
+        """Write one compact UTF-8 JSON response with optional transport headers.
+
+        Args:
+            status: HTTP response status sent to the client.
+            payload: JSON-serializable response body.
+            extra_headers: Additional headers such as a request location.
+
+        """
         encoded = json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode()
         self.send_response(status)
         self.send_header("Content-Type", "application/json; charset=utf-8")
@@ -176,6 +196,15 @@ class ActionHttpServer:
         service: ActionService,
         on_submission: Callable[[], None],
     ) -> None:
+        """Configure a loopback server without starting its background thread.
+
+        Args:
+            host: Validated loopback interface to bind.
+            port: Listening port, or zero to let the OS select one for tests.
+            service: Transport-neutral action-request service.
+            on_submission: Callback that wakes the single execution loop.
+
+        """
         self._server = _ActionRequestHttpServer((host, port), service, on_submission)
         self._thread: threading.Thread | None = None
 

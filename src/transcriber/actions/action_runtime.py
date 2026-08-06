@@ -19,6 +19,12 @@ class ActionRuntime:
     """Own the action store and application services for one process run."""
 
     def __init__(self, store: SQLiteActionRequestStore) -> None:
+        """Compose one canonical store with its transport-neutral service.
+
+        Args:
+            store: Run-scoped SQLite repository shared by every action adapter.
+
+        """
         self.store: SQLiteActionRequestStore = store
         self.service: ActionService = ActionService(store)
 
