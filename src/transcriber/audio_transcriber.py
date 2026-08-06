@@ -270,8 +270,8 @@ class AudioTranscriber:
                     queue.pop(bundle_id)
 
                 # Most jobs only advance their own pipeline. Action jobs can also
-                # mutate or remove other bundles, so their generic effects drive
-                # cross-bundle invalidation without action-specific scheduler code.
+                # mutate or remove other bundles; their effects identify which
+                # queued pipelines must be discarded and derived again.
                 if effects is not None and (effects.changed_bundle_ids or effects.removed_bundle_ids):
                     errored = self._apply_action_effects(
                         effects,
