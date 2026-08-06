@@ -4,7 +4,7 @@ This document describes the current action-request design. Terminology is define
 
 ## Goals
 
-- Give destructive or state-changing user intent a durable identity and visible outcome.
+- Give each destructive or state-changing user request a durable identity and visible outcome.
 - Use the same action execution path for voice commands and HTTP submissions.
 - Keep bundle mutation logic independent from transport and scheduling.
 - Remain synchronous and understandable while the application has one execution loop.
@@ -21,7 +21,7 @@ This document describes the current action-request design. Terminology is define
 ## Main flow
 
 ```text
-HTTP or interpreted command
+HTTP submission or interpreted command
             |
             v
       ActionService.submit
@@ -39,10 +39,10 @@ HTTP or interpreted command
  ActionResult + ActionEffects
             |
             v
- coordinator invalidates only affected bundle work
+ main processing loop refreshes only affected bundle work
 ```
 
-The HTTP server never executes actions. It validates and submits intent, then wakes the continuous coordinator, which remains the only bundle execution context.
+The HTTP server never executes actions. It validates and stores an action request, then wakes the continuous main processing loop. That loop remains the only place where bundle changes are executed.
 
 ## Domain models
 
@@ -70,7 +70,7 @@ An `ActionRequest` contains:
 - immutable request ID, schema version, action, origin, and creation time;
 - lifecycle status and timestamps;
 - execution-attempt count;
-- bounded user-facing terminal error;
+- bounded user-facing error for a failed or blocked request;
 - optional command-origin acknowledgement time.
 
 Origins are:
@@ -82,7 +82,7 @@ Origins are:
 
 An effect is the scheduler-facing description of which bundle identities need their derived work reconsidered after an action runs.
 
-Terminal results are `ActionSucceeded`, `ActionFailed`, and `ActionBlocked`. Every result can carry effects containing:
+After execution finishes, the result is `ActionSucceeded`, `ActionFailed`, or `ActionBlocked`. Every result can carry effects containing:
 
 ```text
 changed_bundle_ids
@@ -91,7 +91,7 @@ removed_bundle_ids
 
 `changed_bundle_ids` identifies bundles that still exist but may need fresh jobs. `removed_bundle_ids` identifies bundles whose queued jobs are no longer valid.
 
-The coordinator only understands these effects. It does not branch on merge, delete, or title action types.
+The main processing loop only understands these effects. It does not branch on merge, delete, or title action types.
 
 Effects are not persisted. After restart, bundles are loaded from durable filesystem state and jobs are derived again. Persisting effects would add audit information but is not needed for recovery correctness.
 
@@ -106,14 +106,14 @@ pending -> running -> succeeded
 - `pending`: durably accepted and not started.
 - `running`: the synchronous processor started one execution attempt.
 - `succeeded`: mutation completed.
-- `failed`: a known terminal failure that is safe to expose and is not retried automatically.
+- `failed`: a known failure that is safe to expose and is not retried automatically.
 - `blocked`: retry may be unsafe or requires inspection.
 
 SQLite has a partial unique index permitting at most one `running` request. There are no leases because action execution is single-threaded.
 
-If startup finds a request left `running`, it becomes `blocked` with an interruption error. Action-specific recovery is intentionally deferred; exceptional recovery code would otherwise become mandatory complexity for every action.
+If startup finds a request left `running`, it changes the request to `blocked` with an interruption error. We have not implemented action-specific recovery yet: startup does not try to infer whether an interrupted merge, delete, or title change partly completed. Targeted recovery can be added later for actions where it is both safe and simple.
 
-Terminal requests expire after seven days. A command-origin request is retained until its terminal outcome has also been acknowledged in the command file.
+The three finished states are `succeeded`, `failed`, and `blocked`. Requests in those states become eligible for deletion after seven days. A request created from a command is kept until its result has also been written to the command file and acknowledged.
 
 ## Persistence
 
@@ -121,8 +121,8 @@ SQLite is used directly through a repository boundary. Domain models and databas
 
 - action and origin are validated domain values stored as JSON;
 - frequently queried lifecycle and error fields are columns;
-- immutable request intent is checked during updates;
-- schema migrations use `PRAGMA user_version`.
+- updates may change lifecycle fields, but the store verifies that the original request ID, action, origin, schema version, and creation time did not change;
+- schema migrations record their current version in SQLite's application-defined `PRAGMA user_version` field.
 
 The earlier SQLModel experiment was rejected because it coupled constructor/database behavior to domain validation, made frozen immutable fields awkward, and added more code and dependencies than explicit `sqlite3` for this small schema.
 
@@ -139,65 +139,65 @@ Moving commands to SQLite was considered because request submission and command 
 The current cross-store ordering is therefore deliberate:
 
 1. persist a request ID in the command;
-2. idempotently ensure the matching request row exists;
-3. execute and persist the terminal request;
-4. write the terminal command receipt;
+2. create the matching database request if it does not exist, or reuse it when the same ID and action were already stored;
+3. execute the action and save its finished request state;
+4. write the finished result into the command file;
 5. acknowledge the request.
 
-If the process stops between steps, the recorded ID makes reconciliation idempotent. Successful delete is the exception to step 4 because deleting the bundle intentionally removes its command origin; its request is acknowledged after successful deletion.
+If the process stops between steps, the recorded request ID lets retries resume the same durable request, preventing reconciliation from submitting or executing the action again. Successful delete is the exception to step 4 because deleting the bundle intentionally removes its command file; its request is acknowledged after successful deletion.
 
 ## Commands and interpretation
 
-Commands remain in each bundle's `_commands.md` file. The file records extracted text, structured interpretation, and terminal resolution.
+Commands remain in each bundle's `_commands.md` file. The file records extracted text, structured interpretation, and the final resolution.
 
 Interpretation is not an action request. It is internal derived work:
 
 - a temporary AI/network exception fails the current job and uses daemon-level retry backoff;
-- a successful interpretation that finds no supported operation receives a terminal `rejected` resolution;
+- a successful interpretation that finds no supported operation receives a final `rejected` resolution;
 - state-changing interpretations submit an action request;
-- `ignore` and supersession are terminal non-action resolutions.
+- `ignore` and supersession are final non-action resolutions.
 
 There are no command attempt counters or per-command maximums. Action execution attempts belong only to `ActionRequest`. This avoids two retry systems describing the same state change.
 
-The runtime accepts only resolution-based command state. Before using this version with an older store, run `scripts/migrate_action_request_commands.py`: it converts completed commands to terminal `migrated` resolutions, assigns missing stable command IDs, and removes the former execution/retry fields. Normal loading rejects unmigrated command files instead of maintaining a second compatibility model.
-
 ## Run-scoped composition
 
-One `ActionRuntime` belongs to each `AudioTranscriber`. It owns:
+`AudioTranscriber` creates one `ActionRuntime` for the process run. The runtime owns:
 
 - the SQLite request store;
-- the transport-neutral `ActionService`;
-- creation of processors bound to the current bundle cache;
-- startup interruption handling, external pending-request processing, and retention pruning.
+- the `ActionService`, which gives HTTP and command code the same operations for submitting, reading, and acknowledging requests;
+- creation of action processors that execute requests against the currently loaded bundles;
+- changing a request left `running` by a previous process to `blocked` during startup;
+- processing pending HTTP requests before bundle jobs;
+- deleting old finished request records after their retention period.
 
 Command jobs receive this runtime instead of constructing stores and services themselves.
 
 ## Coordination and readiness
 
-The coordinator selects one ready derived job at a time. Derived work is not persisted because it can be reconstructed from bundle state.
+The main processing loop selects one ready derived job at a time. Here, a derived job is internal work such as transcription, command extraction, summarization, or bundle naming. It is not persisted because it can be reconstructed from bundle state.
 
-Readiness rules preserve required ordering:
+Readiness checks do two things: they determine whether a job can run now, and they preserve required ordering between dependent jobs:
 
 - transcription precedes command extraction;
 - command extraction precedes interpretation and action submission;
 - summary and naming wait while any queued command work could introduce an invalidating action.
 
-The summary rule is deliberately conservative across bundles. It prevents an older target from being summarized immediately before a newer source merges into it. A future dependency-aware rule could allow more unrelated summary work, but current execution is synchronous and the simpler predicate is adequate.
+The summary rule is deliberately conservative across bundles. It prevents an older target from being summarized immediately before a newer source merges into it. A future rule could allow summaries for bundles that cannot be affected by any pending command, but current execution is synchronous and the simpler check is adequate.
 
-Accepted HTTP requests execute by SQLite `created_at`. Derived jobs have no independent enqueue timestamp, so their stable ordering key is bundle recording date followed by bundle ID. There is no work-type priority.
+Pending HTTP action requests execute oldest first, ordered by SQLite `created_at` and then request ID. Merge, delete, and title requests all use this same order; action type does not add another priority. Derived jobs have no independent enqueue timestamp, so they are ordered by bundle recording date followed by bundle ID, subject to the readiness checks above.
 
-After each action result, the coordinator:
+After receiving an `ActionResult`, the main processing loop resolves the action's `ActionEffects` as follows:
 
 1. removes queued work for `removed_bundle_ids`;
 2. discards stale queued work for `changed_bundle_ids`;
 3. derives replacement jobs only for changed bundles that still exist;
 4. selects the next ready item.
 
-A bounded re-derivation count remains only as an accidental-loop circuit breaker.
+The loop limits how many times it can recreate jobs for the same bundle during one update cycle. Reaching that limit reports an error instead of allowing a scheduling bug to loop forever.
 
 ## HTTP transport
 
-The first HTTP layer uses Python's standard-library HTTP server to avoid a web-framework dependency for three small endpoints:
+The first HTTP layer currently uses Python's standard-library HTTP server for three endpoints:
 
 - `POST /requests`;
 - `GET /requests/{request_id}`;
@@ -205,22 +205,14 @@ The first HTTP layer uses Python's standard-library HTTP server to avoid a web-f
 
 It runs on one transport thread so submissions can arrive while the daemon waits. The thread writes only request rows and signals the daemon event; it never processes a bundle. SQLite serializes the short submission transaction with lifecycle updates.
 
-The API is enabled in the default continuous mode and restricted to `127.0.0.1` until authentication exists. Caller-provided request IDs make repeated HTTP submissions idempotent. `--once` runs one update cycle without starting the watcher or HTTP transport.
-
-## Complexity deliberately removed
-
-- Markdown request inbox, projection files, and its second filesystem watcher.
-- Per-job construction of SQLite stores, request services, and processors.
-- Direct state-changing command handlers and merge-specific scheduler exceptions.
-- Command attempt counters, maximum-attempt metadata, stored command errors, and no-op ignore/unknown handlers.
-- Historical slice-by-slice proposal text in this document.
-- A second durable request type for command interpretation.
+The API is enabled in the default continuous mode and restricted to `127.0.0.1` until authentication exists. When callers repeat the same action with the same request ID, the API returns the existing request instead of creating a duplicate. `--once` runs one update cycle without starting the watcher or HTTP transport.
 
 ## Decisions still open
 
 - Authentication and authorization before any non-loopback HTTP exposure.
+- Whether to keep the standard-library HTTP server or adopt a web framework as the API grows.
 - Whether HTTP needs list, cancellation, or explicit resubmission endpoints.
-- Whether terminal request effects should be persisted for auditing.
+- Whether effects from finished requests should be persisted for auditing.
 - Whether request retention and database backup location should be configurable.
 - Whether global summary readiness becomes measurably too conservative.
 - Whether a future permanent activity history is distinct from short-lived request status.
