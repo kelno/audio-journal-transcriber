@@ -682,10 +682,20 @@ class RunCommandsJob(TranscribeBundleJob):
         *,
         origin_may_be_removed: bool,
     ) -> None:
-        """Persist the terminal receipt before acknowledging its request row."""
+        """Project the terminal database outcome into its command receipt.
+
+        The processor has already committed the terminal request to SQLite.
+        SQLite and the YAML command file cannot participate in one transaction,
+        so the receipt is written first and the request is acknowledged second.
+        A stop between those writes leaves an unacknowledged database request
+        that the next run can use to finish this projection without re-executing
+        the action.
+        """
         owner = cls._find_command_bundle(command_id, bundle_cache)
         if owner is None:
             if origin_may_be_removed:
+                # Successful deletion removes the command file itself, leaving
+                # no separate origin receipt to persist before acknowledgement.
                 service.acknowledge(request.request_id)
                 return
             msg = f"Could not locate command {command_id} while acknowledging request {request.request_id}"

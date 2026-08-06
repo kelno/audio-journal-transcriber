@@ -106,7 +106,13 @@ class ActionService:
         return self._store.prune_expired(_read_utc_clock(self._clock))
 
     def acknowledge(self, request_id: ActionRequestId) -> None:
-        """Record that a terminal outcome is durably reflected at its origin."""
+        """Record that a terminal outcome is durably reflected at its origin.
+
+        Action completion is committed to SQLite before origin-specific state,
+        such as a command-file receipt, is written. Those stores cannot share
+        one transaction, so this separate marker closes the recoverable crash
+        window and allows retention to remove the request later.
+        """
         request = self._store.get(request_id)
         if request is None:
             msg = f"Action request not found: {request_id}"

@@ -136,4 +136,6 @@ class ActionRequest(BaseModel):
     finished_at: AwareDatetime | None = None
     expires_at: AwareDatetime | None = None
     error: ActionError | None = None
+    # Set only after the terminal outcome is reflected in the origin's own
+    # durable state; it does not indicate when action execution completed.
     acknowledged_at: AwareDatetime | None = None

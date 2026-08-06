@@ -428,7 +428,12 @@ class SQLiteActionRequestStore(ActionRequestStore):
 
     @override
     def prune_expired(self, current_time: datetime) -> list[ActionRequestId]:
-        """Delete expired terminal requests and return their IDs."""
+        """Delete expired terminal requests whose origins no longer need them.
+
+        A command request remains available until acknowledgement confirms its
+        terminal receipt was written to the command file. This lets a later run
+        repair the gap if the process stopped between the SQLite and YAML writes.
+        """
         self._require_writable()
         cutoff = self._stored_datetime(current_time)
         try:
