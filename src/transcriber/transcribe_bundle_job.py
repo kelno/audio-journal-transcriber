@@ -476,6 +476,8 @@ class RunCommandsJob(TranscribeBundleJob):
         """Apply each command type's policy and return the selected commands."""
         latest_by_type: dict[CommandType, Command] = {}
         for command in pending_commands:
+            if command.has_active_request:
+                continue
             matched_type = command.matched_type
             assert matched_type is not None
             definition = COMMAND_REGISTRY[matched_type]
@@ -484,6 +486,11 @@ class RunCommandsJob(TranscribeBundleJob):
 
         selected_commands: list[Command] = []
         for command in pending_commands:
+            # Request submission already committed the policy decision. Always
+            # reconcile that durable request before considering newer commands.
+            if command.has_active_request:
+                selected_commands.append(command)
+                continue
             matched_type = command.matched_type
             assert matched_type is not None
             latest = latest_by_type.get(matched_type)
@@ -525,7 +532,11 @@ class RunCommandsJob(TranscribeBundleJob):
             assert matched_type is not None
             definition = COMMAND_REGISTRY[matched_type]
 
-            if definition.execution_policy is CommandExecutionPolicy.ONCE_PER_BUNDLE and matched_type in seen_executed_types:
+            if (
+                not cmd.has_active_request
+                and definition.execution_policy is CommandExecutionPolicy.ONCE_PER_BUNDLE
+                and matched_type in seen_executed_types
+            ):
                 logger.info(
                     f"Skipping duplicate {matched_type.value} command: {cmd.text}",
                 )
@@ -560,21 +571,33 @@ class RunCommandsJob(TranscribeBundleJob):
         bundle_cache: BundleCache,
     ) -> ActionEffects | None:
         """Submit, execute, and acknowledge one state-changing command."""
-        action = self._action_from_command(command, command_type)
-        origin = CommandActionOrigin(bundle_id=self.bundle.bundle_id, command_id=command.id)
+        service = self.action_runtime.service
         resolution = command.resolution
         if isinstance(resolution, ActionRequestCommandResolution):
             request_id = resolution.request_id
+            request = service.get_request(request_id)
+            if request is not None and (
+                not isinstance(request.origin, CommandActionOrigin) or request.origin.command_id != command.id
+            ):
+                msg = (
+                    f"Command {command.id} references action request {request_id}, "
+                    "but that request belongs to a different command."
+                )
+                raise ValueError(msg)
         else:
             request_id = new_action_request_id()
             self.bundle.set_command_resolution(
                 command.id,
                 ActionRequestCommandResolution(request_id=request_id),
             )
+            request = None
 
-        service = self.action_runtime.service
+        if request is None:
+            action = self._action_from_command(command, command_type)
+            origin = CommandActionOrigin(bundle_id=self.bundle.bundle_id, command_id=command.id)
+            request = service.submit(action, origin, request_id=request_id)
+
         processor = self.action_runtime.processor(bundle_cache)
-        request = service.submit(action, origin, request_id=request_id)
         result = processor.process(request_id) if request.status == "pending" else self._result_from_request(request)
         if result is None:
             request = service.get_request(request_id)
@@ -590,9 +613,9 @@ class RunCommandsJob(TranscribeBundleJob):
             service,
             bundle_cache,
             config,
-            origin_may_be_removed=isinstance(action, DeleteAction) and isinstance(result, ActionSucceeded),
+            origin_may_be_removed=isinstance(request.action, DeleteAction) and isinstance(result, ActionSucceeded),
         )
-        return self._handle_action_result(action, result, request_id)
+        return self._handle_action_result(request.action, result, request_id)
 
     def _action_from_command(self, command: Command, command_type: CommandType) -> Action:
         """Translate a validated command into immutable action intent."""

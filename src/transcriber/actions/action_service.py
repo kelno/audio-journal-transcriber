@@ -80,7 +80,10 @@ class ActionService:
         if request_id is not None and (existing := self._store.get(request_id)) is not None:
             if existing.action == action and existing.origin == origin:
                 return existing
-            msg = f"Action request ID already belongs to different intent: {request_id}"
+            msg = (
+                f"Request ID {request_id} already exists with different request details. "
+                "Use a new ID, or resend exactly the same action as the original request."
+            )
             raise ActionRequestAlreadyExistsError(msg)
 
         request_values: dict[str, object] = {

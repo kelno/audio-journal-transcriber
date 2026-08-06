@@ -88,3 +88,7 @@ def test_http_rejects_invalid_action_and_request_id_conflicts(tmp_path: Path) ->
     assert accepted.status_code == 202
     assert conflict.status_code == 409
     assert conflict.json()["error"] == "request_id_conflict"
+    assert conflict.json()["message"] == (
+        f"Request ID {request_id} already exists with different request details. "
+        "Use a new ID, or resend exactly the same action as the original request."
+    )
