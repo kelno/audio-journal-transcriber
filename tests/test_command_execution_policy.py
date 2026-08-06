@@ -15,6 +15,7 @@ from transcriber.commands.command_registry import COMMAND_REGISTRY
 from transcriber.commands.command_resolution import (
     ActionRequestCommandResolution,
     IgnoredCommandResolution,
+    MigratedCommandResolution,
     RejectedCommandResolution,
     SupersededCommandResolution,
 )
@@ -77,7 +78,10 @@ class TestCommandExecutionPolicy:
         )
         _set_all_command_types(bundle, CommandType.IGNORE)
         assert bundle.commands is not None
-        bundle.set_command_executed(bundle.commands.commands[0].id)
+        bundle.set_command_resolution(
+            bundle.commands.commands[0].id,
+            MigratedCommandResolution(),
+        )
 
         definition = COMMAND_REGISTRY[CommandType.IGNORE]
         monkeypatch.setattr(definition, "execution_policy", CommandExecutionPolicy.LATEST_PENDING)

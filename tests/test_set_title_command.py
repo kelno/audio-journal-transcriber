@@ -67,7 +67,7 @@ class TestSetTitleCommand:
         assert len(fake_fs.get_operations("rename")) == 1
         assert fake_ai_manager.named_summaries == []
         assert bundle.commands is not None
-        assert all(command.executed for command in bundle.commands.commands)
+        assert all(command.is_resolved for command in bundle.commands.commands)
 
     def test_merge_runs_before_latest_title_and_applies_it_to_target(
         self,
@@ -124,7 +124,7 @@ class TestSetTitleCommand:
         assert merged_target.bundle_name.endswith("Combined planning")
         assert merged_target.metadata.bundle_title_state is BundleTitleState.MANUAL
         assert merged_target.commands is not None
-        assert all(command.executed for command in merged_target.commands.commands)
+        assert all(command.is_resolved for command in merged_target.commands.commands)
         title_command = next(command for command in merged_target.commands.commands if command.text == final_title)
         assert isinstance(title_command.resolution, ActionRequestCommandResolution)
         assert title_command.resolution.outcome == "succeeded"

@@ -1,4 +1,4 @@
-"""Tests for typed command resolutions and legacy execution compatibility."""
+"""Tests for strict typed command resolutions."""
 
 from datetime import UTC, datetime
 
@@ -8,7 +8,7 @@ from pydantic import ValidationError
 from transcriber.commands.command import Command
 from transcriber.commands.command_resolution import (
     ActionRequestCommandResolution,
-    LegacyExecutedCommandResolution,
+    MigratedCommandResolution,
     SupersededCommandResolution,
 )
 
@@ -16,19 +16,28 @@ REQUEST_ID = "a" * 32
 RESOLVED_AT = datetime(2026, 8, 6, 10, tzinfo=UTC)
 
 
-def test_legacy_executed_fields_map_to_compatibility_resolution() -> None:
-    """Existing command files acquire a typed terminal meaning when loaded."""
-    command = Command.from_dict(
-        {
-            "text": "delete this",
-            "executed": True,
-            "executed_at": RESOLVED_AT.isoformat(),
-        },
+def test_migrated_resolution_is_terminal_without_an_action_request() -> None:
+    """The one-time migration can preserve completion without inventing intent."""
+    command = Command(
+        text="delete this",
+        resolution=MigratedCommandResolution(resolved_at=RESOLVED_AT),
     )
 
-    assert command.resolution == LegacyExecutedCommandResolution(resolved_at=RESOLVED_AT)
+    assert command.resolution == MigratedCommandResolution(resolved_at=RESOLVED_AT)
     assert command.is_resolved
     assert not command.needs_resolution
+
+
+def test_legacy_execution_fields_require_store_migration() -> None:
+    """Normal runtime loading rejects old state instead of silently projecting it."""
+    with pytest.raises(ValidationError):
+        Command.from_dict(
+            {
+                "text": "delete this",
+                "executed": True,
+                "executed_at": RESOLVED_AT.isoformat(),
+            },
+        )
 
 
 def test_active_request_is_submitted_but_not_terminally_resolved() -> None:
@@ -38,15 +47,13 @@ def test_active_request_is_submitted_but_not_terminally_resolved() -> None:
         resolution=ActionRequestCommandResolution(request_id=REQUEST_ID),
     )
 
-    assert not command.executed
-    assert command.executed_at is None
     assert command.has_active_request
     assert not command.is_resolved
     assert not command.needs_resolution
 
 
-def test_terminal_request_outcome_projects_to_legacy_execution_fields() -> None:
-    """Old readers still see an acknowledged action request as executed."""
+def test_terminal_request_outcome_is_resolved() -> None:
+    """An acknowledged action request is terminal command state."""
     command = Command(
         text="merge this",
         resolution=ActionRequestCommandResolution(
@@ -56,20 +63,16 @@ def test_terminal_request_outcome_projects_to_legacy_execution_fields() -> None:
         ),
     )
 
-    assert command.executed
-    assert command.executed_at == RESOLVED_AT
     assert command.is_resolved
 
 
-def test_non_action_resolution_projects_to_legacy_execution_fields() -> None:
-    """Superseded commands remain complete to old and new scheduling policy."""
+def test_non_action_resolution_is_resolved() -> None:
+    """A superseded command is terminal command state."""
     command = Command(
         text="use another title",
         resolution=SupersededCommandResolution(resolved_at=RESOLVED_AT),
     )
 
-    assert command.executed
-    assert command.executed_at == RESOLVED_AT
     assert command.is_resolved
 
 

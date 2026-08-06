@@ -1,7 +1,6 @@
 # pyright:  reportUnknownArgumentType=false
 
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import override
 
@@ -111,21 +110,9 @@ class CommandsFile(TextFile):
             CommandsFile: A CommandsFile instance with commands marked as unexecuted.
 
         """
-        commands = [Command(text=text, executed=False) for text in command_texts]
+        commands = [Command(text=text) for text in command_texts]
         instance = cls(text="", commands=commands)
         return instance
-
-    def mark_executed(self, command_index: int, tz: timezone) -> None:
-        """Mark a command as executed.
-
-        Args:
-            command_index: Index of the command to mark as executed.
-            tz: Timezone to use for the execution timestamp.
-
-        """
-        if 0 <= command_index < len(self.commands):
-            self.commands[command_index].executed_at = datetime.now(tz)
-            self.commands[command_index].executed = True
 
     @override
     def write(self, bundle_dir: Path, fs_service: FileSystemService) -> None:

@@ -59,10 +59,10 @@ class RejectedCommandResolution(CommandResolutionModel):
     resolved_at: AwareDatetime
 
 
-class LegacyExecutedCommandResolution(CommandResolutionModel):
-    """Compatibility receipt reconstructed from the former executed fields."""
+class MigratedCommandResolution(CommandResolutionModel):
+    """Record a completed command imported without an action-request receipt."""
 
-    type: Literal["legacy_executed"] = "legacy_executed"
+    type: Literal["migrated"] = "migrated"
     resolved_at: AwareDatetime | None = None
 
 
@@ -71,7 +71,7 @@ type CommandResolution = Annotated[
     | IgnoredCommandResolution
     | SupersededCommandResolution
     | RejectedCommandResolution
-    | LegacyExecutedCommandResolution,
+    | MigratedCommandResolution,
     Field(discriminator="type"),
 ]
 

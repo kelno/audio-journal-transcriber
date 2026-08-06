@@ -12,6 +12,7 @@ from transcriber.actions.action_request import ActionFailed, ActionResult
 from transcriber.bundle_title import BundleTitleState
 from transcriber.commands.command import Command
 from transcriber.commands.command_handlers import merge_bundles
+from transcriber.commands.command_resolution import MigratedCommandResolution
 from transcriber.config import TranscribeConfig
 from transcriber.constants import MERGE_FAILED_FILENAME, MULTIPLE_TRANSCRIPTS_SEPARATOR
 from transcriber.exception import MergeBlockedException
@@ -92,7 +93,7 @@ class TestMergeActionExecutor:
         assert reloaded.summary is None
         assert reloaded.metadata.bundle_title_state is BundleTitleState.PENDING
         assert reloaded.commands is not None
-        assert reloaded.commands.commands[0].executed is False
+        assert reloaded.commands.commands[0].resolution is None
 
     def test_merge_dedupes_commands_with_same_id(
         self,
@@ -169,13 +170,13 @@ class TestMergeActionExecutor:
             transcript_text="previous transcript",
             summary_text="previous summary",
             commands=[previous_cmd_raw1, previous_cmd_raw2],
-            commands_executed=False,
+            commands_resolved=False,
             transcript_model_used="model-a",
             keep_forever=True,
         )
-        # Manually mark only first command as executed to test mixed states
+        # Manually resolve only the first command to test mixed states.
         assert previous_bundle.commands
-        previous_bundle.commands.commands[0].executed = True
+        previous_bundle.commands.commands[0].resolution = MigratedCommandResolution()
         previous_bundle_dir = previous_bundle.get_bundle_dir()
         previous_bundle.commands.write(previous_bundle_dir, fake_fs)
 
@@ -189,16 +190,16 @@ class TestMergeActionExecutor:
             audio_filename=current_audio_filename,
             transcript_text=current_transcript_text,
             commands=[current_command_raw1, current_command_raw2, current_command_raw3],
-            commands_executed=False,
+            commands_resolved=False,
             transcript_model_used="model-b",
             keep_forever=False,
         )
-        # Mark only second command as executed
+        # Resolve only the second command.
         assert current_bundle.commands
         bundle_cache = _bundle_cache(current_bundle, previous_bundle)
         merge_cmd = current_bundle.commands.commands[0]
-        assert merge_cmd.executed is False  # our merge command, starts at false
-        current_bundle.commands.commands[1].executed = True
+        assert merge_cmd.resolution is None
+        current_bundle.commands.commands[1].resolution = MigratedCommandResolution()
         current_bundle_dir = current_bundle.get_bundle_dir()
         current_bundle.commands.write(current_bundle_dir, fake_fs)
 
@@ -229,7 +230,7 @@ class TestMergeActionExecutor:
         assert merged_bundle.summary is None
         assert merged_bundle.metadata.bundle_title_state is BundleTitleState.PENDING
 
-        # Verify all commands were preserved with their execution states
+        # Verify all commands were preserved with their resolution states.
         assert merged_bundle.commands is not None
         commands = merged_bundle.commands.commands
         assert len(commands) == 5
@@ -241,14 +242,14 @@ class TestMergeActionExecutor:
             current_command_raw3,
         ]
 
-        # Verify execution states were preserved from source bundles
-        assert commands[0].executed is True  # previous bundle first command
-        assert commands[1].executed is False  # previous bundle second command
+        # Verify resolution states were preserved from source bundles.
+        assert commands[0].is_resolved
+        assert commands[1].resolution is None
         # The executor preserves the unresolved merge command; the request
         # lifecycle writes its terminal receipt after mutation succeeds.
-        assert commands[2].executed is False
-        assert commands[3].executed is True  # current bundle second command
-        assert commands[4].executed is False  # current bundle third command, never executed, should still be false
+        assert commands[2].resolution is None
+        assert commands[3].is_resolved
+        assert commands[4].resolution is None
 
         # Verify transcript model usage was merged (both models present across files)
         merged_models = [model for audio_meta in merged_bundle.metadata.audio_files for model in audio_meta.transcript_model_used]
@@ -734,8 +735,8 @@ class TestMergeActionExecutor:
         assert [cmd.text for cmd in commands] == [merge_cmd.text, other_cmd.text]
         # Mutation preserves unresolved commands. The request lifecycle writes
         # the terminal receipt after the executor returns.
-        assert commands[0].executed is False
-        assert commands[1].executed is False
+        assert commands[0].resolution is None
+        assert commands[1].resolution is None
 
     def test_merge_removes_failure_marker_on_success(
         self,
@@ -769,7 +770,7 @@ class TestMergeActionExecutor:
     ) -> None:
         """A failed merge keeps the source bundle (and its audio) and writes a failure cue.
 
-        The merge command must NOT be marked executed, so the merge stays retryable.
+        The merge command must remain unresolved, so the merge stays retryable.
         """
         previous_bundle = transcribe_bundle_factory(
             bundle_name="2025-01-15_previous",
@@ -807,9 +808,9 @@ class TestMergeActionExecutor:
         # Failure cue is present in BOTH the target and the source bundle.
         assert fake_fs.file_exists(previous_bundle_dir / MERGE_FAILED_FILENAME)
         assert fake_fs.file_exists(current_bundle_dir / MERGE_FAILED_FILENAME)
-        # Merge command is NOT marked executed, so the merge can be retried.
+        # Merge command remains unresolved, so the merge can be retried.
         assert current_bundle.commands is not None
-        assert current_bundle.commands.commands[0].executed is False
+        assert current_bundle.commands.commands[0].resolution is None
 
         # A subsequent merge attempt into the same (marked) target is blocked, so the
         # system does not auto-retry against a potentially inconsistent target.

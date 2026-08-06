@@ -13,11 +13,8 @@ from transcriber.commands.command_interpretation import CommandInterpretation
 from transcriber.commands.command_resolution import (
     CommandResolution,
     IgnoredCommandResolution,
-    LegacyExecutedCommandResolution,
     RejectedCommandResolution,
     SupersededCommandResolution,
-    is_terminal_resolution,
-    resolution_time,
 )
 from transcriber.config import TranscribeConfig
 from transcriber.constants import (
@@ -743,21 +740,10 @@ class TranscribeBundle:
         assert self.commands is not None
         self.commands.write(self.get_bundle_dir(), self.fs_service)
 
-    def set_command_executed(self, cmd_id: str) -> None:
-        """Record a compatibility receipt for a directly executed command."""
-        self.set_command_resolution(
-            cmd_id,
-            LegacyExecutedCommandResolution(
-                resolved_at=datetime.now(self.config.general.timezone),
-            ),
-        )
-
     def set_command_resolution(self, cmd_id: str, resolution: CommandResolution) -> None:
-        """Persist a command resolution and its legacy execution projection."""
+        """Persist a command resolution."""
         cmd = self.assert_command(cmd_id)
         cmd.resolution = resolution
-        cmd.executed = is_terminal_resolution(resolution)
-        cmd.executed_at = resolution_time(resolution) if cmd.executed else None
 
         assert self.commands is not None
         self.commands.write(self.get_bundle_dir(), self.fs_service)

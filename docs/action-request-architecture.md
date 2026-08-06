@@ -155,7 +155,7 @@ Interpretation is not an action request. It is internal derived work:
 
 There are no command attempt counters or per-command maximums. Action execution attempts belong only to `ActionRequest`. This avoids two retry systems describing the same state change.
 
-Legacy `executed` fields are still read as a safety migration because treating an old destructive command as new could repeat it. They are a data-safety compatibility rule, not an alternate execution path.
+The runtime accepts only resolution-based command state. Before using this version with an older store, run `scripts/migrate_action_request_commands.py`: it converts completed commands to terminal `migrated` resolutions, assigns missing stable command IDs, and removes the former execution/retry fields. Normal loading rejects unmigrated command files instead of maintaining a second compatibility model.
 
 ## Run-scoped composition
 

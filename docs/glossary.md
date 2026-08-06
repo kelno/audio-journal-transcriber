@@ -65,7 +65,7 @@ Interpretation is a derived job, not an action request. A transient interpretati
 
 The durable record of what command processing decided.
 
-For a state-changing command, the resolution links to an action-request ID and later records its terminal outcome. Non-action resolutions include `ignored`, `superseded`, and `rejected`.
+For a state-changing command, the resolution links to an action-request ID and later records its terminal outcome. Non-action resolutions include `ignored`, `superseded`, and `rejected`. A `migrated` resolution records a command completed before action requests existed, without inventing a request or action history.
 
 ## Coordinator
 
