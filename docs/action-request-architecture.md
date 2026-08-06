@@ -113,7 +113,7 @@ SQLite has a partial unique index permitting at most one `running` request. Ther
 
 If startup finds a request left `running`, it changes the request to `blocked` with an interruption error. We have not implemented action-specific recovery yet: startup does not try to infer whether an interrupted merge, delete, or title change partly completed. Targeted recovery can be added later for actions where it is both safe and simple.
 
-The three finished states are `succeeded`, `failed`, and `blocked`. Requests in those states become eligible for deletion after seven days. A request created from a command is kept until its result has also been written to the command file and acknowledged.
+The three finished states are `succeeded`, `failed`, and `blocked`. Requests in those states become eligible for deletion after 30 days. A request created from a command is kept until its result has also been written to the command file and acknowledged.
 
 ## Persistence
 

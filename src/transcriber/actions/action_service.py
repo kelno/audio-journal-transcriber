@@ -25,7 +25,7 @@ from transcriber.actions.action_request_store import (
 if TYPE_CHECKING:
     from transcriber.actions.action import Action
 
-ACTION_REQUEST_RETENTION: Final = timedelta(days=7)
+ACTION_REQUEST_RETENTION: Final = timedelta(days=30)
 UNEXPECTED_ACTION_ERROR_CODE: Final = "unexpected_action_error"
 INTERRUPTED_ACTION_ERROR_CODE: Final = "interrupted_by_restart"
 
@@ -109,7 +109,7 @@ class ActionService:
         return self._store.get(request_id)
 
     def prune_expired(self) -> list[ActionRequestId]:
-        """Delete terminal requests whose seven-day status window has elapsed."""
+        """Delete finished requests whose 30-day status window has elapsed."""
         return self._store.prune_expired(_read_utc_clock(self._clock))
 
     def acknowledge(self, request_id: ActionRequestId) -> None:

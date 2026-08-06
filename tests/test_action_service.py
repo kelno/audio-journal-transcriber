@@ -191,7 +191,7 @@ class TestActionProcessor:
         assert request.started_at == INITIAL_TIME
         assert request.finished_at == INITIAL_TIME + timedelta(minutes=2)
         assert request.finished_at is not None
-        assert request.expires_at == request.finished_at + ACTION_REQUEST_RETENTION
+        assert request.expires_at == request.finished_at + timedelta(days=30)
         assert request.error is None
 
     @pytest.mark.parametrize(
@@ -307,5 +307,5 @@ class TestActionProcessor:
         assert blocked.attempt_count == running.attempt_count
         assert blocked.started_at == running.started_at
         assert blocked.finished_at == clock.current_time
-        assert blocked.expires_at == clock.current_time + ACTION_REQUEST_RETENTION
+        assert blocked.expires_at == clock.current_time + timedelta(days=30)
         assert processor.block_interrupted_request() is None
