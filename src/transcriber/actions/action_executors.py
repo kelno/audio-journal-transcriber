@@ -16,7 +16,7 @@ if TYPE_CHECKING:
 
 
 class BundleActionExecutor:
-    """Dispatch actions against the daemon's current ID-keyed bundle cache."""
+    """Apply one action to the currently loaded bundles and return its result."""
 
     def __init__(self, bundle_cache: BundleCache) -> None:
         """Bind action execution to the currently loaded bundle state.

@@ -125,6 +125,7 @@ class ActionBlocked(ActionResultModel):
     error: ActionError
 
 
+# Terminal outcome returned after an action executor finishes.
 type ActionResult = Annotated[
     ActionSucceeded | ActionFailed | ActionBlocked,
     Field(discriminator="status"),
@@ -139,7 +140,7 @@ def parse_action_result(value: object) -> ActionResult:
 
 
 class ActionRequest(BaseModel):
-    """Durable execution envelope for one typed action."""
+    """Durable execution envelope around one action."""
 
     # Reject unknown persistence fields while allowing validated lifecycle updates;
     # immutable identity and intent fields are frozen individually below.

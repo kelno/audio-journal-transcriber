@@ -16,7 +16,7 @@ if TYPE_CHECKING:
 
 
 class ActionRuntime:
-    """Own the action store and application services for one process run."""
+    """Own action-request persistence and processing services for one process run."""
 
     def __init__(self, store: SQLiteActionRequestStore) -> None:
         """Compose one canonical store with its transport-neutral service.

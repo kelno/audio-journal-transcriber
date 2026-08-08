@@ -53,19 +53,21 @@ A bundle owns its audio, transcript, summary, metadata, context, and command fil
 
 Natural-language instruction extracted from a bundle transcript.
 
+A raw command is the exact natural-language text extracted between spoken command boundary phrases. The boundary phrases are removed, but the text has not yet been matched to a supported command type or interpreted into structured arguments.
+
 A command is bundle-owned derived data. It is interpreted into a typed command and either submits an action request or receives a terminal non-action resolution such as `ignored`, `superseded`, or `rejected`.
 
 ## Command interpretation
 
 The internal AI step that maps command text to a supported command type and structured arguments.
 
-Interpretation is a derived job, not an action request. A transient interpretation failure is retried through daemon-level backoff. An interpretation that successfully determines that no command is supported becomes a terminal `rejected` resolution.
+Interpretation is a derived job, not an action request. If interpretation fails because the AI response cannot be read or validated, the command remains unresolved so the daemon can try it again. The daemon waits before retrying, and doubles that delay after each unsuccessful processing run up to a maximum of one hour. This avoids repeatedly sending requests in a tight loop. An interpretation that successfully determines that no command is supported becomes a terminal `rejected` resolution.
 
 ## Command resolution
 
 The durable record of what command processing decided.
 
-For a state-changing command, the resolution links to an action-request ID and later records its terminal outcome. Non-action resolutions include `ignored`, `superseded`, and `rejected`. A `migrated` resolution records a command completed before action requests existed, without inventing a request or action history.
+For a state-changing command, the resolution links to an action-request ID and later records its terminal outcome. Non-action resolutions include `ignored`, `superseded`, and `rejected`. A `migrated` resolution records a command completed before action requests system existed.
 
 ## Main processing loop
 
@@ -73,11 +75,11 @@ The synchronous job loop in `AudioTranscriber`.
 
 It selects one ready derived job at a time, applies action effects, discards stale work, and re-derives jobs only for affected bundles. It does not contain merge-specific scheduling behavior.
 
-## Derived job
+## Job
 
 Internal work that can be reconstructed from bundle state.
 
-Examples include transcription, command extraction, command interpretation, summary generation, and naming. Jobs are intentionally not stored in SQLite because the application can derive them again after restart.
+Examples include transcription, command extraction, command interpretation, summary generation, and naming. The architecture calls these derived jobs to emphasize that the application can derive them again from bundle state after restart. Jobs are intentionally not stored in SQLite.
 
 ## Origin
 
