@@ -276,6 +276,14 @@ class AudioTranscriber:
                     )
                     if errored and entry.jobs:
                         errored_bundles.append(entry.jobs)
+
+                # Action effects may replace a seemingly completed pipeline with
+                # fresh work, so report completion only after they are applied.
+                if bundle_id not in queue:
+                    logger.info(
+                        f"Finished processing bundle [{job.bundle.bundle_name}]; "
+                        f"bundles still with work in this run: {len(queue)}",
+                    )
             except Exception as e:  # pylint: disable=broad-exception-caught
                 # Step 5: one failing bundle must not prevent independent bundles
                 # from progressing. Classify the failure, discard this bundle's
