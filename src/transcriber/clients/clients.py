@@ -19,7 +19,7 @@ class AudioTranscriptionClient(ABC):
             str: The transcribed text.
 
         Raises:
-            ValueError: If transcription fails.
+            TranscriptionRequestException: If the service returns an unsuccessful HTTP response.
             FileNotFoundError: If the audio file doesn't exist.
 
         """

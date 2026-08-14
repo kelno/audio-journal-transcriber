@@ -10,6 +10,7 @@ import requests
 from openai import OpenAI
 
 from transcriber.config import AudioConfig, TextConfig
+from transcriber.exception import TranscriptionRequestException
 from transcriber.logger import logger
 
 from .clients import AudioTranscriptionClient, ChatCompletionClient
@@ -34,7 +35,12 @@ class OpenAIAudioClient(AudioTranscriptionClient):
 
     @override
     def transcribe(self, audio_path: Path) -> str:
-        """Transcribe audio file using OpenAI-compatible API with streaming."""
+        """Transcribe audio file using OpenAI-compatible API with streaming.
+
+        Raises:
+            TranscriptionRequestException: If the service returns an unsuccessful HTTP response.
+
+        """
         logger.debug(f"Transcribing: {audio_path}")
 
         with Path.open(audio_path, "rb") as audio_file:
@@ -59,11 +65,13 @@ class OpenAIAudioClient(AudioTranscriptionClient):
                 timeout=(60 if self.config.stream else 600),
             )
 
-        if response.status_code == HTTP_OK:
-            return self._extract_streaming_response(response)
-        else:
-            msg = f"Transcription failed with status code {response.status_code}: {response.text}"
-            raise ValueError(msg)
+        if response.status_code != HTTP_OK:
+            raise TranscriptionRequestException(
+                status_code=response.status_code,
+                response_body=response.text,
+            )
+
+        return self._extract_streaming_response(response)
 
     def _extract_streaming_response(self, response: requests.Response) -> str:
         """Process an OpenAI-compatible SSE transcription response.
