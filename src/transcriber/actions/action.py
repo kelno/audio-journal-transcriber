@@ -69,11 +69,13 @@ class SetTitleAction(ActionModel):
     title: RequestedBundleTitle
 
 
+# Supported state-change descriptions accepted by the action-request boundary.
 type Action = Annotated[
     MergeAction | DeleteAction | SetTitleAction,
     Field(discriminator="type"),
 ]
 
+# Reusable validator that selects the concrete action model from its `type` field.
 _ACTION_ADAPTER = TypeAdapter(Action)
 
 
