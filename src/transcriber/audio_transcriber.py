@@ -225,8 +225,6 @@ class AudioTranscriber:
 
         """
         # Step 1: turn the gathered per-bundle job lists into an ID-keyed queue.
-        # Human-readable bundle names can change during processing, whereas the
-        # persistent ID remains safe for invalidation and replacement.
         queue: BundleJobQueue = {
             jobs_bundle[0].bundle.bundle_id: BundleJobQueueEntry(jobs=jobs_bundle) for jobs_bundle in all_jobs_bundles if jobs_bundle
         }
@@ -237,16 +235,14 @@ class AudioTranscriber:
             # lets newly produced effects change what is safe to execute next.
             bundle_id = self._select_oldest_ready_bundle(queue)
             if bundle_id is None:
-                # A non-empty queue with no ready head violates the scheduler's
-                # assumptions. Preserve all remaining work for retry/reporting
-                # instead of spinning forever.
+                # A non-empty queue with no ready head violates the processing loop assumptions.
                 logger.error("No queued bundle job is ready; stopping to avoid a scheduler loop.")
                 errored_bundles.extend(entry.jobs for entry in queue.values() if entry.jobs)
                 break
 
             entry = queue[bundle_id]
-            # Step 3: execute only the head job. Its bundle-local successors may
-            # depend on files or state that this job has not produced yet.
+            # Step 3: run the first job in the bundle's queue. Other jobs already in
+            # that queue may depend on its output; for example, a summary needs a transcript.
             job = entry.jobs[0]
             try:
                 logger.debug(f"Processing job: {job}")
@@ -256,15 +252,13 @@ class AudioTranscriber:
                     bundle_cache=bundle_cache,
                 )
 
-                # Step 4: consume the completed job before applying effects. If
-                # the action changed this bundle, re-derivation below will replace
-                # the remaining stale jobs with a fresh pipeline.
+                # Step 4: consume the completed job before applying effects.
                 entry.jobs.pop(0)
                 if not entry.jobs:
                     queue.pop(bundle_id)
 
                 # Most jobs only advance their own pipeline. Action jobs can also
-                # mutate or remove other bundles; their effects identify which
+                # mutate or remove current or other bundles; their effects identify which
                 # queued pipelines must be discarded and derived again.
                 if effects is not None and (effects.changed_bundle_ids or effects.removed_bundle_ids):
                     errored = self._apply_action_effects(
@@ -277,17 +271,14 @@ class AudioTranscriber:
                     if errored and entry.jobs:
                         errored_bundles.append(entry.jobs)
 
-                # Action effects may replace a seemingly completed pipeline with
-                # fresh work, so report completion only after they are applied.
-                if bundle_id not in queue:
+                # Log completion
+                if bundle_id not in queue:  # action effects might requeue the current bundle
                     logger.info(
-                        f"Finished processing bundle [{job.bundle.bundle_name}]; "
-                        f"bundles still with work in this run: {len(queue)}",
+                        f"Finished processing bundle [{job.bundle.bundle_name}]; bundles still with work in this run: {len(queue)}",
                     )
             except Exception as e:  # pylint: disable=broad-exception-caught
-                # Step 5: one failing bundle must not prevent independent bundles
-                # from progressing. Classify the failure, discard this bundle's
-                # remaining queue, and retain reportable work for daemon retry.
+                # Step 5: if one bundle fails, continue with the others. Handle the error,
+                # remove that bundle from this run, and keep unfinished jobs for a later retry.
                 errored = self._handle_process_jobs_exception(job, e)
                 queue.pop(bundle_id, None)
                 if errored and entry.jobs:
@@ -462,7 +453,7 @@ class AudioTranscriber:
             ]
 
         # Existing command state may contain an uninterpreted command, a request
-        # awaiting execution, or a terminal request awaiting its command receipt.
+        # awaiting execution, or a finished request whose result still needs to be written to the command file.
         if bundle.commands.has_commands_needing_processing():
             return [RunCommandsJob(bundle, dry_run, self.action_runtime)]
 
@@ -521,23 +512,19 @@ class AudioTranscriber:
         input_dir = self.config.general.input_dir
         store_dir = self.config.general.store_dir
 
-        # Step 1: validate and prepare only the durable directories that this run
-        # is allowed to mutate. Discovery treats a missing store as empty, so dry
-        # runs do not create it merely by inspecting work.
+        # Step 1: validate and prepare directories
         if not self.dry_run:
             self.fs_service.ensure_directory_exists(store_dir)
 
-        # Step 2: build one current ID-keyed view from new input and stored bundles.
-        # Executors and derived jobs share this cache for the duration of the update.
+        # Step 2: combine new and stored bundles, indexed by bundle ID.
+        # Actions and jobs use this same bundle data throughout the update.
         bundle_cache = self.gather_bundles(input_dir, store_dir)
 
-        # Step 3: execute externally submitted requests before deriving jobs. Their
-        # mutations update the cache, so the jobs gathered next already describe
-        # post-action state and do not require a separate invalidation pass here.
+        # Step 3: execute external action requests, such as requests submitted through
+        # HTTP, before creating jobs. The next step then creates jobs from updated bundles.
         self.action_runtime.process_external_requests(bundle_cache)
 
-        # Step 4: derive reconstructible work from the resulting bundle state, then
-        # let the coordinator execute one ready job at a time.
+        # Step 4: create the jobs needed for the current bundle state, then run them
         self.log_section_header("Gathering Jobs")
         all_bundle_jobs = self.gather_jobs(bundle_cache)
         errored_bundles = list[BundleJobs]()

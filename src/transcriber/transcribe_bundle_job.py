@@ -441,8 +441,10 @@ class RunCommandsJob(TranscribeBundleJob):
             return None
 
         commands = self.bundle.commands.commands
-        pending_commands = self._prepare_commands(ai_manager, commands)
-        pending_commands = self._apply_execution_policies(pending_commands)
+        self._interpret_commands(ai_manager, commands)
+        # Keep only commands that still have work to do
+        pending_commands = [command for command in commands if command.needs_processing]
+        pending_commands = self._select_commands_to_execute(pending_commands)
 
         # Commands with side effects that invalidate the rest of the bundle should run first.
         # Keep this local until a more complex command ordering system is actually needed.
@@ -450,30 +452,42 @@ class RunCommandsJob(TranscribeBundleJob):
 
         return self._execute_commands(pending_commands, config, bundle_cache)
 
-    def _prepare_commands(
+    def _interpret_commands(
         self,
         ai_manager: AIManager,
         commands: list[Command],
-    ) -> list[Command]:
-        """Ensure commands have a matched type and return pending commands."""
-        pending_commands = []
+    ) -> None:
+        """Interpret unfinished commands that do not have a matched type.
 
-        for cmd in commands:
-            if not cmd.needs_processing:
+        Args:
+            ai_manager: AI service used to interpret commands.
+            commands: Commands read from this bundle's command file.
+
+        """
+        for command in commands:
+            if not command.needs_processing:
                 continue
 
-            if cmd.matched_type is None and cmd.needs_resolution:
-                # Should not happen under normal circumstances, but recover from
-                # inconsistent state if a command was marked executed without its type.
-                interpretation = ai_manager.interpret_command(cmd.text)
-                self.bundle.set_command_interpretation(cmd.id, interpretation)
+            if command.matched_type is None and command.needs_resolution:
+                # This should not normally happen. Reinterpret a command that
+                # needs work but is missing its type.
+                interpretation = ai_manager.interpret_command(command.text)
+                self.bundle.set_command_interpretation(command.id, interpretation)
 
-            pending_commands.append(cmd)
+    def _select_commands_to_execute(self, pending_commands: list[Command]) -> list[Command]:
+        """Select pending commands to execute.
 
-        return pending_commands
+        Commands with a saved action request remain selected so that request can be
+        completed. For command types that keep only the latest pending command, older
+        commands are marked as superseded.
 
-    def _apply_execution_policies(self, pending_commands: list[Command]) -> list[Command]:
-        """Apply each command type's policy and return the selected commands."""
+        Args:
+            pending_commands: Commands that have been interpreted and still need work.
+
+        Returns:
+            list[Command]: Commands that should be executed now.
+
+        """
         latest_by_type: dict[CommandType, Command] = {}
         for command in pending_commands:
             if command.has_active_request:
@@ -486,15 +500,18 @@ class RunCommandsJob(TranscribeBundleJob):
 
         selected_commands: list[Command] = []
         for command in pending_commands:
-            # Request submission already committed the policy decision. Always
-            # reconcile that durable request before considering newer commands.
             if command.has_active_request:
+                # This command already has a saved request. Process that request before
+                # considering newer commands of the same type.
                 selected_commands.append(command)
                 continue
+
             matched_type = command.matched_type
             assert matched_type is not None
             latest = latest_by_type.get(matched_type)
             if latest is not None and command.id != latest.id:
+                # A newer command of this type replaces this one before either
+                # command creates an action request.
                 logger.info(
                     f"Skipping superseded {matched_type.value} command: {command.text}",
                 )
@@ -513,16 +530,22 @@ class RunCommandsJob(TranscribeBundleJob):
     ) -> ActionEffects | None:
         """Execute commands according to retry and repetition policies.
 
-        Once-per-bundle types skip later duplicates, while revision-style types
-        may execute again when a new pending command is recorded.
+        Some command types run only once for a bundle, so later duplicates are skipped.
+        For other types, only the newest pending command is run; for example, a newer title replaces an older pending title.
 
         Args:
             pending_commands: Commands that still require execution.
             config: Application configuration passed to command handlers.
             bundle_cache: Loaded bundles indexed by persistent ID.
 
+        Returns:
+            ActionEffects | None: Effects from the first action that changes bundle
+                state, or None if no command changes a bundle.
+
         """
         assert self.bundle.commands
+        # Resolved command types are used to enforce policies such as running
+        # an IGNORE command only once for this bundle.
         seen_executed_types: set[CommandType] = {
             cmd.matched_type for cmd in self.bundle.commands.commands if cmd.is_resolved and cmd.matched_type is not None
         }
@@ -537,17 +560,19 @@ class RunCommandsJob(TranscribeBundleJob):
                 and definition.execution_policy is CommandExecutionPolicy.ONCE_PER_BUNDLE
                 and matched_type in seen_executed_types
             ):
-                logger.info(
-                    f"Skipping duplicate {matched_type.value} command: {cmd.text}",
-                )
+                # This command type has already completed for the bundle, so
+                # this later duplicate has no work left to do.
+                logger.info(f"Skipping duplicate {matched_type.value} command: {cmd.text}")
                 self.bundle.set_command_superseded(cmd.id)
                 continue
 
             logger.info(f"Executing {matched_type.value} command for bundle {self.bundle}")
 
             if matched_type in {CommandType.MERGE, CommandType.DELETE, CommandType.SET_TITLE}:
-                effects = self._execute_action_request(cmd, matched_type, config, bundle_cache)
+                effects = self._process_state_changing_command(cmd, matched_type, config, bundle_cache)
                 if effects is not None and (effects.changed_bundle_ids or effects.removed_bundle_ids):
+                    # A state-changing action can make the remaining queued jobs
+                    # stale. Return its effects so the caller can rebuild them.
                     return effects
                 continue
             if matched_type is CommandType.IGNORE:
@@ -563,29 +588,29 @@ class RunCommandsJob(TranscribeBundleJob):
             raise AssertionError(msg)
         return None
 
-    def _execute_action_request(
+    def _process_state_changing_command(
         self,
         command: Command,
         command_type: CommandType,
         config: TranscribeConfig,
         bundle_cache: BundleCache,
     ) -> ActionEffects | None:
-        """Submit, execute, and acknowledge one state-changing command."""
+        """Carry out a state-changing command through its durable action request."""
         service = self.action_runtime.service
         resolution = command.resolution
         if isinstance(resolution, ActionRequestCommandResolution):
+            # A previous run already recorded this ID in the command file. Reuse
+            # it so a retry can find the same durable request after a crash.
             request_id = resolution.request_id
             request = service.get_request(request_id)
-            if request is not None and (
-                not isinstance(request.origin, CommandActionOrigin) or request.origin.command_id != command.id
-            ):
-                msg = (
-                    f"Command {command.id} references action request {request_id}, "
-                    "but that request belongs to a different command."
-                )
+            if request is not None and (not isinstance(request.origin, CommandActionOrigin) or request.origin.command_id != command.id):
+                msg = f"Command {command.id} references action request {request_id}, but that request belongs to a different command."
                 raise ValueError(msg)
         else:
             request_id = new_action_request_id()
+            # Record the ID before creating the request in DB. The two
+            # stores (db + bundle files) cannot share a transaction, so this lets a retry resume
+            # the same request if the process stops between these writes.
             self.bundle.set_command_resolution(
                 command.id,
                 ActionRequestCommandResolution(request_id=request_id),
@@ -593,19 +618,24 @@ class RunCommandsJob(TranscribeBundleJob):
             request = None
 
         if request is None:
-            action = self._action_from_command(command, command_type)
+            action = self._build_action_from_command(command, command_type)
             origin = CommandActionOrigin(bundle_id=self.bundle.bundle_id, command_id=command.id)
             request = service.submit(action, origin, request_id=request_id)
 
-        processor = self.action_runtime.processor(bundle_cache)
-        result = processor.process(request_id) if request.status == "pending" else self._result_from_request(request)
-        if result is None:
+        processor = self.action_runtime.create_processor(bundle_cache)
+        # Process the pending request now...
+        if request.status == "pending":
+            result = processor.process(request_id)
+            assert result is not None  # never none for pending state
+
             request = service.get_request(request_id)
             assert request is not None
-            result = self._result_from_request(request)
+        else:
+            # unless an earlier run already finished it.
+            # This is unlikely, but can if the request succeeded but the process stopped before updating the command file.
+            # In that case, rebuild its saved result instead of running the action again.
+            result = self._rebuild_finished_result(request)
 
-        request = service.get_request(request_id)
-        assert request is not None
         self._acknowledge_command_result(
             command.id,
             request,
@@ -617,8 +647,10 @@ class RunCommandsJob(TranscribeBundleJob):
         )
         return self._handle_action_result(request.action, result, request_id)
 
-    def _action_from_command(self, command: Command, command_type: CommandType) -> Action:
-        """Translate a validated command into immutable action intent."""
+    def _build_action_from_command(self, command: Command, command_type: CommandType) -> Action:
+        """Build the action described by a validated command."""
+        # Commands always act on their own bundle, except a merge whose target
+        # is selected later from the current bundle order.
         match command_type:
             case CommandType.MERGE:
                 return MergeAction(
@@ -628,6 +660,8 @@ class RunCommandsJob(TranscribeBundleJob):
             case CommandType.DELETE:
                 return DeleteAction(bundle_id=self.bundle.bundle_id)
             case CommandType.SET_TITLE:
+                # Only SET_TITLE commands carry title arguments. Check the
+                # concrete type before using the value stored by interpretation.
                 arguments = command.arguments
                 if not isinstance(arguments, SetTitleCommandArguments):
                     msg = f"SET_TITLE command has invalid arguments: {command.text}"
@@ -643,20 +677,28 @@ class RunCommandsJob(TranscribeBundleJob):
         result: ActionResult,
         request_id: str,
     ) -> ActionEffects | None:
-        """Return scheduler effects or translate a non-successful result."""
+        """Return effects for a successful action; raise or log an unsuccessful result."""
         if isinstance(result, ActionSucceeded):
+            # The caller uses these IDs to remove stale work and rebuild jobs
+            # from the bundles changed by the action.
             return result.effects
         if isinstance(result, ActionBlocked):
             if isinstance(action, MergeAction):
+                # A blocked merge leaves a marker that prevents automatic
+                # repetition until a person has inspected the bundle state.
                 raise MergeBlockedException(result.error.message)
+            # Other blocked actions stop this bundle's remaining jobs without
+            # preventing unrelated bundles from continuing.
             msg = f"Action request {request_id} blocked: {result.error.message}"
             raise AbortRemainingBundleJobsException(msg)
+        # A failed action has already recorded its result in the command file.
+        # Log it here, then allow the remaining bundle jobs to continue.
         logger.error(f"Action request {request_id} failed: {result.error.message}")
         return None
 
     @staticmethod
-    def _result_from_request(request: ActionRequest) -> ActionResult:
-        """Reconstruct a terminal result when acknowledging after a crash window."""
+    def _rebuild_finished_result(request: ActionRequest) -> ActionResult:
+        """Rebuild a finished request result after an interrupted update."""
         match request.status:
             case "succeeded":
                 return ActionSucceeded()
@@ -682,14 +724,13 @@ class RunCommandsJob(TranscribeBundleJob):
         *,
         origin_may_be_removed: bool,
     ) -> None:
-        """Project the terminal database outcome into its command receipt.
+        """Write the finished request result back to the command file.
 
-        The processor has already committed the terminal request to SQLite.
-        SQLite and the YAML command file cannot participate in one transaction,
-        so the receipt is written first and the request is acknowledged second.
-        A stop between those writes leaves an unacknowledged database request
-        that the next run can use to finish this projection without re-executing
-        the action.
+        The action result is already saved in SQLite. SQLite and the command file
+        cannot share one transaction, so write the result to the command file
+        first, then mark the SQLite request as acknowledged. If the process stops
+        in between, the next run finds the saved result and finishes updating the
+        command without running the action again.
         """
         owner = cls._find_command_bundle(command_id, bundle_cache)
         if owner is None:
@@ -713,7 +754,7 @@ class RunCommandsJob(TranscribeBundleJob):
 
     @staticmethod
     def _find_command_bundle(command_id: str, bundle_cache: BundleCache) -> TranscribeBundle | None:
-        """Locate a stable command after an action may have moved its bundle."""
+        """Find the bundle that contains this command."""
         for bundle in bundle_cache.values():
             if bundle.commands and any(command.id == command_id for command in bundle.commands.commands):
                 return bundle

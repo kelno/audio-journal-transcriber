@@ -38,12 +38,12 @@ class ActionRuntime:
             ),
         )
 
-    def processor(self, bundle_cache: BundleCache) -> ActionProcessor:
-        """Bind lifecycle processing to the current loaded bundle state."""
+    def create_processor(self, bundle_cache: BundleCache) -> ActionProcessor:
+        """Create an action processor that works with the current bundle state."""
         return ActionProcessor(self.store, BundleActionExecutor(bundle_cache))
 
     def process_external_requests(self, bundle_cache: BundleCache) -> list[ActionResult]:
-        """Execute pending HTTP requests before deriving this cycle's bundle jobs.
+        """Execute pending HTTP requests.
 
         Command requests are skipped because `RunCommandsJob` must execute them
         and write their result back to the originating bundle.
@@ -51,7 +51,7 @@ class ActionRuntime:
         if self.store.dry_run:
             return []
 
-        processor = self.processor(bundle_cache)
+        processor = self.create_processor(bundle_cache)
         results: list[ActionResult] = []
 
         # Repeating an action interrupted in `running` state may be unsafe.
