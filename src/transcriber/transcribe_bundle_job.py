@@ -17,7 +17,7 @@ from transcriber.actions.action_request import (
     new_action_request_id,
 )
 from transcriber.actions.action_runtime import ActionRuntime
-from transcriber.actions.action_service import ActionService
+from transcriber.actions.action_service import ProcessedActionRequest
 from transcriber.bundle_title import BundleTitleState
 from transcriber.commands.command import Command
 from transcriber.commands.command_execution_policy import CommandExecutionPolicy
@@ -596,6 +596,49 @@ class RunCommandsJob(TranscribeBundleJob):
         bundle_cache: BundleCache,
     ) -> ActionEffects | None:
         """Carry out a state-changing command through its durable action request."""
+        request = self._get_or_create_command_request(command, command_type)
+        if request.status == "pending":
+            processed = self._process_action_request(request, bundle_cache)
+        else:
+            # An earlier run may have finished the request but stopped before
+            # updating the command file. Rebuild its saved result without
+            # running the action again.
+            processed = ProcessedActionRequest(
+                request=request,
+                result=self._rebuild_finished_result(request),
+            )
+
+        self._acknowledge_command_result(
+            command.id,
+            processed.request,
+            processed.result,
+            bundle_cache,
+            config,
+        )
+        return self._handle_action_result(
+            processed.request.action,
+            processed.result,
+            processed.request.request_id,
+        )
+
+    def _get_or_create_command_request(
+        self,
+        command: Command,
+        command_type: CommandType,
+    ) -> ActionRequest:
+        """Return the command's existing request or create it when missing.
+
+        Args:
+            command: State-changing command being processed.
+            command_type: Validated type used to build a new action when needed.
+
+        Returns:
+            ActionRequest: Existing or newly created request for this command.
+
+        Raises:
+            ValueError: If the recorded request belongs to another command.
+
+        """
         service = self.action_runtime.service
         resolution = command.resolution
         if isinstance(resolution, ActionRequestCommandResolution):
@@ -610,6 +653,8 @@ class RunCommandsJob(TranscribeBundleJob):
             elif not isinstance(request.origin, CommandActionOrigin) or request.origin.command_id != command.id:
                 msg = f"Command {command.id} references action request {request_id}, but that request belongs to a different command."
                 raise ValueError(msg)
+            else:
+                return request
         else:
             request_id = new_action_request_id()
             # Record the ID before creating the request in DB. The two
@@ -619,36 +664,30 @@ class RunCommandsJob(TranscribeBundleJob):
                 command.id,
                 ActionRequestCommandResolution(request_id=request_id),
             )
-            request = None
 
-        if request is None:
-            action = self._build_action_from_command(command, command_type)
-            origin = CommandActionOrigin(bundle_id=self.bundle.bundle_id, command_id=command.id)
-            request = service.submit(action, origin, request_id=request_id)
+        action = self._build_action_from_command(command, command_type)
+        origin = CommandActionOrigin(bundle_id=self.bundle.bundle_id, command_id=command.id)
+        return service.submit(action, origin, request_id=request_id)
 
+    def _process_action_request(
+        self,
+        request: ActionRequest,
+        bundle_cache: BundleCache,
+    ) -> ProcessedActionRequest:
+        """Process a pending action request.
+
+        Args:
+            request: Pending request to process.
+            bundle_cache: Bundles currently loaded by the update loop.
+
+        Returns:
+            ProcessedActionRequest: Finished request and its processing result.
+
+        """
         processor = self.action_runtime.create_processor(bundle_cache)
-        # Process the pending request now...
-        if request.status == "pending":
-            processed = processor.process(request_id)
-            assert processed is not None  # never none for pending state
-            request = processed.request
-            result = processed.result
-        else:
-            # ... unless an earlier run already finished it.
-            # This is unlikely, but can if the request succeeded but the process stopped before updating the command file.
-            # In that case, rebuild its saved result instead of running the action again.
-            result = self._rebuild_finished_result(request)
-
-        self._acknowledge_command_result(
-            command.id,
-            request,
-            result,
-            service,
-            bundle_cache,
-            config,
-            origin_may_be_removed=isinstance(request.action, DeleteAction) and isinstance(result, ActionSucceeded),
-        )
-        return self._handle_action_result(request.action, result, request_id)
+        processed = processor.process(request.request_id)
+        assert processed is not None  # A request loaded as pending must be processed.
+        return processed
 
     def _build_action_from_command(self, command: Command, command_type: CommandType) -> Action:
         """Build the action described by a validated command."""
@@ -715,17 +754,13 @@ class RunCommandsJob(TranscribeBundleJob):
                 msg = f"Action request {request.request_id} is not terminal: {request.status}"
                 raise ValueError(msg)
 
-    @classmethod
     def _acknowledge_command_result(
-        cls,
+        self,
         command_id: str,
         request: ActionRequest,
         result: ActionResult,
-        service: ActionService,
         bundle_cache: BundleCache,
         config: TranscribeConfig,
-        *,
-        origin_may_be_removed: bool,
     ) -> None:
         """Write the finished request result back to the command file.
 
@@ -739,16 +774,14 @@ class RunCommandsJob(TranscribeBundleJob):
             command_id: ID of the command that started the action request.
             request: Finished request saved in the DB.
             result: Result to write into the command file.
-            service: Service used to acknowledge the saved request.
             bundle_cache: Bundles currently loaded by the update loop.
             config: Configuration used for the fallback resolution timestamp.
-            origin_may_be_removed: Whether the action may have removed the command
-                file before its result can be written there.
 
         """
-        owner = cls._find_command_bundle(command_id, bundle_cache)
+        service = self.action_runtime.service
+        owner = self._find_command_bundle(command_id, bundle_cache)
         if owner is None:
-            if origin_may_be_removed:
+            if isinstance(request.action, DeleteAction) and isinstance(result, ActionSucceeded):
                 # Successful deletion removes the command file itself, leaving
                 # no separate origin receipt to persist before acknowledgement.
                 service.acknowledge(request.request_id)
