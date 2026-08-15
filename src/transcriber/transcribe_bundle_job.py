@@ -603,7 +603,11 @@ class RunCommandsJob(TranscribeBundleJob):
             # it so a retry can find the same durable request after a crash.
             request_id = resolution.request_id
             request = service.get_request(request_id)
-            if request is not None and (not isinstance(request.origin, CommandActionOrigin) or request.origin.command_id != command.id):
+            if request is None:
+                logger.warning(
+                    f"Command {command.id} references action request {request_id}, but it was not found in the DB; creating it again.",
+                )
+            elif not isinstance(request.origin, CommandActionOrigin) or request.origin.command_id != command.id:
                 msg = f"Command {command.id} references action request {request_id}, but that request belongs to a different command."
                 raise ValueError(msg)
         else:
@@ -630,7 +634,7 @@ class RunCommandsJob(TranscribeBundleJob):
             request = processed.request
             result = processed.result
         else:
-            # unless an earlier run already finished it.
+            # ... unless an earlier run already finished it.
             # This is unlikely, but can if the request succeeded but the process stopped before updating the command file.
             # In that case, rebuild its saved result instead of running the action again.
             result = self._rebuild_finished_result(request)
@@ -725,11 +729,22 @@ class RunCommandsJob(TranscribeBundleJob):
     ) -> None:
         """Write the finished request result back to the command file.
 
-        The action result is already saved in SQLite. SQLite and the command file
+        The action result is already saved in the DB. The DB and command file
         cannot share one transaction, so write the result to the command file
-        first, then mark the SQLite request as acknowledged. If the process stops
-        in between, the next run finds the saved result and finishes updating the
-        command without running the action again.
+        first, then mark the DB request as acknowledged. If the process stops
+        between those writes, the request remains unacknowledged so a later run
+        can safely retry this step.
+
+        Args:
+            command_id: ID of the command that started the action request.
+            request: Finished request saved in the DB.
+            result: Result to write into the command file.
+            service: Service used to acknowledge the saved request.
+            bundle_cache: Bundles currently loaded by the update loop.
+            config: Configuration used for the fallback resolution timestamp.
+            origin_may_be_removed: Whether the action may have removed the command
+                file before its result can be written there.
+
         """
         owner = cls._find_command_bundle(command_id, bundle_cache)
         if owner is None:
