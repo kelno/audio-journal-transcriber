@@ -625,11 +625,10 @@ class RunCommandsJob(TranscribeBundleJob):
         processor = self.action_runtime.create_processor(bundle_cache)
         # Process the pending request now...
         if request.status == "pending":
-            result = processor.process(request_id)
-            assert result is not None  # never none for pending state
-
-            request = service.get_request(request_id)
-            assert request is not None
+            processed = processor.process(request_id)
+            assert processed is not None  # never none for pending state
+            request = processed.request
+            result = processed.result
         else:
             # unless an earlier run already finished it.
             # This is unlikely, but can if the request succeeded but the process stopped before updating the command file.

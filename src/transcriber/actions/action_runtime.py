@@ -56,15 +56,15 @@ class ActionRuntime:
 
         # Repeating an action interrupted in `running` state may be unsafe.
         if interrupted := processor.block_interrupted_request():
-            results.append(interrupted)
+            results.append(interrupted.result)
 
         for request in self.store.list_pending():
             # Command requests must return through RunCommandsJob so their
             # terminal result is also written to the bundle's command file.
             if isinstance(request.origin, CommandActionOrigin):
                 continue
-            if result := processor.process(request.request_id):
-                results.append(result)
+            if processed := processor.process(request.request_id):
+                results.append(processed.result)
 
         self.service.prune_expired()
         return results

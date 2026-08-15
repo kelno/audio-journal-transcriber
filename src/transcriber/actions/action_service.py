@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Final, Protocol
 
@@ -60,6 +61,16 @@ class ActionExecutor(Protocol):
     def execute(self, action: Action, /) -> ActionResult:
         """Execute an action synchronously without managing request lifecycle."""
         ...
+
+
+@dataclass(frozen=True)
+class ProcessedActionRequest:
+    """A finished saved request and its temporary processing result."""
+
+    # Request after its finished status has been saved in SQLite.
+    request: ActionRequest
+    # Result returned to the current processing loop, including temporary effects.
+    result: ActionResult
 
 
 class ActionService:
@@ -156,8 +167,20 @@ class ActionProcessor:
         self._executor: ActionExecutor = executor
         self._clock: UtcClock = clock
 
-    def process(self, request_id: ActionRequestId) -> ActionResult | None:
-        """Execute a pending request once; return ``None`` for other states."""
+    def process(self, request_id: ActionRequestId) -> ProcessedActionRequest | None:
+        """Execute a pending request once and return its saved request and result.
+
+        Args:
+            request_id: ID of the request to execute.
+
+        Returns:
+            ProcessedActionRequest | None: The saved finished request and its
+                temporary result, or None when the request is not pending.
+
+        Raises:
+            ActionRequestNotFoundError: If no request has this ID.
+
+        """
         request = self._store.get(request_id)
         if request is None:
             msg = f"Action request not found: {request_id}"
@@ -188,8 +211,14 @@ class ActionProcessor:
 
         return self._finish(running, result)
 
-    def block_interrupted_request(self) -> ActionResult | None:
-        """Safely terminate work left running by an earlier daemon process."""
+    def block_interrupted_request(self) -> ProcessedActionRequest | None:
+        """Safely finish work left running by an earlier daemon process.
+
+        Returns:
+            ProcessedActionRequest | None: The saved blocked request and its
+                result, or None when no request was left running.
+
+        """
         running = self._store.get_running()
         if running is None:
             return None
@@ -201,8 +230,17 @@ class ActionProcessor:
         )
         return self._finish(running, result)
 
-    def _finish(self, running: ActionRequest, result: ActionResult) -> ActionResult:
-        """Persist one executor or recovery result as a terminal request."""
+    def _finish(self, running: ActionRequest, result: ActionResult) -> ProcessedActionRequest:
+        """Save one finished request and return it with its processing result.
+
+        Args:
+            running: Saved request state immediately before finishing.
+            result: Result returned by the action executor or restart handling.
+
+        Returns:
+            ProcessedActionRequest: The saved finished request and temporary result.
+
+        """
         finished_at = _read_utc_clock(self._clock)
         terminal = running.model_copy(deep=True)
         terminal.status = result.status
@@ -215,4 +253,4 @@ class ActionProcessor:
         # Effects remain temporary instructions for the current processing loop.
         # Persist them here only if request status or the API should expose affected bundles later.
         self._store.update(terminal)
-        return result
+        return ProcessedActionRequest(request=terminal, result=result)

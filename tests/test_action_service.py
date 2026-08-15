@@ -180,12 +180,14 @@ class TestActionProcessor:
         processor = ActionProcessor(store, executor, clock=clock)
         request_id = service.submit(_delete_action(), HttpActionOrigin()).request_id
 
-        actual_result = processor.process(request_id)
+        processed = processor.process(request_id)
 
-        assert actual_result == result
+        assert processed is not None
+        assert processed.result == result
         assert executor.actions == [_delete_action()]
         request = service.get_request(request_id)
         assert request is not None
+        assert processed.request == request
         assert request.status == "succeeded"
         assert request.attempt_count == 1
         assert request.started_at == INITIAL_TIME
@@ -212,7 +214,10 @@ class TestActionProcessor:
         processor = ActionProcessor(store, FakeActionExecutor(result), clock=FakeClock())
         request_id = service.submit(_delete_action(), HttpActionOrigin()).request_id
 
-        assert processor.process(request_id) == result
+        processed = processor.process(request_id)
+
+        assert processed is not None
+        assert processed.result == result
 
         request = service.get_request(request_id)
         assert request is not None
@@ -276,16 +281,17 @@ class TestActionProcessor:
         request_id = service.submit(_delete_action(), HttpActionOrigin()).request_id
 
         with caplog.at_level(logging.ERROR):
-            result = processor.process(request_id)
+            processed = processor.process(request_id)
 
-        assert isinstance(result, ActionBlocked)
-        assert result.error.code == UNEXPECTED_ACTION_ERROR_CODE
-        assert "internal diagnostic detail" not in result.error.message
+        assert processed is not None
+        assert isinstance(processed.result, ActionBlocked)
+        assert processed.result.error.code == UNEXPECTED_ACTION_ERROR_CODE
+        assert "internal diagnostic detail" not in processed.result.error.message
         assert "internal diagnostic detail" in caplog.text
         request = service.get_request(request_id)
         assert request is not None
         assert request.status == "blocked"
-        assert request.error == result.error
+        assert request.error == processed.result.error
 
     def test_startup_blocks_interrupted_request_without_executing_again(self, tmp_path: Path) -> None:
         """Restart handling terminates the old attempt without action-specific recovery."""
@@ -296,10 +302,11 @@ class TestActionProcessor:
         executor = FakeActionExecutor()
         processor = ActionProcessor(store, executor, clock=clock)
 
-        result = processor.block_interrupted_request()
+        processed = processor.block_interrupted_request()
 
-        assert isinstance(result, ActionBlocked)
-        assert result.error.code == INTERRUPTED_ACTION_ERROR_CODE
+        assert processed is not None
+        assert isinstance(processed.result, ActionBlocked)
+        assert processed.result.error.code == INTERRUPTED_ACTION_ERROR_CODE
         assert executor.actions == []
         blocked = store.get(running.request_id)
         assert blocked is not None
