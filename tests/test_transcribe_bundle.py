@@ -929,6 +929,34 @@ class TestGatherExistingBundles:
         assert len(bundles) == 1
         assert next(iter(bundles.values())).bundle_name == generic_bundle.bundle_name
 
+    def test_gather_existing_bundles_removes_empty_directory_with_warning(
+        self,
+        fake_config: TranscribeConfig,
+        fake_fs: FakeFileSystemService,
+        fake_audio_service: FakeAudioService,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """Empty store directories are removed instead of logged as invalid bundles."""
+        empty_directory = fake_config.general.store_dir / "2025-01-15_empty"
+        fake_fs.create_directory(empty_directory)
+
+        with caplog.at_level("WARNING", logger="transcriber"):
+            bundles = TranscribeBundle.gather_existing_bundles(
+                store_dir=fake_config.general.store_dir,
+                dry_run=False,
+                cleanup_bundle=True,
+                config=fake_config,
+                fs_service=fake_fs,
+                audio_service=fake_audio_service,
+            )
+
+        assert bundles == {}
+        assert ("rmdir", empty_directory) in fake_fs.operations
+        assert any(
+            record.levelname == "WARNING" and "Removing empty directory" in record.message
+            for record in caplog.records
+        )
+
     def test_gather_existing_bundles_rejects_duplicate_ids(
         self,
         fake_config: TranscribeConfig,

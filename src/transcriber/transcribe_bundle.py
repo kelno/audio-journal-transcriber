@@ -590,6 +590,10 @@ class TranscribeBundle:
             if dir_path.name.startswith("_") or dir_path.name.startswith("."):
                 continue
             if fs_service.directory_exists(dir_path):
+                if not fs_service.list_directory(dir_path):
+                    logger.warning(f"Removing empty directory from managed store: {dir_path}")
+                    fs_service.delete_directory(dir_path)
+                    continue
                 try:
                     bundle = TranscribeBundle.from_existing_directory(
                         dir_path,
