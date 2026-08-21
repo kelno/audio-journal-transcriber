@@ -4,13 +4,14 @@ This one-time migration converts former ``executed: true`` state into an
 explicit terminal ``migrated`` resolution, assigns stable IDs to older commands
 that lack one, and removes obsolete execution and retry fields.
 
-The migration scans and validates every active and safely deleted bundle before
-writing anything. It is a dry run by default; pass ``--apply`` after reviewing
-the report. Run the dry run again after applying to confirm that it reports zero
-files to rewrite.
+The migration scans and validates every active bundle before writing anything.
+It ignores underscore-prefixed store directories such as ``_deleted`` and
+``_migration_backups``. It is a dry run by default; pass ``--apply`` after
+reviewing the report. Run the dry run again after applying to confirm that it
+reports zero files to rewrite.
 
 Changed command files are copied below
-``<store>/_migration_backups/action-request-commands-v1`` before replacement.
+``<store>/_migration_backups/action-request-commands-v2`` before replacement.
 The transcriber must be stopped while applying the migration.
 
 Usage:
@@ -37,7 +38,7 @@ from transcriber.config import TranscribeConfig
 from transcriber.constants import COMMANDS_FILENAME
 from transcriber.files.commands_file import CommandsFile
 
-BACKUP_DIRECTORY: Final = Path("_migration_backups") / "action-request-commands-v1"
+BACKUP_DIRECTORY: Final = Path("_migration_backups") / "action-request-commands-v2"
 
 _CANONICAL_FIELDS: Final = frozenset(
     {
@@ -176,17 +177,36 @@ def _migrate_command(
         isinstance(resolution, dict)
         and resolution.get("type") == "legacy_executed"
     )
+    # A previous migration attempt could record ``migrated`` as an action
+    # request outcome. It has no request receipt, so rewrite it as its own
+    # terminal resolution and deliberately discard the stale request ID.
+    migrated_action_request_resolution = (
+        isinstance(resolution, dict)
+        and resolution.get("type") == "action_request"
+        and resolution.get("outcome") == "migrated"
+    )
     migrated_resolution = executed is True and resolution is None
+    migrated_resolution_count = 0
     if legacy_typed_resolution:
+        assert isinstance(resolution, dict)
         canonical["resolution"] = {
             **resolution,
             "type": "migrated",
         }
+        migrated_resolution_count = 1
+    elif migrated_action_request_resolution:
+        assert isinstance(resolution, dict)
+        canonical["resolution"] = {
+            "type": "migrated",
+            "resolved_at": resolution.get("resolved_at"),
+        }
+        migrated_resolution_count = 1
     elif migrated_resolution:
         canonical["resolution"] = {
             "type": "migrated",
             "resolved_at": raw.get("executed_at"),
         }
+        migrated_resolution_count = 1
     elif executed in {False, _MISSING} and raw.get("executed_at") is not None:
         msg = f"Command {index} in {command_file} has executed_at without completed execution"
         raise ValueError(msg)
@@ -203,26 +223,20 @@ def _migrate_command(
 
     return command, CommandMigrationCounts(
         command_count=1,
-        migrated_resolutions=int(migrated_resolution or legacy_typed_resolution),
+        migrated_resolutions=migrated_resolution_count,
         generated_ids=int(generated_id),
         removed_legacy_fields=sum(field in raw for field in _LEGACY_FIELDS),
     )
 
 
 def _command_file_paths(store_dir: Path) -> list[Path]:
-    """Return command files from active and recoverable deleted bundles."""
-    active_files = [
+    """Return command files from active bundles, ignoring internal directories."""
+    return [
         command_file
         for bundle_dir in sorted(store_dir.iterdir(), key=lambda path: path.name.casefold())
         if bundle_dir.is_dir() and not bundle_dir.name.startswith(("_", "."))
         if (command_file := bundle_dir / COMMANDS_FILENAME).is_file()
     ]
-    deleted_dir = store_dir / "_deleted"
-    deleted_files = list(deleted_dir.rglob(COMMANDS_FILENAME)) if deleted_dir.is_dir() else []
-    return sorted(
-        [*active_files, *deleted_files],
-        key=lambda path: path.relative_to(store_dir).as_posix().casefold(),
-    )
 
 
 def plan_command_store_migration(store_dir: Path) -> CommandStoreMigrationPlan:
@@ -232,7 +246,7 @@ def plan_command_store_migration(store_dir: Path) -> CommandStoreMigrationPlan:
         raise FileNotFoundError(msg)
 
     planned_files: list[PlannedCommandFileMigration] = []
-    active_command_locations: dict[str, Path] = {}
+    command_locations: dict[str, Path] = {}
     for command_file in _command_file_paths(store_dir):
         original_text = command_file.read_text(encoding="utf-8")
         raw_commands = _load_legacy_commands(command_file, original_text)
@@ -250,13 +264,10 @@ def plan_command_store_migration(store_dir: Path) -> CommandStoreMigrationPlan:
                 raise ValueError(msg)
             file_command_ids.add(command.id)
 
-            relative_path = command_file.relative_to(store_dir)
-            is_active_bundle = relative_path.parts[0] != "_deleted"
-            if is_active_bundle and (previous_file := active_command_locations.get(command.id)):
+            if previous_file := command_locations.get(command.id):
                 msg = f"Duplicate command ID {command.id} in {previous_file} and {command_file}"
                 raise ValueError(msg)
-            if is_active_bundle:
-                active_command_locations[command.id] = command_file
+            command_locations[command.id] = command_file
             commands.append(command)
             counts += command_counts
 
