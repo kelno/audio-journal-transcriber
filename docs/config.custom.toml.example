@@ -16,6 +16,14 @@ timezone = "Europe/Brussels"
 # Move deleted bundles under <store_dir>/_deleted where supported.
 safe_delete = true
 
+[http]
+# Expose the local action-request API in the default continuous mode.
+enabled = true
+# Listening host.
+host = "127.0.0.1"
+# Listening TCP port
+port = 8765
+
 [text]
 # Generate structured summaries and automatic directory titles.
 summary_enabled = true

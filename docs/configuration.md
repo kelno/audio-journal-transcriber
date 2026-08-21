@@ -52,6 +52,18 @@ The text connection values are currently required by the configuration model eve
 | `model`        | Required         | Model sent to the transcription endpoint.            |
 | `stream`       | Required         | Ask the service for streaming transcription output.  |
 
+## HTTP settings
+
+| Setting   | Packaged default | Description                                                                                  |
+| --------- | ---------------- | -------------------------------------------------------------------------------------------- |
+| `enabled` | `true`           | Expose the action-request API during the default continuous mode.                            |
+| `host`    | `127.0.0.1`      | Listening interface. The container image overrides this with `0.0.0.0`.                       |
+| `port`    | `8765`           | Listening TCP port.                                                                          |
+
+The HTTP API accepts durable actions and reports their status; it does not execute bundle
+mutations in the HTTP server thread. See [HTTP action requests](http-api.md) for its endpoints
+and payloads.
+
 ## Environment variables
 
 Environment-variable names use `__` between nested sections and keys:
@@ -60,6 +72,9 @@ Environment-variable names use `__` between nested sections and keys:
 TRANSCRIBER_GENERAL__INPUT_DIR=/path/to/audio-inbox
 TRANSCRIBER_GENERAL__STORE_DIR=/path/to/audio-journal
 TRANSCRIBER_GENERAL__DELETE_SOURCE_AUDIO_AFTER_DAYS=30
+TRANSCRIBER_HTTP__ENABLED=true
+TRANSCRIBER_HTTP__HOST=127.0.0.1
+TRANSCRIBER_HTTP__PORT=8765
 TRANSCRIBER_TEXT__SUMMARY_ENABLED=true
 TRANSCRIBER_TEXT__API_BASE_URL=https://your-chat-service.example/v1
 TRANSCRIBER_TEXT__API_KEY=replace-me

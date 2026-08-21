@@ -18,15 +18,15 @@ from transcriber.exception import (
 from transcriber.logger import logger
 
 
-def _unwrap_json_code_fence(response: str) -> str:
-    """Remove one optional Markdown JSON fence from a model response."""
+def _unwrap_code_fence(response: str, language: str) -> str:
+    """Remove one optional Markdown fence for the expected response language."""
     stripped_response = response.strip()
     lines = stripped_response.splitlines()
     if len(lines) < 3 or lines[-1].strip() != "```":
         return stripped_response
 
     opening_fence = lines[0].strip().lower()
-    if opening_fence not in {"```", "```json"}:
+    if opening_fence not in {"```", f"```{language.lower()}"}:
         return stripped_response
 
     return "\n".join(lines[1:-1]).strip()
@@ -204,7 +204,8 @@ class RealAIManager(AIManager):
             Transcript:
             {transcript}
         """
-        summary = self.query_chat_completion(prompt)
+        raw_summary = self.query_chat_completion(prompt)
+        summary = _unwrap_code_fence(raw_summary, "markdown")
         logger.debug(f"get_ai_summary succeeded. Excerpt: {summary[:160]} [...]]")
         return summary
 
@@ -284,7 +285,7 @@ class RealAIManager(AIManager):
   **API-like Response:**"""
 
         raw_response = self.query_chat_completion(prompt)
-        response = _unwrap_json_code_fence(raw_response)
+        response = _unwrap_code_fence(raw_response, "json")
         logger.debug(f"interpret_command answered {raw_response}")
         try:
             response_data: object = json.loads(response)

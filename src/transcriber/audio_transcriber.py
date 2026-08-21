@@ -1,10 +1,10 @@
 from dataclasses import dataclass
 from pathlib import Path
 
+from transcriber.actions.action_request import ActionEffects
+from transcriber.actions.action_runtime import ActionRuntime
 from transcriber.ai_manager import AIManager
 from transcriber.audio_service import AudioService, RealAudioService
-from transcriber.commands.command_handlers import AbortForMergeTargetException
-from transcriber.commands.command_registry import COMMAND_REGISTRY
 from transcriber.config import TranscribeConfig
 from transcriber.exception import (
     AbortRemainingBundleJobsException,
@@ -53,28 +53,28 @@ class AudioTranscriber:
     """Main class for transcribing audio files."""
 
     dry_run: bool
-    only_one_bundle: bool
     ai_manager: AIManager
     config: TranscribeConfig
     fs_service: FileSystemService
     audio_service: AudioService
+    action_runtime: ActionRuntime
 
     def __init__(
         self,
         dry_run: bool,
         ai_manager: AIManager,
         config: TranscribeConfig,
-        only_one_bundle: bool = False,
         fs_service: FileSystemService | None = None,
         audio_service: AudioService | None = None,
+        action_runtime: ActionRuntime | None = None,
     ) -> None:
         """Initialize the audio transcriber."""
         self.dry_run = dry_run
-        self.only_one_bundle = only_one_bundle
         self.ai_manager = ai_manager
         self.config = config
         self.fs_service = fs_service or RealFileSystemService(config)
         self.audio_service = audio_service or RealAudioService()
+        self.action_runtime = action_runtime or ActionRuntime.from_config(config, dry_run=dry_run)
 
     def __post_init__(self) -> None:
         """Initialize the audio transcriber."""
@@ -84,13 +84,12 @@ class AudioTranscriber:
             f"{type(self).__name__} initialized with\nGeneral configuration: {self.config.general}",
         )
 
-    def _handle_process_jobs_exception(self, job: TranscribeBundleJob, e: Exception, queue: BundleJobQueue) -> bool:
-        """Handle a job exception and update the ID-keyed work queue.
+    def _handle_process_jobs_exception(self, job: TranscribeBundleJob, e: Exception) -> bool:
+        """Classify a job exception for logging and error reporting.
 
         Args:
             job: Job whose execution raised the exception.
             e: Exception raised by the job.
-            queue: Remaining jobs indexed by persistent bundle ID.
 
         Returns:
             Whether the exception represents an error for reporting purposes.
@@ -109,31 +108,6 @@ class AudioTranscriber:
                 f"Skipping remaining jobs for current bundle, requested by job {job}: {e}",
             )
             return False
-        elif isinstance(e, AbortForMergeTargetException):
-            logger.debug(f"Merge finished, re-processing target bundle: {e.bundle.bundle_name}")
-            # Drop the target's still-queued (stale) jobs.
-            # Re-gather fresh jobs from the merged target
-            existing = queue.pop(e.bundle.bundle_id, None)
-            requeue_count = (existing.requeue_count + 1) if existing is not None else 1
-            target_name = e.bundle.bundle_name
-            if requeue_count > MAX_REQUEUE_PER_BUNDLE:
-                logger.error(
-                    f"Bundle {target_name} re-queued too many times; stopping to avoid a loop.",
-                )
-                # Then we're done, at this point we've already removed any remaining jobs for the target
-                return True
-
-            # Recompute remaining jobs for target
-            queue[e.bundle.bundle_id] = BundleJobQueueEntry(
-                jobs=self.gather_bundle_jobs(
-                    e.bundle,
-                    self.config.general.store_dir,
-                    self.dry_run,
-                    config=self.config,
-                ),
-                requeue_count=requeue_count,
-            )
-            return False
         elif isinstance(e, MergeBlockedException):
             # A previous merge into the target failed and left a marker. Stop
             # processing this bundle and do NOT re-enqueue it, so the failed
@@ -144,6 +118,100 @@ class AudioTranscriber:
         else:
             logger.exception(f"Error processing {job} (skipping any remaining jobs for this bundle).")
             return True
+
+    def _apply_action_effects(
+        self,
+        effects: ActionEffects,
+        queue: BundleJobQueue,
+        bundle_cache: BundleCache,
+        current_bundle_id: str,
+        current_entry: BundleJobQueueEntry,
+    ) -> bool:
+        """Invalidate affected queue entries and derive fresh work for changed bundles."""
+        # Removed bundles cannot produce any more work. Drop their queues before
+        # considering changed bundles because an effect may defensively mention
+        # the same ID in both collections.
+        for removed_bundle_id in effects.removed_bundle_ids:
+            queue.pop(removed_bundle_id, None)
+
+        had_error = False
+        removed_ids = set(effects.removed_bundle_ids)
+        for changed_bundle_id in effects.changed_bundle_ids:
+            if changed_bundle_id in removed_ids:
+                continue
+
+            # The bundle cache is the authoritative in-memory view after the
+            # executor's mutation. A changed ID missing here means the effect and
+            # the actual mutation disagree, so silently reusing old work is unsafe.
+            bundle = bundle_cache.get(changed_bundle_id)
+            if bundle is None:
+                logger.error(f"Action reported changed bundle {changed_bundle_id}, but it is absent from the bundle cache.")
+                had_error = True
+                continue
+
+            # Any jobs planned before the action observed stale bundle state.
+            # Remove them and remember their requeue count before deriving a
+            # replacement pipeline from the mutated bundle.
+            existing = queue.pop(changed_bundle_id, None)
+            previous_requeues = existing.requeue_count if existing is not None else 0
+
+            # The current entry may already have been removed after its last job,
+            # so its counter is not necessarily available through `queue` above.
+            if changed_bundle_id == current_bundle_id:
+                previous_requeues = max(previous_requeues, current_entry.requeue_count)
+
+            # Effects should eventually converge to a bundle with no stale work.
+            # This guard turns an accidental mutation/re-derivation cycle into a
+            # visible error instead of allowing an infinite update loop.
+            requeue_count = previous_requeues + 1
+            if requeue_count > MAX_REQUEUE_PER_BUNDLE:
+                logger.error(
+                    f"Bundle {bundle.bundle_name} re-queued too many times; stopping to avoid a loop.",
+                )
+                had_error = True
+                continue
+
+            # Re-derive all job types rather than attempting to patch an existing
+            # list. Bundle state remains the single source of truth for needed work.
+            fresh_jobs = self.gather_bundle_jobs(
+                bundle,
+                self.config.general.store_dir,
+                self.dry_run,
+                config=self.config,
+            )
+            if fresh_jobs:
+                queue[changed_bundle_id] = BundleJobQueueEntry(
+                    jobs=fresh_jobs,
+                    requeue_count=requeue_count,
+                )
+        return had_error
+
+    @staticmethod
+    def _select_oldest_ready_bundle(queue: BundleJobQueue) -> str | None:
+        """Select the oldest bundle whose next job satisfies global readiness."""
+        # Command work anywhere in the queue may still create a merge, delete, or
+        # title action. Globally postponing summary and naming work avoids doing
+        # expensive post-processing immediately before such an action invalidates it.
+        has_command_work = any(
+            isinstance(queued_job, (GatherCommandsJob, RunCommandsJob)) for entry in queue.values() for queued_job in entry.jobs
+        )
+
+        # Jobs within one bundle are already dependency ordered, so only its head
+        # can be considered. A later job must never bypass an unready earlier one.
+        ready_ids = [
+            bundle_id
+            for bundle_id, entry in queue.items()
+            if entry.jobs and not (has_command_work and isinstance(entry.jobs[0], (SummaryJob, BundleNameJob)))
+        ]
+        if not ready_ids:
+            return None
+
+        # Derived jobs have no enqueue timestamp of their own. Recording date is
+        # therefore the closest durable age key; or if those are also identical, bundle ID is used to makes ties deterministic.
+        return min(
+            ready_ids,
+            key=lambda bundle_id: (queue[bundle_id].jobs[0].bundle.get_bundle_date(), bundle_id),
+        )
 
     def process_jobs(self, all_jobs_bundles: list[BundleJobs], bundle_cache: BundleCache) -> list[BundleJobs]:
         """Process audio files from the pending directory.
@@ -156,34 +224,65 @@ class AudioTranscriber:
             list[BundleJobs]: Remaining unprocessed bundle jobs.
 
         """
-        # Stable IDs keep queue entries addressable while bundle names change.
+        # Step 1: turn the gathered per-bundle job lists into an ID-keyed queue.
         queue: BundleJobQueue = {
             jobs_bundle[0].bundle.bundle_id: BundleJobQueueEntry(jobs=jobs_bundle) for jobs_bundle in all_jobs_bundles if jobs_bundle
         }
 
         errored_bundles = list[BundleJobs]()
         while queue:
-            # Process one bundle at a time; popitem() yields an arbitrary bundle.
-            _bundle_id, entry = queue.popitem()
-            jobs_bundle = entry.jobs
-            if not jobs_bundle:
-                continue
-            remaining_jobs_in_bundle = jobs_bundle.copy()
-            for job in jobs_bundle:
-                try:
-                    logger.debug(f"Processing job: {job}")
-                    job.run(
-                        ai_manager=self.ai_manager,
-                        config=self.config,
-                        bundle_cache=bundle_cache,
+            # Step 2: choose one ready bundle. Repeating selection after every job
+            # lets newly produced effects change what is safe to execute next.
+            bundle_id = self._select_oldest_ready_bundle(queue)
+            if bundle_id is None:
+                # A non-empty queue with no ready head violates the processing loop assumptions.
+                logger.error("No queued bundle job is ready; stopping to avoid a scheduler loop.")
+                errored_bundles.extend(entry.jobs for entry in queue.values() if entry.jobs)
+                break
+
+            entry = queue[bundle_id]
+            # Step 3: run the first job in the bundle's queue. Other jobs already in
+            # that queue may depend on its output; for example, a summary needs a transcript.
+            job = entry.jobs[0]
+            try:
+                logger.debug(f"Processing job: {job}")
+                effects = job.run(
+                    ai_manager=self.ai_manager,
+                    config=self.config,
+                    bundle_cache=bundle_cache,
+                )
+
+                # Step 4: consume the completed job before applying effects.
+                entry.jobs.pop(0)
+                if not entry.jobs:
+                    queue.pop(bundle_id)
+
+                # Most jobs only advance their own pipeline. Action jobs can also
+                # mutate or remove current or other bundles; their effects identify which
+                # queued pipelines must be discarded and derived again.
+                if effects is not None and (effects.changed_bundle_ids or effects.removed_bundle_ids):
+                    errored = self._apply_action_effects(
+                        effects,
+                        queue,
+                        bundle_cache,
+                        bundle_id,
+                        entry,
                     )
-                    # Remove job from jobs bundle on successful execution
-                    remaining_jobs_in_bundle.remove(job)
-                except Exception as e:  # pylint: disable=broad-exception-caught
-                    errored = self._handle_process_jobs_exception(job, e, queue)
-                    if errored and len(remaining_jobs_in_bundle) > 0:
-                        errored_bundles.append(remaining_jobs_in_bundle)
-                    break  # skip remaining jobs in this bundle
+                    if errored and entry.jobs:
+                        errored_bundles.append(entry.jobs)
+
+                # Log completion
+                if bundle_id not in queue:  # action effects might requeue the current bundle
+                    logger.info(
+                        f"Finished processing bundle [{job.bundle.bundle_name}]; bundles still with work in this run: {len(queue)}",
+                    )
+            except Exception as e:  # pylint: disable=broad-exception-caught
+                # Step 5: if one bundle fails, continue with the others. Handle the error,
+                # remove that bundle from this run, and keep unfinished jobs for a later retry.
+                errored = self._handle_process_jobs_exception(job, e)
+                queue.pop(bundle_id, None)
+                if errored and entry.jobs:
+                    errored_bundles.append(entry.jobs)
 
         return errored_bundles
 
@@ -263,8 +362,7 @@ class AudioTranscriber:
         """Generate the job queue for processing all bundles.
 
         Creates a list of BundleJobs, one per bundle, containing all the
-        tasks needed to complete transcription for each bundle. When
-        only_one_bundle mode is enabled, returns only the first bundle's jobs.
+        tasks needed to complete transcription for each bundle.
 
         Args:
             bundle_cache: Bundles indexed by persistent ID to generate jobs for.
@@ -275,7 +373,9 @@ class AudioTranscriber:
         """
         logger.debug(f"Gathering jobs from {len(bundle_cache)} bundles")
 
-        # one BundleJobs per bundle
+        # Each bundle gets an internally ordered pipeline. Inter-bundle ordering
+        # is deliberately deferred to `process_jobs`, where global readiness and
+        # action effects can be considered after every completed job.
         jobs: list[BundleJobs] = [
             bundle_jobs
             for bundle in bundle_cache.values()
@@ -288,9 +388,6 @@ class AudioTranscriber:
                 )
             )
         ]
-        if self.only_one_bundle:
-            jobs = jobs[:1]
-
         return jobs
 
     # Moved here to avoid circular imports
@@ -304,6 +401,9 @@ class AudioTranscriber:
         """Gather transcription jobs from this bundle. Jobs needs to be run in order."""
         logger.debug(f"Gathering jobs for bundle: {bundle}")
 
+        # These phases define the dependency order within one bundle. Command
+        # actions must be known before post-processing because they may invalidate
+        # the bundle or change the content that should be summarized and named.
         jobs: list[TranscribeBundleJob] = []
         jobs.extend(self._gather_lifecycle_jobs(bundle, store_dir, dry_run))
         jobs.extend(self._gather_command_jobs(bundle, dry_run))
@@ -338,19 +438,24 @@ class AudioTranscriber:
         dry_run: bool,
     ) -> list[TranscribeBundleJob]:
         """Gather command extraction and execution jobs."""
+        # A deleted/empty bundle with no saved commands has no command source and
+        # no outstanding command receipt to reconcile.
         if not bundle.source_audios and not bundle.commands:
             return []
 
+        # The first visit extracts command text, then interprets/submits it in a
+        # separate job. Keeping both jobs explicit makes their ordering visible to
+        # the global summary-readiness rule.
         if not bundle.commands:
             return [
                 GatherCommandsJob(bundle, dry_run),
-                RunCommandsJob(bundle, dry_run),
+                RunCommandsJob(bundle, dry_run, self.action_runtime),
             ]
 
-        if bundle.commands.has_commands_needing_processing(
-            max_attempts_for=lambda cmd_type: COMMAND_REGISTRY[cmd_type].max_attempts,
-        ):
-            return [RunCommandsJob(bundle, dry_run)]
+        # Existing command state may contain an uninterpreted command, a request
+        # awaiting execution, or a finished request whose result still needs to be written to the command file.
+        if bundle.commands.has_commands_needing_processing():
+            return [RunCommandsJob(bundle, dry_run, self.action_runtime)]
 
         return []
 
@@ -407,15 +512,19 @@ class AudioTranscriber:
         input_dir = self.config.general.input_dir
         store_dir = self.config.general.store_dir
 
-        # Discovery treats a missing store as empty, so dry runs do not need to
-        # create it before gathering bundles.
+        # Step 1: validate and prepare directories
         if not self.dry_run:
             self.fs_service.ensure_directory_exists(store_dir)
 
-        # Loading existing bundles
-        # Keep a cache of loaded bundles for the time of this run.
+        # Step 2: combine new and stored bundles, indexed by bundle ID.
+        # Actions and jobs use this same bundle data throughout the update.
         bundle_cache = self.gather_bundles(input_dir, store_dir)
 
+        # Step 3: execute external action requests, such as requests submitted through
+        # HTTP, before creating jobs. The next step then creates jobs from updated bundles.
+        self.action_runtime.process_external_requests(bundle_cache)
+
+        # Step 4: create the jobs needed for the current bundle state, then run them
         self.log_section_header("Gathering Jobs")
         all_bundle_jobs = self.gather_jobs(bundle_cache)
         errored_bundles = list[BundleJobs]()
@@ -427,6 +536,7 @@ class AudioTranscriber:
             self.log_section_header("Processing Jobs")
             errored_bundles = self.process_jobs(all_bundle_jobs, bundle_cache)
 
+        # Step 5: remove input directories emptied by successful imports.
         if not self.dry_run:
             remove_empty_subdirs(input_dir)
 

@@ -10,6 +10,12 @@ from transcriber.bundle_id import BundleId, new_bundle_id
 from transcriber.bundle_title import BundleTitleState, normalize_bundle_title
 from transcriber.commands.command import Command
 from transcriber.commands.command_interpretation import CommandInterpretation
+from transcriber.commands.command_resolution import (
+    CommandResolution,
+    IgnoredCommandResolution,
+    RejectedCommandResolution,
+    SupersededCommandResolution,
+)
 from transcriber.config import TranscribeConfig
 from transcriber.constants import (
     COMMANDS_FILENAME,
@@ -734,46 +740,37 @@ class TranscribeBundle:
         assert self.commands is not None
         self.commands.write(self.get_bundle_dir(), self.fs_service)
 
-    def set_command_executed(self, cmd_id: str) -> None:
-        """Mark a raw command as executed."""
+    def set_command_resolution(self, cmd_id: str, resolution: CommandResolution) -> None:
+        """Persist a command resolution."""
         cmd = self.assert_command(cmd_id)
-        cmd.executed = True
-        cmd.executed_at = datetime.now(self.config.general.timezone)
+        cmd.resolution = resolution
 
         assert self.commands is not None
         self.commands.write(self.get_bundle_dir(), self.fs_service)
 
-    def set_last_error(self, cmd_id: str, error: object) -> None:
-        """Set a debug error string for a command and write the commands file.
+    def set_command_ignored(self, cmd_id: str) -> None:
+        """Persist a terminal resolution for a command requiring no action."""
+        self.set_command_resolution(
+            cmd_id,
+            IgnoredCommandResolution(resolved_at=datetime.now(self.config.general.timezone)),
+        )
 
-        Coerces `error` to `str`, normalizes newlines, and truncates very long
-        messages to keep the commands YAML file compact. YAML serialization
-        (`yaml.dump`) will safely encode multiline strings, so no escaping is
-        required beyond ensuring we have a textual value.
-        """
-        cmd = self.assert_command(cmd_id)
+    def set_command_superseded(self, cmd_id: str) -> None:
+        """Persist that command policy selected another command instead."""
+        self.set_command_resolution(
+            cmd_id,
+            SupersededCommandResolution(resolved_at=datetime.now(self.config.general.timezone)),
+        )
 
-        # Sanitize: Coerce to string and normalize newlines
-        error_str = str(error) if error is not None else ""
-        error_str = error_str.replace("\r\n", "\n").strip()
-
-        # Sanitize: Truncate overly long messages to avoid huge YAML blobs
-        max_len = 2000
-        if len(error_str) > max_len:
-            error_str = error_str[: max_len - 14] + "... (truncated)"
-
-        cmd.last_error = error_str
-
-        assert self.commands is not None
-        self.commands.write(self.get_bundle_dir(), self.fs_service)
-
-    def add_command_attempt(self, cmd_id: str) -> None:
-        """Increment retry count by 1."""
-        cmd = self.assert_command(cmd_id)
-        cmd.attempt_count = cmd.attempt_count + 1
-
-        assert self.commands is not None
-        self.commands.write(self.get_bundle_dir(), self.fs_service)
+    def set_command_rejected(self, cmd_id: str, reason: str) -> None:
+        """Persist that interpretation produced no supported operation."""
+        self.set_command_resolution(
+            cmd_id,
+            RejectedCommandResolution(
+                reason=reason,
+                resolved_at=datetime.now(self.config.general.timezone),
+            ),
+        )
 
     def init_metadata(
         self,

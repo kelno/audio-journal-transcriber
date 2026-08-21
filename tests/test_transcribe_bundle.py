@@ -11,6 +11,7 @@ from tests.fake_audio_service import FakeAudioService
 from transcriber.bundle_id import new_bundle_id
 from transcriber.bundle_title import BundleTitleState
 from transcriber.commands.command_interpretation import SetTitleCommandArguments, SetTitleCommandInterpretation
+from transcriber.commands.command_resolution import MigratedCommandResolution
 from transcriber.commands.command_type import CommandType
 from transcriber.config import TranscribeConfig
 from transcriber.constants import (
@@ -525,12 +526,12 @@ class TestTranscribeBundleWriteOperations:
         # Check file was written
         assert fake_fs.file_exists(generic_bundle_dir / COMMANDS_FILENAME)
 
-    def test_set_command_interpretation_and_executed(
+    def test_set_command_interpretation_and_resolution(
         self,
         generic_bundle: TranscribeBundle,
         fake_fs: FakeFileSystemService,
     ) -> None:
-        """Test atomic interpretation persistence and command execution state."""
+        """Test atomic interpretation and terminal-resolution persistence."""
         command_one = "do the thing"
         command_two = "do the other thing"
         generic_bundle.set_and_write_commands([command_one, command_two])
@@ -548,10 +549,8 @@ class TestTranscribeBundleWriteOperations:
         assert isinstance(stored_arguments, SetTitleCommandArguments)
         assert stored_arguments.title == "Planning session"
         assert generic_bundle.commands.commands[1].matched_type is None
-        assert not generic_bundle.commands.commands[0].executed
-        assert not generic_bundle.commands.commands[1].executed
-        assert generic_bundle.commands.commands[0].executed_at is None
-        assert generic_bundle.commands.commands[1].executed_at is None
+        assert generic_bundle.commands.commands[0].resolution is None
+        assert generic_bundle.commands.commands[1].resolution is None
 
         persisted_commands = CommandsFile.from_file(
             generic_bundle.get_bundle_dir() / COMMANDS_FILENAME,
@@ -562,11 +561,12 @@ class TestTranscribeBundleWriteOperations:
         assert isinstance(persisted_arguments, SetTitleCommandArguments)
         assert persisted_arguments.title == "Planning session"
 
-        generic_bundle.set_command_executed(cmd_one_id)
-        assert generic_bundle.commands.commands[0].executed
-        assert not generic_bundle.commands.commands[1].executed
-        assert generic_bundle.commands.commands[0].executed_at is not None
-        assert generic_bundle.commands.commands[1].executed_at is None
+        generic_bundle.set_command_resolution(
+            cmd_one_id,
+            MigratedCommandResolution(),
+        )
+        assert generic_bundle.commands.commands[0].is_resolved
+        assert generic_bundle.commands.commands[1].resolution is None
 
     def test_init_metadata(
         self,

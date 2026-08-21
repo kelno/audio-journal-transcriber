@@ -1,6 +1,9 @@
 """Bundle-title state and cross-platform normalization rules."""
 
 from enum import StrEnum
+from typing import Annotated
+
+from pydantic import AfterValidator
 
 from transcriber.exception import InvalidBundleTitleException
 from transcriber.logger import logger
@@ -8,6 +11,17 @@ from transcriber.logger import logger
 BUNDLE_TITLE_MAX_LENGTH = 60
 
 _INVALID_FILESYSTEM_CHARACTERS = frozenset('<>:"/\\|?*')
+
+
+def validate_requested_bundle_title(title: str) -> str:
+    """Reject an empty requested title while preserving its original text."""
+    if not title.strip():
+        msg = "A requested bundle title cannot be empty"
+        raise ValueError(msg)
+    return title
+
+
+type RequestedBundleTitle = Annotated[str, AfterValidator(validate_requested_bundle_title)]
 
 
 class BundleTitleState(StrEnum):

@@ -2,7 +2,7 @@ from pathlib import Path
 from typing import ClassVar, override
 from zoneinfo import ZoneInfo
 
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, Field, model_validator
 from pydantic_settings import (
     BaseSettings,
     PydanticBaseSettingsSource,
@@ -85,6 +85,14 @@ class AudioConfig(BaseModel):
         )
 
 
+class HttpConfig(BaseModel):
+    """Configuration for the local action-request HTTP transport."""
+
+    enabled: bool = True
+    host: str = "127.0.0.1"
+    port: int = Field(default=8765, ge=1, le=65535)
+
+
 default_toml_file = Path(__file__).parent / "config.default.toml"
 if not default_toml_file.exists():
     error_msg = f"Default configuration file not found: {default_toml_file}"
@@ -116,6 +124,7 @@ class TranscribeConfig(BaseSettings):
     general: GeneralConfig
     text: TextConfig
     audio: AudioConfig
+    http: HttpConfig = Field(default_factory=HttpConfig)
 
     @classmethod
     @override

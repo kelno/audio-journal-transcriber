@@ -1,6 +1,9 @@
 """Tests for AudioTranscriber summary scheduling (context-change regeneration)."""
 
+import logging
 from datetime import datetime, timedelta
+
+import pytest
 
 from tests.bundle_fixtures import TranscribeBundleFactory
 from tests.fake_ai_manager import FakeAIManager
@@ -14,6 +17,46 @@ from transcriber.constants import CUSTOM_CONTEXT_FILENAME, SUMMARY_FILENAME
 from transcriber.files.text_file import CustomContextFile
 from transcriber.transcribe_bundle import TranscribeBundle
 from transcriber.transcribe_bundle_job import BundleNameJob, SummaryJob, TranscribeBundleJob
+
+
+def test_process_jobs_selects_oldest_bundle_date_first(
+    caplog: pytest.LogCaptureFixture,
+    monkeypatch: pytest.MonkeyPatch,
+    fake_transcriber: AudioTranscriber,
+    transcribe_bundle_factory: TranscribeBundleFactory,
+) -> None:
+    """Derived jobs use bundle age instead of dictionary insertion or work type."""
+    timezone = fake_transcriber.config.general.timezone
+    older = transcribe_bundle_factory(
+        bundle_name="older",
+        audio_filename="older.mp3",
+        bundle_date=datetime(2026, 8, 6, 9, tzinfo=timezone),
+    )
+    newer = transcribe_bundle_factory(
+        bundle_name="newer",
+        audio_filename="newer.mp3",
+        bundle_date=datetime(2026, 8, 6, 10, tzinfo=timezone),
+    )
+    execution_order: list[str] = []
+
+    def record_execution(job: SummaryJob, **_arguments: object) -> None:
+        execution_order.append(job.bundle.bundle_id)
+
+    monkeypatch.setattr(SummaryJob, "run", record_execution)
+    bundle_cache = {older.bundle_id: older, newer.bundle_id: newer}
+
+    with caplog.at_level(logging.INFO, logger="transcriber"):
+        errors = fake_transcriber.process_jobs(
+            [[SummaryJob(older, dry_run=False)], [SummaryJob(newer, dry_run=False)]],
+            bundle_cache,
+        )
+
+    assert errors == []
+    assert execution_order == [older.bundle_id, newer.bundle_id]
+    assert [record.message for record in caplog.records] == [
+        "Finished processing bundle [older]; bundles still with work in this run: 1",
+        "Finished processing bundle [newer]; bundles still with work in this run: 0",
+    ]
 
 
 class TestSummaryScheduling:
@@ -187,15 +230,16 @@ class TestMergeRequeue:
 
     def test_merge_regenerates_target_summary_in_same_run(
         self,
+        caplog: pytest.LogCaptureFixture,
         fake_transcriber: AudioTranscriber,
         fake_fs: FakeFileSystemService,
         fake_ai_manager: FakeAIManager,
         transcribe_bundle_factory: TranscribeBundleFactory,
     ) -> None:
-        """After a merge, the target's summary/name are regenerated within process_jobs.
+        """A target summary waits for a pending merge, then runs once on merged text.
 
-        The target bundle is gathered first (so its stale jobs sit in the queue),
-        then the source bundle whose merge command fires and re-enqueues the target.
+        The older target's summary is initially ready by local bundle state, but
+        global command readiness defers it until the newer source's merge runs.
         """
         tz = fake_transcriber.config.general.timezone
         target_date = datetime(year=2025, month=1, day=15, hour=20, tzinfo=tz)
@@ -204,7 +248,6 @@ class TestMergeRequeue:
             audio_filename="target.mp3",
             bundle_date=target_date,
             transcript_text="target transcript",
-            summary_text="stale summary that should be replaced",
         )
         source_raw_merge_cmd = "merge this recording with the previous one"
         source_transcript = f"source transcript, start command {source_raw_merge_cmd} end command"
@@ -230,10 +273,15 @@ class TestMergeRequeue:
         }
         jobs = fake_transcriber.gather_jobs(bundle_cache)
 
-        errored = fake_transcriber.process_jobs(jobs, bundle_cache)
+        with caplog.at_level(logging.INFO, logger="transcriber"):
+            errored = fake_transcriber.process_jobs(jobs, bundle_cache)
 
         # The merge + regeneration completed in one pass: nothing left unprocessed.
         assert errored == []
+        assert (
+            "Finished processing bundle [2025-01-15_source]; "
+            "bundles still with work in this run: 1"
+        ) in caplog.messages
 
         # Source bundle was deleted by the merge.
         assert not fake_fs.directory_exists(source.get_bundle_dir())
@@ -242,6 +290,7 @@ class TestMergeRequeue:
         target_dir = target.get_bundle_dir()
         assert fake_fs.file_exists(target_dir / SUMMARY_FILENAME)
         assert fake_fs.read_file(target_dir / SUMMARY_FILENAME) == post_merge_summary
+        assert len(fake_ai_manager.summarized_transcripts) == 1
 
         # The regenerated summary implies a SummaryJob ran for the target.
         reloaded = TranscribeBundle.from_existing_directory(

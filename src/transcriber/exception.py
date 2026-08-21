@@ -37,6 +37,25 @@ class EmptyTranscriptException(AudioTranscriberException):
 
 
 @final
+class TranscriptionRequestException(AudioTranscriberException):
+    """An audio transcription request received an unsuccessful HTTP response."""
+
+    def __init__(self, status_code: int, response_body: str):
+        """Preserve the response details needed to classify the failure later.
+
+        Args:
+            status_code: HTTP status returned by the transcription service.
+            response_body: Response text supplied by the service.
+
+        """
+        super().__init__(f"Transcription failed with status code {status_code}: {response_body}")
+        # Machine-readable status for later retry or blocking decisions.
+        self.status_code = status_code
+        # Service explanation retained for logs and user-facing diagnostics.
+        self.response_body = response_body
+
+
+@final
 class AbortRemainingBundleJobsException(AudioTranscriberException):
     """Abort remaining jobs in the queue for current bundle. This is not an error case."""
 
@@ -74,30 +93,12 @@ class DuplicateBundleIdException(AudioTranscriberException):
 
 
 @final
-class NoPreviousBundleException(AudioTranscriberException):
-    """Failed to find a previous bundle for merge command."""
-
-    def __init__(self, target_bundle: str, search_pattern: str, context: str | None = None):
-        message = f"No previous bundle found for {target_bundle} using pattern: {search_pattern}"
-        if context:
-            message = f"{message}: {context}"
-        super().__init__(message)
-        self.target_bundle = target_bundle
-        self.search_pattern = search_pattern
-
-
-@final
 class MergeBlockedException(AudioTranscriberException):
     """A previous merge into the target bundle failed and left a failure marker.
 
     Auto-retry is blocked until the marker is removed by hand, so a partially
     merged/inconsistent target is not merged into again automatically.
     """
-
-
-@final
-class UnknownCommandException(AudioTranscriberException):
-    """Command text couldn't be matched to a know command type."""
 
 
 @final

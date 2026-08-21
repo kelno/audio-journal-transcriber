@@ -5,7 +5,7 @@
     "request": "launch",
     "console": "integratedTerminal",
     "module": "transcriber",
-    "args": [],
+    "args": ["--once"],
     "justMyCode": false,
   },
   {
@@ -14,7 +14,7 @@
     "request": "launch",
     "console": "integratedTerminal",
     "module": "transcriber",
-    "args": ["--debug"],
+    "args": ["--debug", "--once"],
     "justMyCode": false,
   },
   {
@@ -23,7 +23,7 @@
     "request": "launch",
     "console": "integratedTerminal",
     "module": "transcriber",
-    "args": ["--debug", "--daemon"],
+    "args": ["--debug"],
     "justMyCode": false,
   },
   {
@@ -32,7 +32,7 @@
     "request": "launch",
     "console": "integratedTerminal",
     "module": "transcriber",
-    "args": ["--dry-run", "--debug"],
+    "args": ["--dry-run", "--once", "--debug"],
     "justMyCode": false,
   },
   {

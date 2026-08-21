@@ -6,6 +6,7 @@ authors = [{ name = "Kelno", email = "kelnow@proton.me" }]
 requires-python = ">=3.13"
 
 dependencies = [
+  "fastapi",
   "requests",
   "pyyaml",
   "pydantic",
@@ -16,6 +17,7 @@ dependencies = [
   "uv>=0.11.29",
   "watchdog>=6.0.0",
   "tzdata>=2026.3",
+  "uvicorn",
   "pytest>=9.1.1",
   "audioop-lts>=0.2.2",
 ]

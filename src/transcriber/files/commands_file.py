@@ -1,10 +1,8 @@
 # pyright:  reportUnknownArgumentType=false
 
-from collections.abc import Callable
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
 from pathlib import Path
-from typing import TYPE_CHECKING, override
+from typing import override
 
 import yaml
 
@@ -14,9 +12,6 @@ from transcriber.exception import InvalidCommandFileException
 from transcriber.files.file_system import FileSystemService
 from transcriber.files.text_file import TextFile
 from transcriber.logger import logger
-
-if TYPE_CHECKING:
-    from transcriber.commands.command_type import CommandType
 
 
 @dataclass
@@ -115,21 +110,9 @@ class CommandsFile(TextFile):
             CommandsFile: A CommandsFile instance with commands marked as unexecuted.
 
         """
-        commands = [Command(text=text, executed=False) for text in command_texts]
+        commands = [Command(text=text) for text in command_texts]
         instance = cls(text="", commands=commands)
         return instance
-
-    def mark_executed(self, command_index: int, tz: timezone) -> None:
-        """Mark a command as executed.
-
-        Args:
-            command_index: Index of the command to mark as executed.
-            tz: Timezone to use for the execution timestamp.
-
-        """
-        if 0 <= command_index < len(self.commands):
-            self.commands[command_index].executed = True
-            self.commands[command_index].executed_at = datetime.now(tz)
 
     @override
     def write(self, bundle_dir: Path, fs_service: FileSystemService) -> None:
@@ -143,29 +126,6 @@ class CommandsFile(TextFile):
         output_file = bundle_dir / self.get_filename()
         fs_service.write_file(output_file, self.to_yaml())
 
-    def has_commands_needing_processing(
-        self,
-        max_attempts_for: Callable[["CommandType"], int],
-    ) -> bool:
-        """Check if any command still needs to be executed.
-
-        A command needs processing when it is not executed and has not yet
-        exhausted its retry budget (``attempt_count >= max_attempts``). Commands
-        that failed too many times are considered given up and are not reported
-        as needing processing, so bundles are not endlessly re-enqueued for them.
-
-        The retry budget is injected (``max_attempts_for``) rather than imported
-        from the command registry, to keep this file free of a circular import
-        (``files`` <-> ``commands``).
-
-        Args:
-            max_attempts_for: Maps a command's matched type to its max attempt count.
-
-        Returns:
-            bool: True if at least one command still needs processing.
-
-        """
-        return any(
-            not command.executed and (command.matched_type is None or command.attempt_count < max_attempts_for(command.matched_type))
-            for command in self.commands
-        )
+    def has_commands_needing_processing(self) -> bool:
+        """Return whether any command still lacks a terminal resolution."""
+        return any(command.needs_processing for command in self.commands)

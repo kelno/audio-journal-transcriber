@@ -2,20 +2,20 @@
 
 from datetime import datetime, timedelta
 
-import pytest
-
 from tests.bundle_fixtures import TranscribeBundleFactory
 from tests.fake_ai_manager import FakeAIManager
 from tests.fake_file_system import FakeFileSystemService
+from transcriber.actions.action_request_store import SQLiteActionRequestStore, default_action_request_database_path
+from transcriber.actions.action_runtime import ActionRuntime
 from transcriber.audio_transcriber import AudioTranscriber
 from transcriber.bundle_title import BundleTitleState
-from transcriber.commands.command_handlers import AbortForMergeTargetException
 from transcriber.commands.command_interpretation import (
     ArgumentlessCommandInterpretation,
     CommandInterpretation,
     SetTitleCommandArguments,
     SetTitleCommandInterpretation,
 )
+from transcriber.commands.command_resolution import ActionRequestCommandResolution
 from transcriber.commands.command_type import CommandType
 from transcriber.config import TranscribeConfig
 from transcriber.transcribe_bundle_job import RunCommandsJob
@@ -67,7 +67,7 @@ class TestSetTitleCommand:
         assert len(fake_fs.get_operations("rename")) == 1
         assert fake_ai_manager.named_summaries == []
         assert bundle.commands is not None
-        assert all(command.executed for command in bundle.commands.commands)
+        assert all(command.is_resolved for command in bundle.commands.commands)
 
     def test_merge_runs_before_latest_title_and_applies_it_to_target(
         self,
@@ -103,15 +103,33 @@ class TestSetTitleCommand:
             target.bundle_id: target,
             source.bundle_id: source,
         }
+        action_runtime = ActionRuntime.from_config(fake_config, dry_run=False)
 
-        with pytest.raises(AbortForMergeTargetException) as merge_result:
-            RunCommandsJob(source, dry_run=False).run(fake_ai_manager, fake_config, bundle_cache)
+        merge_effects = RunCommandsJob(source, dry_run=False, action_runtime=action_runtime).run(
+            fake_ai_manager,
+            fake_config,
+            bundle_cache,
+        )
 
-        merged_target = merge_result.value.bundle
-        RunCommandsJob(merged_target, dry_run=False).run(fake_ai_manager, fake_config, bundle_cache)
+        assert merge_effects is not None
+        assert len(merge_effects.changed_bundle_ids) == 1
+        merged_target = bundle_cache[merge_effects.changed_bundle_ids[0]]
+        RunCommandsJob(merged_target, dry_run=False, action_runtime=action_runtime).run(
+            fake_ai_manager,
+            fake_config,
+            bundle_cache,
+        )
 
         assert source.bundle_id not in bundle_cache
         assert merged_target.bundle_name.endswith("Combined planning")
         assert merged_target.metadata.bundle_title_state is BundleTitleState.MANUAL
         assert merged_target.commands is not None
-        assert all(command.executed for command in merged_target.commands.commands)
+        assert all(command.is_resolved for command in merged_target.commands.commands)
+        title_command = next(command for command in merged_target.commands.commands if command.text == final_title)
+        assert isinstance(title_command.resolution, ActionRequestCommandResolution)
+        assert title_command.resolution.outcome == "succeeded"
+        request = SQLiteActionRequestStore(
+            default_action_request_database_path(fake_config.general.store_dir),
+        ).get(title_command.resolution.request_id)
+        assert request is not None
+        assert request.acknowledged_at is not None

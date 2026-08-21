@@ -143,6 +143,27 @@ We discussed the Q3 roadmap...
         # Assert
         assert result == expected_summary
 
+    @pytest.mark.parametrize("opening_fence", ["```markdown", "```"])
+    def test_get_ai_summary_unwraps_markdown_code_fence(
+        self,
+        opening_fence: str,
+        fake_config: TranscribeConfig,
+    ) -> None:
+        """A fence enclosing the whole model response is omitted from the summary."""
+        expected_summary = "# Topics\nProject planning\n\n# Summary\nRoadmap discussion"
+        fake_chat_client = FakeChatClient(
+            response=f"{opening_fence}\n{expected_summary}\n```",
+        )
+        ai_manager = RealAIManager(
+            audio_client=FakeAudioClient(),
+            chat_client=fake_chat_client,
+            config=fake_config,
+        )
+
+        result = ai_manager.get_ai_summary("transcript text here")
+
+        assert result == expected_summary
+
     def test_get_ai_summary_includes_extra_context(
         self,
         fake_config: TranscribeConfig,

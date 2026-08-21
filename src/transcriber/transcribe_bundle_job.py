@@ -1,14 +1,29 @@
 import traceback
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import override
 
+from transcriber.actions.action import Action, DeleteAction, MergeAction, PreviousBundleTarget, SetTitleAction
+from transcriber.actions.action_request import (
+    ActionBlocked,
+    ActionEffects,
+    ActionFailed,
+    ActionRequest,
+    ActionResult,
+    ActionSucceeded,
+    CommandActionOrigin,
+    new_action_request_id,
+)
+from transcriber.actions.action_runtime import ActionRuntime
+from transcriber.actions.action_service import ProcessedActionRequest
 from transcriber.bundle_title import BundleTitleState
 from transcriber.commands.command import Command
 from transcriber.commands.command_execution_policy import CommandExecutionPolicy
-from transcriber.commands.command_handlers import AbortForMergeTargetException
+from transcriber.commands.command_interpretation import SetTitleCommandArguments
 from transcriber.commands.command_registry import COMMAND_REGISTRY
+from transcriber.commands.command_resolution import ActionRequestCommandResolution
 from transcriber.commands.command_type import CommandType
 from transcriber.constants import (
     MULTIPLE_TRANSCRIPTS_SEPARATOR,
@@ -19,8 +34,8 @@ from .config import TranscribeConfig
 from .exception import (
     AbortRemainingBundleJobsException,
     EmptyTranscriptException,
+    MergeBlockedException,
     TooShortException,
-    UnknownCommandException,
 )
 from .files.metadata import AudioFileMeta
 from .logger import logger
@@ -35,7 +50,7 @@ class TranscribeBundleJob(ABC):
     dry_run: bool
 
     @abstractmethod
-    def run(self, ai_manager: AIManager, config: TranscribeConfig, bundle_cache: BundleCache) -> None:
+    def run(self, ai_manager: AIManager, config: TranscribeConfig, bundle_cache: BundleCache) -> ActionEffects | None:
         """Perform the job's main work.
 
         Args:
@@ -381,13 +396,15 @@ class GatherCommandsJob(TranscribeBundleJob):
 class RunCommandsJob(TranscribeBundleJob):
     """Try to run non-executed commands for a bundle."""
 
+    action_runtime: ActionRuntime
+
     @override
     def run(
         self,
         ai_manager: AIManager,
         config: TranscribeConfig,
         bundle_cache: BundleCache,
-    ) -> None:
+    ) -> ActionEffects | None:
         """Execute pending commands for the bundle.
 
         Processes commands in priority order and applies each type's execution
@@ -406,59 +423,75 @@ class RunCommandsJob(TranscribeBundleJob):
         if not self.bundle.commands:
             if self.dry_run:
                 logger.info(f"{self.bundle}: (dry-run) Skipping running commands as they are not gathered")
-                return  # expected in dry run as commands might not have been gathered
+                return None  # expected in dry run as commands might not have been gathered
 
             msg = f"{self}: Cannot run commands without commands file"
             raise ValueError(msg)
 
         if not self.bundle.commands.commands:
-            return  # no commands to run, that's valid
+            return None  # no commands to run, that's valid
 
-        if not any(not cmd.executed for cmd in self.bundle.commands.commands):
-            logger.debug(f"All commands already executed for {self.bundle}")
-            return
+        if not any(cmd.needs_processing for cmd in self.bundle.commands.commands):
+            logger.debug(f"All commands already resolved or submitted for {self.bundle}")
+            return None
 
         logger.debug(f"Running commands for {self.bundle}")
 
         if self.dry_run:
-            return
+            return None
 
         commands = self.bundle.commands.commands
-        pending_commands = self._prepare_commands(ai_manager, commands)
-        pending_commands = self._apply_execution_policies(pending_commands)
+        self._interpret_commands(ai_manager, commands)
+        # Keep only commands that still have work to do
+        pending_commands = [command for command in commands if command.needs_processing]
+        pending_commands = self._select_commands_to_execute(pending_commands)
 
         # Commands with side effects that invalidate the rest of the bundle should run first.
         # Keep this local until a more complex command ordering system is actually needed.
         pending_commands.sort(key=lambda cmd: self._command_priority(cmd.matched_type))
 
-        self._execute_commands(pending_commands, config, bundle_cache)
+        return self._execute_commands(pending_commands, config, bundle_cache)
 
-    def _prepare_commands(
+    def _interpret_commands(
         self,
         ai_manager: AIManager,
         commands: list[Command],
-    ) -> list[Command]:
-        """Ensure commands have a matched type and return pending commands."""
-        pending_commands = []
+    ) -> None:
+        """Interpret unfinished commands that do not have a matched type.
 
-        for cmd in commands:
-            if cmd.executed:
+        Args:
+            ai_manager: AI service used to interpret commands.
+            commands: Commands read from this bundle's command file.
+
+        """
+        for command in commands:
+            if not command.needs_processing:
                 continue
 
-            if cmd.matched_type is None:
-                # Should not happen under normal circumstances, but recover from
-                # inconsistent state if a command was marked executed without its type.
-                interpretation = ai_manager.interpret_command(cmd.text)
-                self.bundle.set_command_interpretation(cmd.id, interpretation)
+            if command.matched_type is None and command.needs_resolution:
+                # This should not normally happen. Reinterpret a command that
+                # needs work but is missing its type.
+                interpretation = ai_manager.interpret_command(command.text)
+                self.bundle.set_command_interpretation(command.id, interpretation)
 
-            pending_commands.append(cmd)
+    def _select_commands_to_execute(self, pending_commands: list[Command]) -> list[Command]:
+        """Select pending commands to execute.
 
-        return pending_commands
+        Commands with a saved action request remain selected so that request can be
+        completed. For command types that keep only the latest pending command, older
+        commands are marked as superseded.
 
-    def _apply_execution_policies(self, pending_commands: list[Command]) -> list[Command]:
-        """Apply each command type's policy and return the selected commands."""
+        Args:
+            pending_commands: Commands that have been interpreted and still need work.
+
+        Returns:
+            list[Command]: Commands that should be executed now.
+
+        """
         latest_by_type: dict[CommandType, Command] = {}
         for command in pending_commands:
+            if command.has_active_request:
+                continue
             matched_type = command.matched_type
             assert matched_type is not None
             definition = COMMAND_REGISTRY[matched_type]
@@ -467,14 +500,22 @@ class RunCommandsJob(TranscribeBundleJob):
 
         selected_commands: list[Command] = []
         for command in pending_commands:
+            if command.has_active_request:
+                # This command already has a saved request. Process that request before
+                # considering newer commands of the same type.
+                selected_commands.append(command)
+                continue
+
             matched_type = command.matched_type
             assert matched_type is not None
             latest = latest_by_type.get(matched_type)
             if latest is not None and command.id != latest.id:
+                # A newer command of this type replaces this one before either
+                # command creates an action request.
                 logger.info(
                     f"Skipping superseded {matched_type.value} command: {command.text}",
                 )
-                self.bundle.set_command_executed(command.id)
+                self.bundle.set_command_superseded(command.id)
                 continue
 
             selected_commands.append(command)
@@ -486,70 +527,285 @@ class RunCommandsJob(TranscribeBundleJob):
         pending_commands: list[Command],
         config: TranscribeConfig,
         bundle_cache: BundleCache,
-    ) -> None:
+    ) -> ActionEffects | None:
         """Execute commands according to retry and repetition policies.
 
-        Once-per-bundle types skip later duplicates, while revision-style types
-        may execute again when a new pending command is recorded.
+        Some command types run only once for a bundle, so later duplicates are skipped.
+        For other types, only the newest pending command is run; for example, a newer title replaces an older pending title.
 
         Args:
             pending_commands: Commands that still require execution.
             config: Application configuration passed to command handlers.
             bundle_cache: Loaded bundles indexed by persistent ID.
 
+        Returns:
+            ActionEffects | None: Effects from the first action that changes bundle
+                state, or None if no command changes a bundle.
+
         """
         assert self.bundle.commands
+        # Resolved command types are used to enforce policies such as running
+        # an IGNORE command only once for this bundle.
         seen_executed_types: set[CommandType] = {
-            cmd.matched_type for cmd in self.bundle.commands.commands if cmd.executed and cmd.matched_type is not None
+            cmd.matched_type for cmd in self.bundle.commands.commands if cmd.is_resolved and cmd.matched_type is not None
         }
 
         for cmd in pending_commands:
-            try:
-                matched_type = cmd.matched_type
-                assert matched_type is not None
-                definition = COMMAND_REGISTRY[matched_type]
+            matched_type = cmd.matched_type
+            assert matched_type is not None
+            definition = COMMAND_REGISTRY[matched_type]
 
-                if (
-                    definition.execution_policy is CommandExecutionPolicy.ONCE_PER_BUNDLE
-                    and matched_type in seen_executed_types
-                ):
-                    logger.info(
-                        f"Skipping duplicate {matched_type.value} command: {cmd.text}",
-                    )
+            if (
+                not cmd.has_active_request
+                and definition.execution_policy is CommandExecutionPolicy.ONCE_PER_BUNDLE
+                and matched_type in seen_executed_types
+            ):
+                # This command type has already completed for the bundle, so
+                # this later duplicate has no work left to do.
+                logger.info(f"Skipping duplicate {matched_type.value} command: {cmd.text}")
+                self.bundle.set_command_superseded(cmd.id)
+                continue
 
-                    # Mark as executed to avoid picking it up when gathering bundle with pending commands.
-                    self.bundle.set_command_executed(cmd.id)
-                    continue
+            logger.info(f"Executing {matched_type.value} command for bundle {self.bundle}")
 
-                max_attemps = definition.max_attempts
-                if cmd.attempt_count >= max_attemps:
-                    logger.debug(
-                        f"{self.bundle}: Skipping command {cmd.text} as max attempt count ({max_attemps}) has been reached",
-                    )
-                    continue
-
-                logger.info(f"Executing {matched_type.value} command for bundle {self.bundle}")
-
-                handler = definition.handler
-                handler(self.bundle, config, bundle_cache, cmd)
-
-                self.bundle.set_command_executed(cmd.id)
+            if matched_type in {CommandType.MERGE, CommandType.DELETE, CommandType.SET_TITLE}:
+                effects = self._process_state_changing_command(cmd, matched_type, config, bundle_cache)
+                if effects is not None and (effects.changed_bundle_ids or effects.removed_bundle_ids):
+                    # A state-changing action can make the remaining queued jobs
+                    # stale. Return its effects so the caller can rebuild them.
+                    return effects
+                continue
+            if matched_type is CommandType.IGNORE:
+                self.bundle.set_command_ignored(cmd.id)
                 seen_executed_types.add(matched_type)
+                continue
+            if matched_type is CommandType.UNKNOWN:
+                self.bundle.set_command_rejected(cmd.id, "Interpretation produced no supported command type.")
+                seen_executed_types.add(matched_type)
+                continue
 
-            except AbortRemainingBundleJobsException:
-                logger.debug(f"{cmd} requested aborting remaining jobs for bundle {self.bundle}")
-                raise  # raise it further to the job execution loop
-            except AbortForMergeTargetException:
-                logger.debug(f"{cmd} finished a merge, re-processing target bundle for {self.bundle}")
-                raise  # raise it further to the job execution loop
-            except (UnknownCommandException, Exception) as e:
-                # On error, stop processing remaining commands to avoid partial state.
-                logger.exception(
-                    f"{self.bundle}: Failed to process bundle command '{cmd.text}'",
+            msg = f"Unsupported command type: {matched_type}"
+            raise AssertionError(msg)
+        return None
+
+    def _process_state_changing_command(
+        self,
+        command: Command,
+        command_type: CommandType,
+        config: TranscribeConfig,
+        bundle_cache: BundleCache,
+    ) -> ActionEffects | None:
+        """Carry out a state-changing command through its durable action request."""
+        request = self._get_or_create_command_request(command, command_type)
+        if request.status == "pending":
+            processed = self._process_action_request(request, bundle_cache)
+        else:
+            # An earlier run may have finished the request but stopped before
+            # updating the command file. Rebuild its saved result without
+            # running the action again.
+            processed = ProcessedActionRequest(
+                request=request,
+                result=self._rebuild_finished_result(request),
+            )
+
+        self._acknowledge_command_result(
+            command.id,
+            processed.request,
+            processed.result,
+            bundle_cache,
+            config,
+        )
+        return self._handle_action_result(
+            processed.request.action,
+            processed.result,
+            processed.request.request_id,
+        )
+
+    def _get_or_create_command_request(
+        self,
+        command: Command,
+        command_type: CommandType,
+    ) -> ActionRequest:
+        """Return the command's existing request or create it when missing.
+
+        Args:
+            command: State-changing command being processed.
+            command_type: Validated type used to build a new action when needed.
+
+        Returns:
+            ActionRequest: Existing or newly created request for this command.
+
+        Raises:
+            ValueError: If the recorded request belongs to another command.
+
+        """
+        service = self.action_runtime.service
+        resolution = command.resolution
+        if isinstance(resolution, ActionRequestCommandResolution):
+            # A previous run already recorded this ID in the command file. Reuse
+            # it so a retry can find the same durable request after a crash.
+            request_id = resolution.request_id
+            request = service.get_request(request_id)
+            if request is None:
+                logger.warning(
+                    f"Command {command.id} references action request {request_id}, but it was not found in the DB; creating it again.",
                 )
-                self.bundle.set_last_error(cmd_id=cmd.id, error=str(e))
-                self.bundle.add_command_attempt(cmd_id=cmd.id)
-                raise
+            elif not isinstance(request.origin, CommandActionOrigin) or request.origin.command_id != command.id:
+                msg = f"Command {command.id} references action request {request_id}, but that request belongs to a different command."
+                raise ValueError(msg)
+            else:
+                return request
+        else:
+            request_id = new_action_request_id()
+            # Record the ID before creating the request in DB. The two
+            # stores (db + bundle files) cannot share a transaction, so this lets a retry resume
+            # the same request if the process stops between these writes.
+            self.bundle.set_command_resolution(
+                command.id,
+                ActionRequestCommandResolution(request_id=request_id),
+            )
+
+        action = self._build_action_from_command(command, command_type)
+        origin = CommandActionOrigin(bundle_id=self.bundle.bundle_id, command_id=command.id)
+        return service.submit(action, origin, request_id=request_id)
+
+    def _process_action_request(
+        self,
+        request: ActionRequest,
+        bundle_cache: BundleCache,
+    ) -> ProcessedActionRequest:
+        """Process a pending action request.
+
+        Args:
+            request: Pending request to process.
+            bundle_cache: Bundles currently loaded by the update loop.
+
+        Returns:
+            ProcessedActionRequest: Finished request and its processing result.
+
+        """
+        processor = self.action_runtime.create_processor(bundle_cache)
+        processed = processor.process(request.request_id)
+        assert processed is not None  # A request loaded as pending must be processed.
+        return processed
+
+    def _build_action_from_command(self, command: Command, command_type: CommandType) -> Action:
+        """Build the action described by a validated command."""
+        # Commands always act on their own bundle, except a merge whose target
+        # is selected later from the current bundle order.
+        match command_type:
+            case CommandType.MERGE:
+                return MergeAction(
+                    source_bundle_id=self.bundle.bundle_id,
+                    target=PreviousBundleTarget(),
+                )
+            case CommandType.DELETE:
+                return DeleteAction(bundle_id=self.bundle.bundle_id)
+            case CommandType.SET_TITLE:
+                # Only SET_TITLE commands carry title arguments. Check the
+                # concrete type before using the value stored by interpretation.
+                arguments = command.arguments
+                if not isinstance(arguments, SetTitleCommandArguments):
+                    msg = f"SET_TITLE command has invalid arguments: {command.text}"
+                    raise TypeError(msg)
+                return SetTitleAction(bundle_id=self.bundle.bundle_id, title=arguments.title)
+            case _:
+                msg = f"Command type does not create an action request: {command_type}"
+                raise ValueError(msg)
+
+    def _handle_action_result(
+        self,
+        action: Action,
+        result: ActionResult,
+        request_id: str,
+    ) -> ActionEffects | None:
+        """Return effects for a successful action; raise or log an unsuccessful result."""
+        if isinstance(result, ActionSucceeded):
+            # The caller uses these IDs to remove stale work and rebuild jobs
+            # from the bundles changed by the action.
+            return result.effects
+        if isinstance(result, ActionBlocked):
+            if isinstance(action, MergeAction):
+                # A blocked merge leaves a marker that prevents automatic
+                # repetition until a person has inspected the bundle state.
+                raise MergeBlockedException(result.error.message)
+            # Other blocked actions stop this bundle's remaining jobs without
+            # preventing unrelated bundles from continuing.
+            msg = f"Action request {request_id} blocked: {result.error.message}"
+            raise AbortRemainingBundleJobsException(msg)
+        # A failed action has already recorded its result in the command file.
+        # Log it here, then allow the remaining bundle jobs to continue.
+        logger.error(f"Action request {request_id} failed: {result.error.message}")
+        return None
+
+    @staticmethod
+    def _rebuild_finished_result(request: ActionRequest) -> ActionResult:
+        """Rebuild a finished request result after an interrupted update."""
+        match request.status:
+            case "succeeded":
+                return ActionSucceeded()
+            case "failed":
+                assert request.error is not None
+                return ActionFailed(error=request.error)
+            case "blocked":
+                assert request.error is not None
+                return ActionBlocked(error=request.error)
+            case _:
+                msg = f"Action request {request.request_id} is not terminal: {request.status}"
+                raise ValueError(msg)
+
+    def _acknowledge_command_result(
+        self,
+        command_id: str,
+        request: ActionRequest,
+        result: ActionResult,
+        bundle_cache: BundleCache,
+        config: TranscribeConfig,
+    ) -> None:
+        """Write the finished request result back to the command file.
+
+        The action result is already saved in the DB. The DB and command file
+        cannot share one transaction, so write the result to the command file
+        first, then mark the DB request as acknowledged. If the process stops
+        between those writes, the request remains unacknowledged so a later run
+        can safely retry this step.
+
+        Args:
+            command_id: ID of the command that started the action request.
+            request: Finished request saved in the DB.
+            result: Result to write into the command file.
+            bundle_cache: Bundles currently loaded by the update loop.
+            config: Configuration used for the fallback resolution timestamp.
+
+        """
+        service = self.action_runtime.service
+        owner = self._find_command_bundle(command_id, bundle_cache)
+        if owner is None:
+            if isinstance(request.action, DeleteAction) and isinstance(result, ActionSucceeded):
+                # Successful deletion removes the command file itself, leaving
+                # no separate origin receipt to persist before acknowledgement.
+                service.acknowledge(request.request_id)
+                return
+            msg = f"Could not locate command {command_id} while acknowledging request {request.request_id}"
+            raise ValueError(msg)
+        resolved_at = request.finished_at or datetime.now(config.general.timezone)
+        owner.set_command_resolution(
+            command_id,
+            ActionRequestCommandResolution(
+                request_id=request.request_id,
+                outcome=result.status,
+                resolved_at=resolved_at,
+            ),
+        )
+        service.acknowledge(request.request_id)
+
+    @staticmethod
+    def _find_command_bundle(command_id: str, bundle_cache: BundleCache) -> TranscribeBundle | None:
+        """Find the bundle that contains this command."""
+        for bundle in bundle_cache.values():
+            if bundle.commands and any(command.id == command_id for command in bundle.commands.commands):
+                return bundle
+        return None
 
     @staticmethod
     def _command_priority(command_type: CommandType | None) -> int:

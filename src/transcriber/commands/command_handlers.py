@@ -1,27 +1,20 @@
-"""Command handlers for executing command operations.
+"""Direct command handlers and shared bundle mutation operations.
 
-Contains the implementation logic for each command type.
+State-changing commands are executed through action executors. Their shared
+mutation functions remain here until they warrant a dedicated module.
 """
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, final
+from typing import TYPE_CHECKING
 
-from transcriber.bundle_title import BundleTitleState
-from transcriber.commands.command_interpretation import SetTitleCommandArguments
 from transcriber.constants import (
     MANAGED_BUNDLE_FILENAMES,
     MERGE_FAILED_FILENAME,
     MULTIPLE_TRANSCRIPTS_SEPARATOR,
     SUMMARY_FILENAME,
 )
-from transcriber.exception import (
-    AbortRemainingBundleJobsException,
-    AudioTranscriberException,
-    MergeBlockedException,
-    NoPreviousBundleException,
-    UnknownCommandException,
-)
+from transcriber.exception import MergeBlockedException
 from transcriber.files.metadata import AudioFileMeta
 from transcriber.files.text_file import CustomContextFile, TranscriptFile
 from transcriber.globals import is_handled_audio_file
@@ -32,14 +25,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from transcriber.commands.command import Command
-    from transcriber.commands.command_definition import CommandHandler
-    from transcriber.config import TranscribeConfig
     from transcriber.files.file_system import FileSystemService
-
-
-def command_handler(func: CommandHandler) -> CommandHandler:
-    """Decorator to enforce CommandHandler interface compliance."""
-    return func
 
 
 def _get_collision_free_destination(
@@ -270,26 +256,10 @@ def _write_fail_markers(source: TranscribeBundle, target: TranscribeBundle) -> N
     )
 
 
-@final
-class AbortForMergeTargetException(AudioTranscriberException):
-    """Abort remaining jobs for the current (source) bundle and re-process `bundle`.
-
-    Raised by a merge: the source bundle is deleted, so its remaining jobs must be
-    skipped, while the merge target's summary/name were invalidated and must be
-    regenerated within the same run. `bundle` is the (already merged and committed)
-    target bundle to re-gather and re-process.
-    """
-
-    def __init__(self, bundle: TranscribeBundle, message: str):
-        super().__init__(message)
-        self.bundle = bundle
-
-
 def merge_bundles(
     source: TranscribeBundle,
     target: TranscribeBundle,
     bundles_cache: BundleCache,
-    merge_cmd: Command | None = None,
 ) -> TranscribeBundle:
     """Merge one explicitly selected source bundle into a target bundle.
 
@@ -297,8 +267,6 @@ def merge_bundles(
         source: Bundle that will be removed after its contents are transferred.
         target: Bundle that survives and receives the source contents.
         bundles_cache: Loaded bundles indexed by persistent ID.
-        merge_cmd: Optional command that triggered the merge. When provided, it is
-            marked executed in the surviving bundle after command files are combined.
 
     Returns:
         The surviving target bundle.
@@ -364,12 +332,6 @@ def merge_bundles(
         # Rebuild target metadata now that the source audio is included, then commit.
         target.metadata.write(target_bundle_dir, target.fs_service)
 
-        if merge_cmd is not None:
-            # The triggering command now lives in the target bundle (merged above),
-            # so mark it executed before deleting the source. Reviewed migrations do
-            # not invent a command merely to use the same merge implementation.
-            target.set_command_executed(merge_cmd.id)
-
         # Source removed only after the merge is fully committed to the target.
         source.fs_service.delete_directory(source_bundle_dir)
         bundles_cache.pop(source.bundle_id)
@@ -388,105 +350,7 @@ def merge_bundles(
     return target
 
 
-@command_handler
-def handle_merge(source: TranscribeBundle, _config: TranscribeConfig, bundles_cache: BundleCache, merge_cmd: Command) -> None:
-    """Merge the current recording into its most recent eligible predecessor."""
-    logger.info(f"Running merge command for {source} (command text: {merge_cmd.text})")
-
-    target = TranscribeBundle.find_previous_bundle(source, bundles_cache.values())
-    if target is None:
-        raise NoPreviousBundleException(
-            target_bundle=source.bundle_name,
-            search_pattern="previous bundles",
-            context="No previous bundle found to merge with",
-        )
-
-    # The automatic target is chosen by recency rather than explicit user intent.
-    # Surface it prominently so a wrong-target merge is noticeable in the logs.
-    gap_hours = (source.get_bundle_date() - target.get_bundle_date()).total_seconds() / 3600
-    logger.info(
-        f"{source}: Merge target selected -> {target}, gap = {gap_hours:.1f}h (merge window: {source.config.general.merge_max_hours:.1f}h)",
-    )
-
-    merged_target = merge_bundles(
-        source=source,
-        target=target,
-        bundles_cache=bundles_cache,
-        merge_cmd=merge_cmd,
-    )
-    msg = f"Merged bundle {source} into {merged_target}"
-    raise AbortForMergeTargetException(merged_target, msg)
-
-
-@command_handler
-def handle_delete(bundle: TranscribeBundle, _config: TranscribeConfig, bundles_cache: BundleCache, cmd: Command) -> None:
-    """Delete the current recording.
-
-    Args:
-        bundle: The transcribe bundle to operate on.
-        _config: The transcribe configuration, unused by this handler.
-        cmd: The original command triggering this.
-        bundles_cache: Loaded bundles indexed by persistent ID.
-
-    """
-    logger.debug(f"Running delete command for {bundle} (command text: {cmd.text})")
-    bundle.set_command_executed(cmd.id)
+def delete_bundle(bundle: TranscribeBundle, bundles_cache: BundleCache) -> None:
+    """Remove one explicitly selected bundle from disk and the loaded cache."""
     bundle.fs_service.delete_directory(bundle.get_bundle_dir())
     bundles_cache.pop(bundle.bundle_id)
-    logger.info(f"Removed bundle {bundle} (command text: {cmd.text})")
-
-    msg = "Skip remaining jobs after delete command"
-    raise AbortRemainingBundleJobsException(msg)
-
-
-@command_handler
-def handle_set_title(
-    bundle: TranscribeBundle,
-    _config: TranscribeConfig,
-    _bundles_cache: BundleCache,
-    cmd: Command,
-) -> None:
-    """Apply the command's explicit title to the current recording."""
-    arguments = cmd.arguments
-    if not isinstance(arguments, SetTitleCommandArguments) or not arguments.title.strip():
-        msg = f"SET_TITLE command requires a non-empty title (command text: {cmd.text})"
-        raise ValueError(msg)
-    title = arguments.title
-
-    logger.info(f"Running set-title command for {bundle} (requested title: {title!r})")
-    bundle.set_and_write_bundle_title(
-        title,
-        title_state=BundleTitleState.MANUAL,
-    )
-
-
-@command_handler
-def handle_unknown(_bundle: TranscribeBundle, _config: TranscribeConfig, _bundles_cache: BundleCache, cmd: Command) -> None:
-    """Handle unknown command type.
-
-    Args:
-        _bundle: The transcribe bundle, unused by this handler.
-        _config: The transcribe configuration, unused by this handler.
-        cmd: The original command triggering this.
-        _bundles_cache: Loaded bundles indexed by persistent ID, unused here.
-
-    Raises:
-        ValueError: Always raised as the command type is unknown.
-
-    """
-    msg = f"Unknown command type cannot be executed (command text: {cmd.text})"
-    raise UnknownCommandException(msg)
-
-
-@command_handler
-def handle_ignore(_bundle: TranscribeBundle, _config: TranscribeConfig, _bundles_cache: BundleCache, cmd: Command) -> None:
-    """Handle ignore command type.
-
-    Args:
-        _bundle: The transcribe bundle, unused by this handler.
-        _config: The transcribe configuration, unused by this handler.
-        cmd: The original command triggering this.
-        _bundles_cache: Loaded bundles indexed by persistent ID, unused here.
-
-    """
-    logger.debug(f"Command {cmd.text} is ignored.")

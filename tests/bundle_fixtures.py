@@ -10,6 +10,7 @@ from tests.fake_audio_service import FakeAudioService
 from tests.fake_file_system import FakeFileSystemService
 from transcriber.bundle_id import BundleId, new_bundle_id
 from transcriber.bundle_title import BundleTitleState
+from transcriber.commands.command_resolution import MigratedCommandResolution
 from transcriber.config import TranscribeConfig
 from transcriber.files.commands_file import CommandsFile
 from transcriber.files.metadata import AudioFileMeta, MetadataFile
@@ -30,7 +31,7 @@ class TranscribeBundleFactory(Protocol):
         transcript_text: str | None = None,
         summary_text: str | None = None,
         commands: list[str] | None = None,
-        commands_executed: bool = False,
+        commands_resolved: bool = False,
         transcript_model_used: list[str] | str | None = None,
         keep_forever: bool = False,
         config: TranscribeConfig | None = None,
@@ -46,7 +47,7 @@ class TranscribeBundleFactory(Protocol):
             transcript_text: Optional transcript content.
             summary_text: Optional summary content.
             commands: Optional raw command strings.
-            commands_executed: Whether supplied commands start as executed.
+            commands_resolved: Whether supplied commands start with terminal resolutions.
             transcript_model_used: Optional model name or ordered model names.
             keep_forever: Whether source audio is exempt from deletion.
             config: Optional configuration overriding the fixture default.
@@ -75,7 +76,7 @@ def transcribe_bundle_factory(
         transcript_text: str | None = None,
         summary_text: str | None = None,
         commands: list[str] | None = None,
-        commands_executed: bool = False,
+        commands_resolved: bool = False,
         transcript_model_used: list[str] | str | None = None,
         keep_forever: bool = False,
         config: TranscribeConfig | None = None,
@@ -91,7 +92,7 @@ def transcribe_bundle_factory(
             transcript_text: Optional transcript content.
             summary_text: Optional summary content.
             commands: Optional raw command strings.
-            commands_executed: Whether supplied commands start as executed.
+            commands_resolved: Whether supplied commands start with terminal resolutions.
             transcript_model_used: Optional model name or ordered model names.
             keep_forever: Whether source audio is exempt from deletion.
             config: Optional configuration overriding the fixture default.
@@ -139,9 +140,9 @@ def transcribe_bundle_factory(
         bundle.metadata.write(bundle_dir, fake_fs)
 
         if commands and bundle.commands:
-            if commands_executed:
+            if commands_resolved:
                 for command in bundle.commands.commands:
-                    command.executed = True
+                    command.resolution = MigratedCommandResolution()
             bundle.commands.write(bundle_dir, fake_fs)
 
         fake_fs.write_file(bundle_dir / audio_filename, "Audio")

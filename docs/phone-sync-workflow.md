@@ -1,6 +1,6 @@
 # Example setup: sync voice recordings from a phone
 
-This is one example of a hands-off capture workflow. It combines a phone, a file synchronization tool, and daemon mode:
+This is one example of a hands-off capture workflow. It combines a phone, a file synchronization tool, and the transcriber's continuous mode:
 
 ```text
 Phone recorder → synchronized input directory → transcriber daemon → Markdown archive
@@ -26,10 +26,10 @@ The transcriber waits briefly after filesystem activity so that a file can settl
 
 ## 3. Run the watcher
 
-Start the transcriber in daemon mode:
+Start the transcriber in its default continuous mode:
 
 ```bash
-uv run transcriber --daemon
+uv run transcriber
 ```
 
 The daemon processes existing recordings at startup, watches for later filesystem activity, retries failed bundles with increasing delays, and performs an hourly fallback scan.
