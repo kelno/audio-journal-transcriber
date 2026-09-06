@@ -1,6 +1,6 @@
 [
   {
-    "label": "Transcribe",
+    "label": "Transcribe once",
     "adapter": "Debugpy",
     "request": "launch",
     "console": "integratedTerminal",
@@ -9,7 +9,7 @@
     "justMyCode": false,
   },
   {
-    "label": "Transcribe (debug)",
+    "label": "Transcribe once (debug)",
     "adapter": "Debugpy",
     "request": "launch",
     "console": "integratedTerminal",
@@ -27,7 +27,7 @@
     "justMyCode": false,
   },
   {
-    "label": "(DRY RUN) Transcribe",
+    "label": "(DRY) Transcribe once",
     "adapter": "Debugpy",
     "request": "launch",
     "console": "integratedTerminal",
