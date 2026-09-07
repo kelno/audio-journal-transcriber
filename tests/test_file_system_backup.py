@@ -1,5 +1,7 @@
 """Tests for file system backup deletion functionality."""
 
+import errno
+import os
 import tempfile
 from pathlib import Path
 
@@ -51,6 +53,33 @@ class TestFileSystemBackupDeletion:
             backup_file = store_dir / DELETED_DIR_NAME / "test.txt"
             assert backup_file.exists()
             assert backup_file.read_text() == "test content"
+
+    def test_delete_file_with_backup_enabled_handles_cross_device_move(
+        self,
+        fake_config: TranscribeConfig,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Safe deletion copies to backup when source and backup use different filesystems."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            store_dir = temp_path / "store"
+            store_dir.mkdir()
+            test_file = temp_path / "voice_memo.mp3"
+            test_file.write_text("audio content")
+
+            self._create_config_with_backup_enabled(fake_config, temp_path, store_dir)
+            fs = RealFileSystemService(fake_config)
+
+            def raise_cross_device_error(*_arguments: object) -> None:
+                raise OSError(errno.EXDEV, "Cross-device link")
+
+            monkeypatch.setattr(os, "rename", raise_cross_device_error)
+
+            fs.delete_file(test_file)
+
+            backup_file = store_dir / DELETED_DIR_NAME / "voice_memo.mp3"
+            assert not test_file.exists()
+            assert backup_file.read_text() == "audio content"
 
     def test_delete_file_with_backup_disabled_deletes_permanently(self, fake_config: TranscribeConfig) -> None:
         """Test that deleting a file with backup disabled removes it permanently."""

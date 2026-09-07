@@ -280,8 +280,9 @@ class RealFileSystemService(FileSystemService):
             # Ensure the backup directory exists
             backup_path.parent.mkdir(parents=True, exist_ok=True)
 
-            # Move file to backup location
-            path.rename(backup_path)
+            # shutil.move falls back to copy-and-delete when the backup resides
+            # on a different filesystem, unlike Path.rename.
+            shutil.move(str(path), str(backup_path))
         else:
             path.unlink()
 
