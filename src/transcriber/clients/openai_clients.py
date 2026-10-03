@@ -168,9 +168,6 @@ class OpenAIChatClient(ChatCompletionClient):
         completion = client.chat.completions.create(
             model=self.config.model,
             messages=messages,
-            extra_body={
-                "parent_id": None,
-            },  # Fixes an issue with OpenWebUI 0.9.5, until https://github.com/open-webui/open-webui/commit/bc244fdc90504824b76654880898bf3f6649c299 is published
         )
 
         if len(completion.choices) == 0:
