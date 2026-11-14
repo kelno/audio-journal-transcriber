@@ -30,7 +30,7 @@ RETENTION_DAYS = 30
 def disk_config(fake_config: TranscribeConfig, tmp_path: Path) -> TranscribeConfig:
     """Return a configuration whose store is a real temporary directory."""
     general = fake_config.general.model_copy(
-        update={"store_dir": tmp_path / "store", "delete_source_audio_after_days": RETENTION_DAYS},
+        update={"store_dir": tmp_path / "store"},
     )
     return fake_config.model_copy(update={"general": general})
 
@@ -123,32 +123,8 @@ class TestAudioRetentionBlocker:
         assert bundle.find_audio_retention_blocker(older_than_days=RETENTION_DAYS) is expected
 
 
-class TestAudioSourceNeedsRemoval:
-    """The transcriber's own retention setting, `delete_source_audio_after_days`."""
-
-    def test_removes_audio_older_than_the_setting(self, disk_config: TranscribeConfig) -> None:
-        """Audio older than the setting is due for removal."""
-        bundle = _write_bundle(disk_config, listed_audio=["a.m4a"], present_audio=["a.m4a"], bundle_age_days=40)
-
-        assert bundle.audio_source_needs_removal(disk_config.general.store_dir)
-
-    def test_keeps_audio_younger_than_the_setting(self, disk_config: TranscribeConfig) -> None:
-        """Audio younger than the setting stays."""
-        bundle = _write_bundle(disk_config, listed_audio=["a.m4a"], present_audio=["a.m4a"], bundle_age_days=10)
-
-        assert not bundle.audio_source_needs_removal(disk_config.general.store_dir)
-
-    def test_disabled_setting_keeps_audio(self, disk_config: TranscribeConfig) -> None:
-        """A setting of 0 never removes audio."""
-        general = disk_config.general.model_copy(update={"delete_source_audio_after_days": 0})
-        config = disk_config.model_copy(update={"general": general})
-        bundle = _write_bundle(config, listed_audio=["a.m4a"], present_audio=["a.m4a"], bundle_age_days=400)
-
-        assert not bundle.audio_source_needs_removal(config.general.store_dir)
-
-
 class TestMissingAudioKeepsTranscript:
-    """Audio that left a bundle (retention or archiving) must not cost the bundle its transcript."""
+    """Audio that left a bundle (archived) must not cost the bundle its transcript."""
 
     def test_some_listed_audio_missing_keeps_transcript(self, disk_config: TranscribeConfig) -> None:
         """A bundle whose listed audio is only partly present keeps its transcript.
@@ -210,8 +186,7 @@ class TestArchivedBundleGetsNoJobs:
         "Half the audio gone" is what another machine sees while a sync tool applies
         the removal of a multi-recording bundle's audio one file at a time.
         """
-        general = disk_config.general.model_copy(update={"delete_source_audio_after_days": 0})
-        config = disk_config.model_copy(update={"general": general})
+        config = disk_config
         store_dir = config.general.store_dir
         _finish_processing(_write_bundle(config, listed_audio=["a.m4a", "b.m4a"], present_audio=present_audio, bundle_age_days=40))
         fs_service = RealFileSystemService(config)

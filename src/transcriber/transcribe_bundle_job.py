@@ -313,40 +313,6 @@ class BundleNameJob(TranscribeBundleJob):
 
 
 @dataclass
-class DeleteAudioFileJob(TranscribeBundleJob):
-    """Remove all audio files in bundle."""
-
-    @override
-    def run(
-        self,
-        ai_manager: AIManager,
-        config: TranscribeConfig,
-        bundle_cache: BundleCache,
-    ) -> None:
-        """Delete eligible source audio files.
-
-        Args:
-            ai_manager: AI operations supplied through the shared job interface.
-            config: Application configuration for the current run.
-            bundle_cache: Loaded bundles indexed by persistent ID.
-
-        """
-        if not self.bundle.source_audios:
-            msg = f"{self}: Bundle has no audio files set"
-            raise FileNotFoundError(msg)
-
-        logger.info(f"Deleting {len(self.bundle.source_audios)} audio file(s)")
-        if self.dry_run:
-            return
-
-        for audio_path in self.bundle.source_audios:
-            logger.debug(f"Deleting {audio_path}")
-            self.bundle.fs_service.delete_file(audio_path)
-
-        self.bundle.update_audio_paths(None)
-
-
-@dataclass
 class GatherCommandsJob(TranscribeBundleJob):
     """Gather raw commands from transcription, not interpreting them yet."""
 

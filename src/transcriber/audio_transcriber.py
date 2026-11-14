@@ -19,7 +19,6 @@ from transcriber.transcribe_bundle_job import (
     BundleJobs,
     BundleNameJob,
     CreateBundleJob,
-    DeleteAudioFileJob,
     GatherCommandsJob,
     RunCommandsJob,
     SummaryJob,
@@ -417,7 +416,7 @@ class AudioTranscriber:
         store_dir: Path,
         dry_run: bool,
     ) -> list[TranscribeBundleJob]:
-        """Gather bundle creation, deletion, and transcription jobs."""
+        """Gather bundle creation and transcription jobs."""
         if not bundle.source_audios:
             return []
 
@@ -427,8 +426,6 @@ class AudioTranscriber:
             jobs.append(CreateBundleJob(bundle, dry_run))
         if not bundle.transcript:
             jobs.append(TranscriptionJob(bundle, dry_run))
-        if bundle.audio_source_needs_removal(store_dir):
-            jobs.append(DeleteAudioFileJob(bundle, dry_run))
 
         return jobs
 

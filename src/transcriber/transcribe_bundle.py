@@ -44,7 +44,6 @@ from transcriber.files.text_file import (
 from transcriber.globals import is_handled_audio_file
 from transcriber.logger import logger
 from transcriber.utils import (
-    file_is_in_directory_tree,
     get_days_since_time,
     get_file_modified_date,
 )
@@ -334,8 +333,8 @@ class TranscribeBundle:
         # Redo the bundle only when it holds audio its metadata does not list: that audio
         # is new content (added by hand, or copied back without being listed), which the
         # transcript does not cover yet. Listed audio that is missing must not trigger a
-        # redo. It is the normal state once audio leaves on purpose (retention deletes
-        # it, archiving moves it out of the store), and a sync tool such as Syncthing
+        # redo. It is the normal state once audio leaves on purpose (archiving moves it
+        # out of the store), and a sync tool such as Syncthing
         # applies a removal one file at a time, so another machine can briefly see only
         # part of a bundle's audio gone. A redo then would delete a good transcript,
         # summary and commands and rebuild them from the audio left, losing the rest.
@@ -490,9 +489,8 @@ class TranscribeBundle:
     def find_audio_retention_blocker(self, older_than_days: int) -> AudioRetentionBlocker | None:
         """Return why this bundle's source audio must stay, or None if it may leave.
 
-        This is the one rule for audio leaving a bundle, whether the transcriber
-        deletes it (``delete_source_audio_after_days``) or the archive command moves
-        it out of the store, so the two can never disagree on which audio may leave.
+        This is the rule the archive command applies before moving a bundle's audio
+        out of the store.
 
         Args:
             older_than_days: Audio must be more than this many whole days old.
@@ -511,25 +509,6 @@ class TranscribeBundle:
         if self.get_audio_age_days() <= older_than_days:
             return AudioRetentionBlocker.TOO_RECENT
         return None
-
-    def audio_source_needs_removal(
-        self,
-        store_dir: Path,
-    ) -> bool:
-        """Check whether ``delete_source_audio_after_days`` makes this bundle's audio due for deletion."""
-        removal_after_days = self.config.general.delete_source_audio_after_days
-        if removal_after_days <= 0:
-            return False
-
-        # If any audio file is NOT in the store, we're in an unexpected state, don't remove anything
-        for audio_path in self.source_audios:
-            if not file_is_in_directory_tree(audio_path, store_dir):
-                logger.error(
-                    f"bundle: {self}: audio_source_needs_removal has unexpectedly found an audio file outside of store: {audio_path}",
-                )
-                return False
-
-        return self.find_audio_retention_blocker(removal_after_days) is None
 
     def get_bundle_date(
         self,

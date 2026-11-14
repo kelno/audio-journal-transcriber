@@ -808,7 +808,6 @@ def maintenance_config(store_dir: Path, timezone: ZoneInfo) -> TranscribeConfig:
         general=GeneralConfig(
             input_dir=store_dir,
             store_dir=store_dir,
-            delete_source_audio_after_days=0,
             min_length_seconds=0.0,
             remove_short_files=False,
             timezone=timezone,

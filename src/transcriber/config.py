@@ -16,7 +16,6 @@ class GeneralConfig(BaseModel):
 
     input_dir: Path
     store_dir: Path
-    delete_source_audio_after_days: int  # 0 means disabled
     min_length_seconds: float  # 0 means disabled
     remove_short_files: bool
     timezone: ZoneInfo
@@ -28,7 +27,6 @@ class GeneralConfig(BaseModel):
         """Return a string representation of the GeneralConfig."""
         return (
             f"GeneralConfig(input_dir={self.input_dir}, store_dir={self.store_dir}, "
-            f"delete_source_audio_after_days={self.delete_source_audio_after_days or 'disabled'}, "
             f"min_length_seconds={self.min_length_seconds or 'disabled'}, "
             f"remove_short_files={self.remove_short_files}, "
             f"merge_max_hours={self.merge_max_hours})"

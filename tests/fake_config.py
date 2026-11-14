@@ -13,7 +13,6 @@ def fake_config() -> TranscribeConfig:
         general=GeneralConfig(
             input_dir=Path("/fake/input"),
             store_dir=Path("/fake/store"),
-            delete_source_audio_after_days=0,
             min_length_seconds=0.0,
             remove_short_files=False,
             timezone=ZoneInfo("UTC"),

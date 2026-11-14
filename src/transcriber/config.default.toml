@@ -7,8 +7,6 @@ store_dir = "/data/store"
 min_length_seconds = 10.0
 # Remove audio files that are shorter than min_length_seconds
 remove_short_files = true
-# Remove successfully processed audio files after this delay. The date is either the file modification date or the bundle date, whichever is later. 0 = disabled
-delete_source_audio_after_days = 0
 # Maximum age in hours between two bundles to allow a merge command to target the previous bundle. 0 = disabled
 merge_max_hours = 12.0
 # IANA time zone, to use to interpret filenames dates

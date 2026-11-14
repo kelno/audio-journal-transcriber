@@ -79,7 +79,7 @@ def _move_audio_to_bundle(source: TranscribeBundle, target: TranscribeBundle) ->
 
     """
     target_bundle_dir = target.get_bundle_dir()
-    # Audio the target lists but no longer holds (archived, or removed by retention)
+    # Audio the target lists but no longer holds (archived out of the store)
     # keeps its name, so a copy brought back later is recognised as listed audio.
     target_listed_names = frozenset(audio_meta.filename for audio_meta in target.metadata.audio_files)
 
@@ -133,7 +133,7 @@ def _listed_missing_audio(
 ) -> list[AudioFileMeta]:
     """Return the entries of audio both bundles list but no longer hold, to keep listing in the merged bundle.
 
-    Such audio was archived or removed by retention on purpose. Keeping it listed lets a
+    Such audio was archived on purpose. Keeping it listed lets a
     copy brought back later count as known audio instead of new audio that resets the
     bundle's transcript.
     """

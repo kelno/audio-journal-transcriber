@@ -7,8 +7,6 @@ store_dir = "/path/to/audio-journal"
 min_length_seconds = 10.0
 # Remove recordings rejected by the minimum-duration check.
 remove_short_files = true
-# Remove audio from successfully transcribed bundles after this many days. Use 0 to retain it.
-delete_source_audio_after_days = 0
 # Maximum gap when merging into the previous bundle. Use 0 to disable merging.
 merge_max_hours = 12.0
 # IANA timezone used to interpret recording dates.
