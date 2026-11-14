@@ -678,14 +678,21 @@ def _format_size(size_bytes: int) -> str:
     return f"{size_bytes / 1024**2:.1f} MB"
 
 
+def _bundle_line(label: str, planned: PlannedBundle) -> str:
+    """Return a bundle's report line: its archive folder's name, under the archive directory the report starts with.
+
+    The folder name is the bundle's, or its ID-suffixed form when another bundle already has that name.
+    """
+    count = len(planned.bundle.source_audios)
+    files = "1 file" if count == 1 else f"{count} files"
+    return f"[{label}] {planned.archive_dir.name} ({files}, {_format_size(planned.total_bytes)})"
+
+
 def report_lines(report: ArchiveReport, *, apply: bool) -> list[str]:
     """Return the report: one line per bundle acted on, then a summary ending with what to do next."""
     lines = [f"Archive directory: {report.archive_root}"]
     label = "archived" if apply else "dry-run"
-    lines += [
-        f"[{label}] {planned.bundle_name}: {len(planned.bundle.source_audios)} file(s), {_format_size(planned.total_bytes)} -> {planned.archive_dir}"
-        for planned in (report.archived if apply else report.planned)
-    ]
+    lines += [_bundle_line(label, planned) for planned in (report.archived if apply else report.planned)]
     lines += [f"[note] {note.bundle_name}: {note.message}" for note in report.notes]
     for error in report.errors:
         lines += [f"[error] {error.bundle_name}: {error.message}", f"        next step: {error.next_step}"]

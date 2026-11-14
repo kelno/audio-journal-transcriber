@@ -708,6 +708,24 @@ class TestMain:
         assert "[dry-run] 2026-09-01 10.00 Walk" in log
         assert "[archived] 2026-09-01 10.00 Walk" in log
 
+    def test_bundle_line_names_the_archive_folder_with_its_count_and_size(
+        self,
+        disk_config: TranscribeConfig,
+        store_dir: Path,
+        archive_root: Path,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        """Each line gives the folder's name under the archive directory printed first, then its files and size."""
+        _make_bundle(disk_config, "2026-09-01 10.00 Walk", {"rec.m4a": b"walk audio"})
+        _make_bundle(disk_config, "2026-09-02 11.00 Talk", {"a.m4a": b"a", "b.m4a": b"b"})
+
+        archive.main(_main_args(store_dir, archive_root, "--include-multi-audio"))
+
+        lines = capsys.readouterr().out.splitlines()
+        assert f"Archive directory: {archive_root.resolve()}" in lines
+        assert "[dry-run] 2026-09-01 10.00 Walk (1 file, 0.0 MB)" in lines
+        assert "[dry-run] 2026-09-02 11.00 Talk (2 files, 0.0 MB)" in lines
+
     def test_failed_bundle_exits_1(
         self,
         disk_config: TranscribeConfig,
