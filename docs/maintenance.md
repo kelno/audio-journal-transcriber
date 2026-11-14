@@ -25,6 +25,30 @@ match the configured model. Run the transcriber to regenerate them:
 uv run transcriber
 ```
 
+## Archive old audio outside the store
+
+Move the audio of transcribed bundles to another directory, for example to keep a synchronised store small. Only the audio moves; the transcript, summary and other files stay in the bundle. Preview first:
+
+```bash
+uv run python scripts/archive_source_audio.py --archive-dir /path/to/archive
+```
+
+Then archive:
+
+```bash
+uv run python scripts/archive_source_audio.py --archive-dir /path/to/archive --apply
+```
+
+A bundle's audio is archived when it has a transcript, is not marked `keep_forever`, has had its voice commands extracted and none is still being processed, holds no `_merge_failed.md` and no audio its metadata does not list, and is more than `--older-than-days` whole days old (default 30). The age is counted from the most recent of the bundle's date and its audio files' modification times, the same rule as `delete_source_audio_after_days`.
+
+Each bundle's audio goes to `<archive-dir>/<bundle directory name>/` (with ` ~<first 8 characters of the bundle ID>` added if another bundle already used that name), next to an `archive.json` listing each file's size and SHA-256. Every file is copied, compared with the original, and only then removed from the store, provided it is still the version that was copied: a newer version put in place meanwhile (by a sync tool, for example) is left in the store and reported. The bundle's `_archived_audio.md` lists every archive folder holding its audio, with the same file lists; archiving the bundle again adds to it rather than replacing it.
+
+With `--apply`, each bundle is checked again right before its audio moves, so a bundle marked `keep_forever` or given a voice command while others are being copied keeps its audio. A bundle that fails is reported on an `[error]` line followed by its next step, and the others go on; the command then exits with status 1. A full archive drive stops the run at the first bundle that does not fit. When the transcriber's settings cannot be loaded or the arguments are unusable (for example an archive directory inside the store), the command does nothing and exits with status 2. Running the command again is always safe: the bundle's archive folder is recognised, a file already copied is reused, and a file in the archive with different content is reported with both copies left as they are.
+
+To bring audio back, copy the files listed in `_archived_audio.md` into the bundle directory. A bundle that other bundles were merged into can also hold `_archived_audio_1.md` and so on, one for each of them. Archived audio stays listed in the bundle's `_metadata.md`, through merges too, so a copy brought back counts as the bundle's own audio. Check that each file you bring back is listed under `audio_files` there, and add it if not: audio the metadata does not list makes the transcriber redo the bundle's transcript. Archived audio cannot be transcribed again with a new model until it is brought back.
+
+Bundles holding several recordings are left out unless you add `--include-multi-audio`. Add it only once every transcriber reading this store keeps a bundle's transcript when some of its listed audio is missing. Older versions redo such a bundle from the audio that is left, which can happen when the store is synchronised to another machine and the removal arrives there one file at a time.
+
 ## List bundles by transcript length
 
 List longest transcripts first:

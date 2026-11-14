@@ -73,7 +73,7 @@ store/
     └── _metadata.md
 ```
 
-`transcript.md`, `summary.md`, and `custom_context.md` are intended to remain readable and editable. Files prefixed with `_` hold application state and should normally be left to the transcriber.
+`transcript.md`, `summary.md`, and `custom_context.md` are intended to remain readable and editable. Files prefixed with `_` hold application state and should normally be left to the transcriber. A bundle whose audio was moved out with the [archive utility](maintenance.md) also holds `_archived_audio.md`, listing where the audio went.
 
 `custom_context.md` can be used to provide additional context for this bundle to the summarizer. Changing its content causes the summary to be regenerated on the next processing run.
 

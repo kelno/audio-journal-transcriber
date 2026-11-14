@@ -14,7 +14,7 @@ from transcriber.commands.command import Command
 from transcriber.commands.command_handlers import merge_bundles
 from transcriber.commands.command_resolution import MigratedCommandResolution
 from transcriber.config import TranscribeConfig
-from transcriber.constants import MERGE_FAILED_FILENAME, MULTIPLE_TRANSCRIPTS_SEPARATOR, TRANSCRIPT_FILENAME
+from transcriber.constants import ARCHIVED_AUDIO_FILENAME, MERGE_FAILED_FILENAME, MULTIPLE_TRANSCRIPTS_SEPARATOR, TRANSCRIPT_FILENAME
 from transcriber.exception import MergeBlockedException
 from transcriber.transcribe_bundle import TranscribeBundle
 
@@ -394,6 +394,42 @@ class TestMergeActionExecutor:
 
         assert restored_bundle.transcript is not None
         assert fake_fs.file_exists(target_dir / TRANSCRIPT_FILENAME)
+
+    def test_merge_keeps_both_archived_audio_records(
+        self,
+        fake_config: TranscribeConfig,
+        fake_fs: FakeFileSystemService,
+        transcribe_bundle_factory: TranscribeBundleFactory,
+    ) -> None:
+        """Each bundle's record of where its archived audio went survives a merge, under a collision-safe name."""
+        previous_bundle = transcribe_bundle_factory(
+            bundle_name="2025-01-15_previous",
+            audio_filename="Recording 20250115080000.mp3",
+            bundle_date=datetime(2025, 1, 15, 8, tzinfo=fake_config.general.timezone),
+        )
+        current_bundle = transcribe_bundle_factory(
+            bundle_name="2025-01-15_current",
+            audio_filename="Recording 20250115090000.mp3",
+            bundle_date=datetime(2025, 1, 15, 9, tzinfo=fake_config.general.timezone),
+            commands=["merge"],
+        )
+        assert current_bundle.commands is not None
+
+        target_dir = previous_bundle.get_bundle_dir()
+        source_dir = current_bundle.get_bundle_dir()
+        fake_fs.write_file(target_dir / ARCHIVED_AUDIO_FILENAME, "previous bundle's archive")
+        fake_fs.write_file(source_dir / ARCHIVED_AUDIO_FILENAME, "current bundle's archive")
+
+        _execute_previous_merge(
+            current_bundle,
+            fake_config,
+            _bundle_cache(previous_bundle, current_bundle),
+            current_bundle.commands.commands[0],
+        )
+
+        archived_audio = Path(ARCHIVED_AUDIO_FILENAME)
+        assert fake_fs.read_file(target_dir / archived_audio) == "previous bundle's archive"
+        assert fake_fs.read_file(target_dir / f"{archived_audio.stem}_1{archived_audio.suffix}") == "current bundle's archive"
 
     def test_merge_moves_directory_trees_and_renames_collisions(
         self,

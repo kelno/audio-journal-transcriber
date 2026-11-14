@@ -11,6 +11,24 @@ from transcriber.exception import InvalidMetadataFileException
 from transcriber.files.file_system import FileSystemService
 
 
+def extract_frontmatter(text: str) -> str | None:
+    """Return the YAML frontmatter of a Markdown text.
+
+    Args:
+        text: The full text, starting with a ``---`` line when it has frontmatter.
+
+    Returns:
+        str | None: The frontmatter YAML if found, None otherwise.
+
+    """
+    if text.startswith("---"):
+        parts = text.split("---", 2)
+        if len(parts) >= 2:
+            _, front, _body = parts
+            return front.strip()
+    return None
+
+
 class AudioFileMeta(BaseModel):
     """Metadata for a single source audio file within a bundle.
 
@@ -49,24 +67,6 @@ class Metadata(BaseModel):
 
 
 class MetadataFile(Metadata):
-    @staticmethod
-    def _extract_frontmatter(text: str) -> str | None:
-        """Split text into frontmatter YAML and body text.
-
-        Args:
-            text: The full text to extract frontmatter from.
-
-        Returns:
-            str | None: The frontmatter YAML if found, None otherwise.
-
-        """
-        if text.startswith("---"):
-            parts = text.split("---", 2)
-            if len(parts) >= 2:
-                _, front, _body = parts
-                return front.strip()
-        return None
-
     @classmethod
     def from_file(
         cls,
@@ -87,7 +87,7 @@ class MetadataFile(Metadata):
 
         """
         text = fs_service.read_file(meta_file)
-        if frontmatter := cls._extract_frontmatter(text):
+        if frontmatter := extract_frontmatter(text):
             data = yaml.safe_load(frontmatter)
         else:
             raise InvalidMetadataFileException(

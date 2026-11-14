@@ -5,6 +5,12 @@ METADATA_FILENAME = "_metadata.md"
 MERGE_FAILED_FILENAME = "_merge_failed.md"
 DELETED_DIR_NAME = "_deleted"
 
+# Written by scripts/archive_source_audio.py when it moves a bundle's audio to an
+# archive outside the store: where the audio went and how to check it. It is not a
+# managed file, so a merge carries it along like a user-added attachment, under a
+# collision-safe name (_archived_audio_1.md) when the target already has one.
+ARCHIVED_AUDIO_FILENAME = "_archived_audio.md"
+
 # Per-bundle optional context the user can write to help the summary process.
 # Lines starting with the markdown comment marker below are ignored when the
 # effective context is computed, so the pregenerated header never triggers a

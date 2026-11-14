@@ -659,6 +659,10 @@ class TranscribeBundle:
         """Get the bundle directory path."""
         return self.config.general.store_dir / self.bundle_name
 
+    def make_id_suffixed_name(self, preferred_name: str) -> str:
+        """Return the form of a directory name used when the plain name is taken by another bundle."""
+        return f"{preferred_name} ~{self.bundle_id[:8]}"
+
     def _get_available_bundle_name(self, preferred_name: str, owned_dir: Path | None) -> str:
         """Return a readable, collision-free directory name for this bundle.
 
@@ -677,7 +681,7 @@ class TranscribeBundle:
         if preferred_dir == owned_dir or not self.fs_service.directory_exists(preferred_dir):
             return preferred_name
 
-        unique_name = f"{preferred_name} ~{self.bundle_id[:8]}"
+        unique_name = self.make_id_suffixed_name(preferred_name)
         unique_dir = self.config.general.store_dir / unique_name
         if unique_dir == owned_dir or not self.fs_service.directory_exists(unique_dir):
             return unique_name
