@@ -1,6 +1,7 @@
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
+from enum import StrEnum
 from hashlib import sha256
 from pathlib import Path
 from typing import override
@@ -51,6 +52,15 @@ from transcriber.utils import (
 type BundleCache = dict[BundleId, "TranscribeBundle"]
 
 BUNDLE_NAME_PREFIX_FORMAT = "%Y-%m-%d %H.%M"
+
+
+class AudioRetentionBlocker(StrEnum):
+    """Why a bundle's source audio must stay in the bundle for now."""
+
+    NO_AUDIO = "no audio left"
+    NO_TRANSCRIPT = "no transcript yet"
+    KEEP_FOREVER = "marked keep forever"
+    TOO_RECENT = "too recent"
 
 
 @dataclass(eq=False)
@@ -452,57 +462,67 @@ class TranscribeBundle:
         prefix = cls.generate_bundle_name_prefix(bundle_date)
         return f"{prefix}_{Path(audio_filename).stem}"
 
+    def get_audio_age_days(self) -> int:
+        """Return the whole days since this bundle last gained audio.
+
+        That is the most recent of the canonical bundle date and each source audio
+        file's modification time, so audio merged in recently keeps an old bundle
+        recent. A file whose time cannot be read counts as modified now.
+
+        Returns:
+            Whole days elapsed since that most recent moment.
+
+        Raises:
+            FileNotFoundError: If the bundle has no source audio.
+
+        """
+        tz = self.config.general.timezone
+        audio_dates = [get_file_modified_date(audio_path, tz, self.fs_service) for audio_path in self.assert_source_audios()]
+        return get_days_since_time(max([self.get_bundle_date(), *audio_dates]))
+
+    def find_audio_retention_blocker(self, older_than_days: int) -> AudioRetentionBlocker | None:
+        """Return why this bundle's source audio must stay, or None if it may leave.
+
+        This is the one rule for audio leaving a bundle, whether the transcriber
+        deletes it (``delete_source_audio_after_days``) or the archive command moves
+        it out of the store, so the two can never disagree on which audio may leave.
+
+        Args:
+            older_than_days: Audio must be more than this many whole days old.
+
+        Returns:
+            The first condition that keeps the audio, or None.
+
+        """
+        if not self.source_audios:
+            return AudioRetentionBlocker.NO_AUDIO
+        # The audio is the only source of the transcript until the transcript exists.
+        if not self.transcript:
+            return AudioRetentionBlocker.NO_TRANSCRIPT
+        if self.metadata.keep_forever:
+            return AudioRetentionBlocker.KEEP_FOREVER
+        if self.get_audio_age_days() <= older_than_days:
+            return AudioRetentionBlocker.TOO_RECENT
+        return None
+
     def audio_source_needs_removal(
         self,
         store_dir: Path,
     ) -> bool:
-        """Check if the bundle audio file can be removed.
-
-        Won't remove files if the transcript does not exists.
-        The date is either the latest audio file modification date or the bundle date, whichever is latest.
-        """
-        # We never want to remove the audio file if the transcript is not yet created
-        if not self.transcript:
+        """Check whether ``delete_source_audio_after_days`` makes this bundle's audio due for deletion."""
+        removal_after_days = self.config.general.delete_source_audio_after_days
+        if removal_after_days <= 0:
             return False
 
-        # Bundle is explicitely marked as "keep audio forever"
-        if self.metadata.keep_forever:
-            return False
-
-        # No audios to delete or removal is disabled in configuration
-        if not self.source_audios or self.config.general.delete_source_audio_after_days <= 0:
-            return False
-
-        bundle_date = self.get_date_from_bundle_name()
-        bundle_days_since = get_days_since_time(bundle_date)
-        file_days_since = 0
-
-        # Check all files, use the most recent one (max days_since)
-        tz = self.config.general.timezone
+        # If any audio file is NOT in the store, we're in an unexpected state, don't remove anything
         for audio_path in self.source_audios:
-            # if any audio file is NOT in the store, we're in an unexpected state, don't remove anything
             if not file_is_in_directory_tree(audio_path, store_dir):
                 logger.error(
                     f"bundle: {self}: audio_source_needs_removal has unexpectedly found an audio file outside of store: {audio_path}",
                 )
                 return False
 
-            file_date = get_file_modified_date(audio_path, tz, self.fs_service)
-            file_days_since_current = get_days_since_time(file_date)
-            file_days_since = min(file_days_since, file_days_since_current)
-
-        days_since = min(bundle_days_since, file_days_since)
-        return days_since > self.config.general.delete_source_audio_after_days
-
-    def get_date_from_bundle_name(
-        self,
-    ) -> datetime:
-        """Extract date from the bundle name."""
-        # Date is in format %Y-%m-%d at the start of the bundle name
-        date_str = self.bundle_name[0:10]
-        return datetime.strptime(date_str, "%Y-%m-%d").replace(
-            tzinfo=self.config.general.timezone,
-        )
+        return self.find_audio_retention_blocker(removal_after_days) is None
 
     def get_bundle_date(
         self,
