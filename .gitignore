@@ -4,3 +4,6 @@ __pycache__/
 config.custom.toml
 *.egg-info
 run_podman.sh
+
+# Left by `uv tool install .` (setuptools builds in place)
+/build/
