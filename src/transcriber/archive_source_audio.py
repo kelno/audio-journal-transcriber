@@ -7,18 +7,20 @@ every archive folder holding its audio. Every file is copied, checked against th
 original by SHA-256, and only then removed from the store, provided it is still the
 version that was copied.
 
-By default this script only reports what it would do; pass ``--apply`` to do it.
+By default this command only reports what it would do; pass ``--apply`` to do it.
 Running it again after an interruption or a failure finishes the job: the bundle's
 archive folder is recognised, a verified copy already there is reused, and nothing
 is overwritten.
 
-The store and the time zone come from the transcriber's settings, read from
-``config.custom.toml`` in the current folder and ``TRANSCRIBER_*`` environment
-variables, so run it from the folder holding the transcriber's ``config.custom.toml``.
+It is meant to run unattended from a scheduler (a systemd timer, Windows Task
+Scheduler), so it takes everything it needs as arguments and reads none of the
+transcriber's settings: it never calls the transcription or text APIs. It can append
+each run's report to a log file, and its exit status says how the run went
+(``EXIT_*`` below), for the scheduler or a wrapper to act on.
 
 Usage:
-    uv run python scripts/archive_source_audio.py --archive-dir /path/to/archive
-    uv run python scripts/archive_source_audio.py --archive-dir /path/to/archive --apply
+    transcriber-archive-audio --store-dir STORE --archive-dir ARCHIVE --timezone Europe/Brussels
+    transcriber-archive-audio --store-dir STORE --archive-dir ARCHIVE --timezone Europe/Brussels --apply --log-file LOG
 """
 
 from __future__ import annotations
@@ -37,12 +39,13 @@ from datetime import datetime
 from enum import StrEnum
 from pathlib import Path
 from typing import TYPE_CHECKING
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import pydantic
 import yaml
 
 from transcriber.audio_service import RealAudioService
-from transcriber.config import TranscribeConfig
+from transcriber.config import AudioConfig, GeneralConfig, TextConfig, TranscribeConfig
 from transcriber.constants import ARCHIVED_AUDIO_FILENAME, MERGE_FAILED_FILENAME
 from transcriber.exception import AudioTranscriberException
 from transcriber.files import metadata
@@ -50,7 +53,7 @@ from transcriber.files.file_system import RealFileSystemService
 from transcriber.transcribe_bundle import AudioRetentionBlocker, TranscribeBundle
 
 if TYPE_CHECKING:
-    from zoneinfo import ZoneInfo
+    from collections.abc import Iterable
 
 DEFAULT_OLDER_THAN_DAYS = 30
 ARCHIVE_RECORD_FILENAME = "archive.json"
@@ -62,8 +65,11 @@ COPY_CHUNK_BYTES = 1024 * 1024
 MULTI_AUDIO_FLAG = "--include-multi-audio"
 # PyYAML folds values longer than its line width; paths must stay on one line to be read and searched.
 YAML_NO_FOLD_WIDTH = 1_000_000
+EXIT_DONE = 0
+# Some bundles failed, each reported with its next step; the others were archived. An
+# unexpected crash also exits with 1, Python's own status for an uncaught exception.
 EXIT_BUNDLE_FAILED = 1
-# Nothing was done: the settings or the arguments are unusable (argparse uses 2 for its own errors too).
+# Nothing was done: the arguments are unusable (argparse uses 2 for its own errors too).
 EXIT_NOT_STARTED = 2
 
 
@@ -672,56 +678,89 @@ def _format_size(size_bytes: int) -> str:
     return f"{size_bytes / 1024**2:.1f} MB"
 
 
-def print_report(report: ArchiveReport, *, apply: bool) -> None:
-    """Print one line per bundle acted on, then a summary ending with what to do next."""
-    print(f"Archive directory: {report.archive_root}")
+def report_lines(report: ArchiveReport, *, apply: bool) -> list[str]:
+    """Return the report: one line per bundle acted on, then a summary ending with what to do next."""
+    lines = [f"Archive directory: {report.archive_root}"]
     label = "archived" if apply else "dry-run"
-    for planned in report.archived if apply else report.planned:
-        print(
-            f"[{label}] {planned.bundle_name}: {len(planned.bundle.source_audios)} file(s), {_format_size(planned.total_bytes)} -> {planned.archive_dir}",
-        )
-    for note in report.notes:
-        print(f"[note] {note.bundle_name}: {note.message}")
+    lines += [
+        f"[{label}] {planned.bundle_name}: {len(planned.bundle.source_audios)} file(s), {_format_size(planned.total_bytes)} -> {planned.archive_dir}"
+        for planned in (report.archived if apply else report.planned)
+    ]
+    lines += [f"[note] {note.bundle_name}: {note.message}" for note in report.notes]
     for error in report.errors:
-        print(f"[error] {error.bundle_name}: {error.message}")
-        print(f"        next step: {error.next_step}")
+        lines += [f"[error] {error.bundle_name}: {error.message}", f"        next step: {error.next_step}"]
     if report.stopped_early:
-        print(f"\n{report.stopped_early}")
+        lines.append(report.stopped_early)
 
     if report.skipped:
         counts = ", ".join(f"{count} {reason}" for reason, count in report.skipped.most_common())
-        print(f"\nKept their audio: {counts}.")
+        lines.append(f"Kept their audio: {counts}.")
     if report.skipped[SkipReason.SEVERAL_RECORDINGS]:
-        print(
+        lines.append(
             f"Bundles with several recordings were left out; add {MULTI_AUDIO_FLAG} once every transcriber "
             "watching this store keeps transcripts when listed audio is missing (see docs/maintenance.md).",
         )
 
     if apply:
         size = _format_size(sum(planned.total_bytes for planned in report.archived))
-        print(f"\nArchived the audio of {len(report.archived)} bundle(s), {size}, into {report.archive_root}.")
+        lines.append(f"Archived the audio of {len(report.archived)} bundle(s), {size}, into {report.archive_root}.")
     elif report.planned:
         size = _format_size(sum(planned.total_bytes for planned in report.planned))
-        print(
-            f"\nDry run: nothing was copied or removed. {len(report.planned)} bundle(s), {size}, would be archived; add --apply to do it.",
+        lines.append(
+            f"Dry run: nothing was copied or removed. {len(report.planned)} bundle(s), {size}, would be archived; add --apply to do it.",
         )
     else:
-        print("\nDry run: nothing to archive.")
+        lines.append("Dry run: nothing to archive.")
     if report.errors:
-        print(
+        lines.append(
             f"{len(report.errors)} bundle(s) failed; each [error] line is followed by its next step. "
             "Running again is safe: what is already in the archive is reused, never overwritten.",
         )
+    return lines
+
+
+def print_report(report: ArchiveReport, *, apply: bool) -> None:
+    """Print the report returned by ``report_lines``."""
+    for line in report_lines(report, apply=apply):
+        print(line)
+
+
+def _append_to_log(log_file: Path, header: str, lines: Iterable[str]) -> None:
+    """Add one run's lines to the log, under a header naming the run, creating the file if needed."""
+    log_file.parent.mkdir(parents=True, exist_ok=True)
+    with log_file.open("a", encoding="utf-8") as log:
+        log.write(f"=== {header}\n")
+        log.writelines(f"{line}\n" for line in lines)
+
+
+def _time_zone(name: str) -> ZoneInfo:
+    """Return the time zone an IANA name such as ``Europe/Brussels`` names, for argparse."""
+    try:
+        return ZoneInfo(name)
+    except (ZoneInfoNotFoundError, ValueError) as error:
+        msg = f"unknown time zone {name!r}; use an IANA name such as Europe/Brussels"
+        raise argparse.ArgumentTypeError(msg) from error
 
 
 def build_parser() -> argparse.ArgumentParser:
     """Return the command-line parser."""
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser = argparse.ArgumentParser(
+        prog="transcriber-archive-audio",
+        description=__doc__,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    parser.add_argument("--store-dir", type=Path, required=True, help="Bundle store directory.")
     parser.add_argument(
         "--archive-dir",
         type=Path,
         required=True,
         help="Directory receiving one folder per archived bundle. Must be outside the store.",
+    )
+    parser.add_argument(
+        "--timezone",
+        type=_time_zone,
+        required=True,
+        help="Time zone of the recordings, as an IANA name such as Europe/Brussels: the transcriber's general.timezone.",
     )
     parser.add_argument(
         "--older-than-days",
@@ -736,25 +775,50 @@ def build_parser() -> argparse.ArgumentParser:
         "keeps transcripts when listed audio is missing.",
     )
     parser.add_argument(
-        "--store-dir",
+        "--log-file",
         type=Path,
         default=None,
-        help="Bundle store directory. Defaults to general.store_dir.",
+        help="Also append each run's report to this file, under a line giving the run's time, mode and exit status.",
     )
     parser.add_argument(
         "--apply",
         action="store_true",
-        help="Copy, verify and remove the audio. Without this flag the script is a dry run.",
+        help="Copy, verify and remove the audio. Without this flag the command is a dry run.",
     )
     return parser
+
+
+def maintenance_config(store_dir: Path, timezone: ZoneInfo) -> TranscribeConfig:
+    """Return the configuration bundles are loaded with, built from this command's arguments alone.
+
+    Loading and moving bundle files uses only the store and the time zone. The other
+    general settings are fixed to their neutral values, and the API sections hold
+    placeholders: this command never calls the transcription or text APIs, so it needs
+    none of the transcriber's settings or keys.
+    """
+    unused = "unused by the archive command"
+    return TranscribeConfig(
+        general=GeneralConfig(
+            input_dir=store_dir,
+            store_dir=store_dir,
+            delete_source_audio_after_days=0,
+            min_length_seconds=0.0,
+            remove_short_files=False,
+            timezone=timezone,
+            safe_delete=True,
+            merge_max_hours=0.0,
+        ),
+        text=TextConfig(summary_enabled=False, api_base_url=unused, model=unused, api_key=unused),
+        audio=AudioConfig(api_base_url=unused, model=unused, api_key=unused, stream=False),
+    )
 
 
 def _escape_unencodable_output() -> None:
     """Print characters the output's encoding lacks as escapes instead of failing.
 
-    On Windows, output to a pipe (as when an agent runs this script) is often cp1252,
-    while bundle titles may hold any character; a failed print would cut the report
-    off after the audio has already moved.
+    On Windows, output to a pipe (as when a scheduler or an agent runs this command) is
+    often cp1252, while bundle titles may hold any character; a failed print would cut
+    the report off after the audio has already moved.
     """
     for stream in (sys.stdout, sys.stderr):
         if isinstance(stream, io.TextIOWrapper):
@@ -762,39 +826,41 @@ def _escape_unencodable_output() -> None:
 
 
 def main(argv: list[str] | None = None) -> int:
-    """Run the source audio archiving CLI.
+    """Run the source audio archiving command.
 
     Returns:
-        0 when every planned bundle succeeded, 1 when any bundle failed, 2 when nothing
-        was done because the transcriber's settings or the arguments are unusable.
+        ``EXIT_DONE`` when every planned bundle succeeded, ``EXIT_BUNDLE_FAILED`` when
+        any bundle failed, ``EXIT_NOT_STARTED`` when nothing was done because the
+        arguments are unusable.
 
     """
     _escape_unencodable_output()
     args = build_parser().parse_args(argv)
-    try:
-        config = TranscribeConfig()  # pyright: ignore[reportCallIssue]
-    except pydantic.ValidationError as error:
-        print(
-            f"Could not load the transcriber's settings:\n{error}\n"
-            "They are read from config.custom.toml in the current folder and from TRANSCRIBER_* environment "
-            "variables; run this script from the folder holding the transcriber's config.custom.toml.",
-            file=sys.stderr,
-        )
-        return EXIT_NOT_STARTED
+    started = datetime.now(args.timezone).isoformat(timespec="seconds")
+    mode = "apply" if args.apply else "dry run"
     try:
         report = archive_source_audio(
-            args.store_dir or config.general.store_dir,
+            args.store_dir,
             args.archive_dir,
             older_than_days=args.older_than_days,
             include_multi_audio=args.include_multi_audio,
             apply=args.apply,
-            config=config,
+            config=maintenance_config(args.store_dir, args.timezone),
         )
     except InvalidArgumentsError as error:
-        print(f"Nothing was done: {error}", file=sys.stderr)
+        message = f"Nothing was done: {error}"
+        print(message, file=sys.stderr)
+        if args.log_file:
+            _append_to_log(args.log_file, f"{started} {mode}: exit {EXIT_NOT_STARTED}", [message])
         return EXIT_NOT_STARTED
-    print_report(report, apply=args.apply)
-    return EXIT_BUNDLE_FAILED if report.errors else 0
+
+    lines = report_lines(report, apply=args.apply)
+    for line in lines:
+        print(line)
+    exit_status = EXIT_BUNDLE_FAILED if report.errors else EXIT_DONE
+    if args.log_file:
+        _append_to_log(args.log_file, f"{started} {mode}: exit {exit_status}", lines)
+    return exit_status
 
 
 if __name__ == "__main__":

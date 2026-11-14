@@ -13,12 +13,13 @@ import sys
 from dataclasses import asdict
 from datetime import datetime, timedelta
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 import pydantic
 import pytest
 import yaml
 
-from scripts import archive_source_audio as archive
+from transcriber import archive_source_audio as archive
 from transcriber.bundle_id import BundleId, new_bundle_id
 from transcriber.bundle_title import BundleTitleState
 from transcriber.commands.command_resolution import MigratedCommandResolution
@@ -635,9 +636,11 @@ class TestArguments:
             )
 
     def test_parser_defaults_to_a_dry_run(self) -> None:
-        """Only --archive-dir is required, and nothing is changed unless --apply is given."""
-        args = archive.build_parser().parse_args(["--archive-dir", "somewhere"])
+        """Only the store, archive and time zone are required, and nothing is changed unless --apply is given."""
+        args = archive.build_parser().parse_args(["--store-dir", "store", "--archive-dir", "somewhere", "--timezone", "Europe/Brussels"])
 
+        assert args.timezone == ZoneInfo("Europe/Brussels")
+        assert args.log_file is None
         assert args.apply is False
         assert args.include_multi_audio is False
         assert args.older_than_days == archive.DEFAULT_OLDER_THAN_DAYS
@@ -658,37 +661,65 @@ class TestArguments:
         assert entry.archive_dir == str(tmp_path / "relative archive" / "2026-09-01 10.00 Walk")
 
 
-# What main() needs besides config.default.toml, which these tests supply instead of a config.custom.toml.
-SETTINGS_ENV = {
-    "TRANSCRIBER_TEXT__API_BASE_URL": "http://localhost",
-    "TRANSCRIBER_TEXT__API_KEY": "unused",
-    "TRANSCRIBER_TEXT__MODEL": "unused",
-    "TRANSCRIBER_AUDIO__API_BASE_URL": "http://localhost",
-    "TRANSCRIBER_AUDIO__API_KEY": "unused",
-    "TRANSCRIBER_AUDIO__MODEL": "unused",
-    "TRANSCRIBER_AUDIO__STREAM": "false",
-}
-
-
-@pytest.fixture
-def no_settings_file(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    """Run from a folder holding no config.custom.toml, with no settings in the environment."""
-    monkeypatch.chdir(tmp_path)
-    for name in SETTINGS_ENV:
-        monkeypatch.delenv(name, raising=False)
-
-
-@pytest.fixture
-def settings_env(no_settings_file: None, monkeypatch: pytest.MonkeyPatch) -> None:  # noqa: ARG001 - ordering: clear, then set
-    """Provide main()'s settings through environment variables."""
-    for name, value in SETTINGS_ENV.items():
-        monkeypatch.setenv(name, value)
+def _main_args(store_dir: Path, archive_root: Path, *extra: str) -> list[str]:
+    """Return the command line a scheduler would use, with the given extra arguments."""
+    return ["--store-dir", str(store_dir), "--archive-dir", str(archive_root), "--timezone", "Europe/Brussels", *extra]
 
 
 class TestMain:
-    """The command line: what it prints and its exit status."""
+    """The installed command: it needs only its arguments, and reports by output, log file and exit status."""
 
-    @pytest.mark.usefixtures("settings_env")
+    def test_runs_from_its_arguments_alone(
+        self,
+        disk_config: TranscribeConfig,
+        store_dir: Path,
+        archive_root: Path,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """No config.custom.toml and no TRANSCRIBER_* settings are needed, as in a scheduler's empty environment."""
+        bundle_dir = _make_bundle(disk_config, "2026-09-01 10.00 Walk", {"rec.m4a": b"walk audio"})
+        monkeypatch.chdir(tmp_path)
+        for name in [name for name in os.environ if name.startswith("TRANSCRIBER_")]:
+            monkeypatch.delenv(name)
+
+        exit_code = archive.main(_main_args(store_dir, archive_root, "--apply"))
+
+        assert exit_code == archive.EXIT_DONE
+        assert not (bundle_dir / "rec.m4a").exists()
+
+    def test_each_run_is_appended_to_the_log_file(
+        self,
+        disk_config: TranscribeConfig,
+        store_dir: Path,
+        archive_root: Path,
+        tmp_path: Path,
+    ) -> None:
+        """Every run adds its report under a header with its time, mode and exit status."""
+        _make_bundle(disk_config, "2026-09-01 10.00 Walk", {"rec.m4a": b"walk audio"})
+        log_file = tmp_path / "logs" / "archive.log"
+
+        archive.main(_main_args(store_dir, archive_root, "--log-file", str(log_file)))
+        archive.main(_main_args(store_dir, archive_root, "--log-file", str(log_file), "--apply"))
+
+        log = log_file.read_text(encoding="utf-8")
+        headers = [line for line in log.splitlines() if line.startswith("=== ")]
+        assert [header.split(" ", 2)[2] for header in headers] == ["dry run: exit 0", "apply: exit 0"]
+        assert "[dry-run] 2026-09-01 10.00 Walk" in log
+        assert "[archived] 2026-09-01 10.00 Walk" in log
+
+    def test_failed_bundle_exits_1(
+        self,
+        disk_config: TranscribeConfig,
+        store_dir: Path,
+        archive_root: Path,
+    ) -> None:
+        """A bundle that could not be archived makes the run's exit status 1, for the scheduler to report."""
+        bundle_dir = _make_bundle(disk_config, "2026-09-01 10.00 Walk", {"rec.m4a": b"walk audio"})
+        (bundle_dir / ARCHIVED_AUDIO_FILENAME).write_text("---\nwritten: by hand\n---\n", encoding="utf-8")
+
+        assert archive.main(_main_args(store_dir, archive_root, "--apply")) == archive.EXIT_BUNDLE_FAILED
+
     def test_bundle_name_the_output_encoding_lacks_is_escaped(
         self,
         disk_config: TranscribeConfig,
@@ -702,33 +733,34 @@ class TestMain:
         cp1252_stdout = io.TextIOWrapper(output, encoding="cp1252")
         monkeypatch.setattr(sys, "stdout", cp1252_stdout)
 
-        exit_code = archive.main(["--store-dir", str(store_dir), "--archive-dir", str(archive_root), "--apply"])
+        exit_code = archive.main(_main_args(store_dir, archive_root, "--apply"))
         cp1252_stdout.flush()
 
-        assert exit_code == 0
+        assert exit_code == archive.EXIT_DONE
         assert "[archived] 2026-09-01 10.00 Plan A \\u2192 B" in output.getvalue().decode("cp1252")
 
-    @pytest.mark.usefixtures("settings_env")
-    def test_archive_inside_the_store_does_nothing_and_exits_2(
+    def test_archive_inside_the_store_does_nothing_exits_2_and_is_logged(
         self,
         store_dir: Path,
+        tmp_path: Path,
         capsys: pytest.CaptureFixture[str],
     ) -> None:
         """Unusable arguments get a message and the not-started status, not a traceback and the bundle-failed one."""
-        exit_code = archive.main(["--store-dir", str(store_dir), "--archive-dir", str(store_dir / "_archive")])
+        log_file = tmp_path / "archive.log"
+
+        exit_code = archive.main(_main_args(store_dir, store_dir / "_archive", "--log-file", str(log_file)))
 
         assert exit_code == archive.EXIT_NOT_STARTED
         assert "Nothing was done: The archive directory" in capsys.readouterr().err
+        assert "exit 2" in log_file.read_text(encoding="utf-8")
 
-    @pytest.mark.usefixtures("no_settings_file")
-    def test_missing_settings_do_nothing_and_exit_2(
+    def test_unknown_time_zone_is_refused(
         self,
         store_dir: Path,
         archive_root: Path,
-        capsys: pytest.CaptureFixture[str],
     ) -> None:
-        """Without the transcriber's settings, the message says where they are read from."""
-        exit_code = archive.main(["--store-dir", str(store_dir), "--archive-dir", str(archive_root)])
+        """A time zone name that does not exist stops the command before it looks at any bundle."""
+        with pytest.raises(SystemExit) as stopped:
+            archive.main(["--store-dir", str(store_dir), "--archive-dir", str(archive_root), "--timezone", "Europe/Atlantis"])
 
-        assert exit_code == archive.EXIT_NOT_STARTED
-        assert "config.custom.toml" in capsys.readouterr().err
+        assert stopped.value.code == archive.EXIT_NOT_STARTED

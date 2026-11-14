@@ -25,6 +25,8 @@ dependencies = [
 [project.scripts]
 # This creates a console command
 transcriber = "transcriber.cli:main"
+# Moves old transcribed audio out of the store; meant for a scheduler, see docs/maintenance.md
+transcriber-archive-audio = "transcriber.archive_source_audio:main"
 
 [tool.uv]
 package = true
