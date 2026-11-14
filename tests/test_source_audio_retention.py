@@ -10,11 +10,15 @@ from pathlib import Path
 
 import pytest
 
+from tests.fake_ai_manager import FakeAIManager
 from tests.fake_audio_service import FakeAudioService
+from transcriber.audio_transcriber import AudioTranscriber
 from transcriber.bundle_id import new_bundle_id
 from transcriber.bundle_title import BundleTitleState
+from transcriber.commands.command_resolution import MigratedCommandResolution
 from transcriber.config import TranscribeConfig
-from transcriber.constants import TRANSCRIPT_FILENAME
+from transcriber.constants import DELETED_DIR_NAME, SUMMARY_FILENAME, TRANSCRIPT_FILENAME
+from transcriber.files.commands_file import CommandsFile
 from transcriber.files.file_system import RealFileSystemService
 from transcriber.files.metadata import AudioFileMeta, MetadataFile
 from transcriber.transcribe_bundle import AudioRetentionBlocker, TranscribeBundle
@@ -141,3 +145,94 @@ class TestAudioSourceNeedsRemoval:
         bundle = _write_bundle(config, listed_audio=["a.m4a"], present_audio=["a.m4a"], bundle_age_days=400)
 
         assert not bundle.audio_source_needs_removal(config.general.store_dir)
+
+
+class TestMissingAudioKeepsTranscript:
+    """Audio that left a bundle (retention or archiving) must not cost the bundle its transcript."""
+
+    def test_some_listed_audio_missing_keeps_transcript(self, disk_config: TranscribeConfig) -> None:
+        """A bundle whose listed audio is only partly present keeps its transcript.
+
+        This is the state another machine sees while a synchronisation tool applies
+        the removal of a multi-recording bundle's audio one file at a time.
+        """
+        bundle = _write_bundle(
+            disk_config,
+            listed_audio=["a.m4a", "b.m4a"],
+            present_audio=["a.m4a"],
+            bundle_age_days=40,
+        )
+
+        bundle.cleanup_inconsistencies(dry_run=False)
+
+        assert bundle.transcript is not None
+        assert (bundle.get_bundle_dir() / TRANSCRIPT_FILENAME).is_file()
+
+    def test_unlisted_audio_still_refreshes_bundle(self, disk_config: TranscribeConfig) -> None:
+        """Audio the metadata does not list is new content, so the transcript is redone."""
+        bundle = _write_bundle(
+            disk_config,
+            listed_audio=["a.m4a"],
+            present_audio=["a.m4a", "b.m4a"],
+            bundle_age_days=40,
+        )
+
+        bundle.cleanup_inconsistencies(dry_run=False)
+
+        assert bundle.transcript is None
+        assert not (bundle.get_bundle_dir() / TRANSCRIPT_FILENAME).exists()
+        assert (disk_config.general.store_dir / DELETED_DIR_NAME / bundle.bundle_name / TRANSCRIPT_FILENAME).is_file()
+
+
+def _finish_processing(bundle: TranscribeBundle) -> None:
+    """Write what a fully processed bundle holds besides its transcript: summary, context hash, handled commands."""
+    bundle_dir = bundle.get_bundle_dir()
+    (bundle_dir / SUMMARY_FILENAME).write_text("summary text", encoding="utf-8")
+    bundle.init_custom_context()
+    commands = CommandsFile.from_command_list(["merge with previous"])
+    for command in commands.commands:
+        command.resolution = MigratedCommandResolution()
+    commands.write(bundle_dir, bundle.fs_service)
+
+
+class TestArchivedBundleGetsNoJobs:
+    """The transcriber's reaction to a bundle whose audio left the store: nothing redoes it."""
+
+    @pytest.mark.parametrize("present_audio", [[], ["b.m4a"]], ids=["all audio gone", "half the audio gone"])
+    def test_no_job_after_the_cleanup_pass(
+        self,
+        disk_config: TranscribeConfig,
+        fake_ai_manager: FakeAIManager,
+        present_audio: list[str],
+    ) -> None:
+        """After the load-and-clean pass the daemon runs, the bundle gets no job and keeps its transcript.
+
+        "Half the audio gone" is what another machine sees while a sync tool applies
+        the removal of a multi-recording bundle's audio one file at a time.
+        """
+        general = disk_config.general.model_copy(update={"delete_source_audio_after_days": 0})
+        config = disk_config.model_copy(update={"general": general})
+        store_dir = config.general.store_dir
+        _finish_processing(_write_bundle(config, listed_audio=["a.m4a", "b.m4a"], present_audio=present_audio, bundle_age_days=40))
+        fs_service = RealFileSystemService(config)
+        transcriber = AudioTranscriber(
+            dry_run=True,
+            ai_manager=fake_ai_manager,
+            config=config,
+            fs_service=fs_service,
+            audio_service=FakeAudioService(),
+        )
+
+        bundles = TranscribeBundle.gather_existing_bundles(
+            store_dir=store_dir,
+            dry_run=False,
+            cleanup_bundle=True,
+            config=config,
+            fs_service=fs_service,
+            audio_service=FakeAudioService(),
+        )
+        [bundle] = bundles.values()
+        jobs = transcriber.gather_bundle_jobs(bundle, store_dir, dry_run=True, config=config)
+
+        assert jobs == []
+        assert (bundle.get_bundle_dir() / TRANSCRIPT_FILENAME).is_file()

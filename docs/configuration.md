@@ -29,7 +29,7 @@ Both service URLs are normalized to include a trailing slash. The audio service 
 | `timezone`                       | `Europe/Brussels` | IANA timezone used when interpreting recording dates.                                                        |
 | `safe_delete`                    | `true`            | Move deleted bundle content under `<store_dir>/_deleted` where supported instead of deleting it immediately. |
 
-Retention cleanup removes eligible source audio files after a transcript exists. A bundle's audio is eligible once the most recent of the bundle's date and its audio files' modification times is more than `delete_source_audio_after_days` whole days old, unless the bundle is marked `keep_forever`. Retention cleanup is separate from deleting an entire bundle with a voice command.
+Retention cleanup removes eligible source audio files after a transcript exists. A bundle's audio is eligible once the most recent of the bundle's date and its audio files' modification times is more than `delete_source_audio_after_days` whole days old, unless the bundle is marked `keep_forever`. A bundle keeps its transcript when some of its listed audio is missing; only audio its metadata does not list makes the transcriber redo it. Retention cleanup is separate from deleting an entire bundle with a voice command.
 
 ## Text settings
 

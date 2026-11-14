@@ -32,11 +32,12 @@ def _get_collision_free_destination(
     source_item: Path,
     target_bundle_dir: Path,
     fs_service: FileSystemService,
+    reserved_names: frozenset[str],
 ) -> Path:
-    """Choose a target path without overwriting an existing bundle entry."""
+    """Choose a target path without overwriting an existing bundle entry or taking a reserved name."""
     destination = target_bundle_dir / source_item.name
     counter = 1
-    while fs_service.file_exists(destination) or fs_service.directory_exists(destination):
+    while destination.name in reserved_names or fs_service.file_exists(destination) or fs_service.directory_exists(destination):
         destination = target_bundle_dir / f"{source_item.stem}_{counter}{source_item.suffix}"
         counter += 1
     return destination
@@ -46,7 +47,7 @@ def _move_additional_entries(source: TranscribeBundle, target: TranscribeBundle)
     """Move top-level user-added files and complete directory trees."""
     target_bundle_dir = target.get_bundle_dir()
     for source_item in source.fs_service.list_directory(source.get_bundle_dir()):
-        destination = _get_collision_free_destination(source_item, target_bundle_dir, source.fs_service)
+        destination = _get_collision_free_destination(source_item, target_bundle_dir, source.fs_service, frozenset())
 
         if source.fs_service.file_exists(source_item):
             if source_item.name in MANAGED_BUNDLE_FILENAMES or is_handled_audio_file(source_item.suffix):
@@ -78,6 +79,9 @@ def _move_audio_to_bundle(source: TranscribeBundle, target: TranscribeBundle) ->
 
     """
     target_bundle_dir = target.get_bundle_dir()
+    # Audio the target lists but no longer holds (archived, or removed by retention)
+    # keeps its name, so a copy brought back later is recognised as listed audio.
+    target_listed_names = frozenset(audio_meta.filename for audio_meta in target.metadata.audio_files)
 
     moved_audio_paths: list[Path] = []
     moved_audio_names: dict[str, str] = {}
@@ -86,7 +90,7 @@ def _move_audio_to_bundle(source: TranscribeBundle, target: TranscribeBundle) ->
             msg = f"Audio file not found for merge: {source_audio}"
             raise FileNotFoundError(msg)
 
-        target_audio = _get_collision_free_destination(source_audio, target_bundle_dir, source.fs_service)
+        target_audio = _get_collision_free_destination(source_audio, target_bundle_dir, source.fs_service, target_listed_names)
 
         source.fs_service.move_file(source_audio, target_audio)
         moved_audio_paths.append(target_audio)
@@ -115,10 +119,43 @@ def _move_audio_to_bundle(source: TranscribeBundle, target: TranscribeBundle) ->
     target_meta_by_name = {m.filename: m for m in target.metadata.audio_files}
 
     # Rebuild audio_files in the same order as the sorted source_audios.
-    target.metadata.audio_files = [
+    present_audio_files = [
         source_meta_by_final_name.get(path.name) or target_meta_by_name.get(path.name) or AudioFileMeta(filename=path.name)
         for path in target.source_audios
     ]
+    target.metadata.audio_files = present_audio_files + _listed_missing_audio(source, target, present_audio_files)
+
+
+def _listed_missing_audio(
+    source: TranscribeBundle,
+    target: TranscribeBundle,
+    present_audio_files: list[AudioFileMeta],
+) -> list[AudioFileMeta]:
+    """Return the entries of audio both bundles list but no longer hold, to keep listing in the merged bundle.
+
+    Such audio was archived or removed by retention on purpose. Keeping it listed lets a
+    copy brought back later count as known audio instead of new audio that resets the
+    bundle's transcript.
+    """
+    kept_names = {audio_meta.filename for audio_meta in present_audio_files}
+    present_source_names = {path.name for path in source.source_audios}
+    missing: list[AudioFileMeta] = []
+    for audio_meta in target.metadata.audio_files:
+        if audio_meta.filename not in kept_names:
+            kept_names.add(audio_meta.filename)
+            missing.append(audio_meta)
+    for audio_meta in source.metadata.audio_files:
+        if audio_meta.filename in present_source_names:
+            continue
+        if audio_meta.filename in kept_names:
+            logger.warning(
+                f"Merging {source} into {target}: both list audio named {audio_meta.filename}; "
+                "the source's entry is dropped, so restoring that file from the source's archive needs a new name.",
+            )
+            continue
+        kept_names.add(audio_meta.filename)
+        missing.append(AudioFileMeta(filename=audio_meta.filename, transcript_model_used=list(audio_meta.transcript_model_used)))
+    return missing
 
 
 def _write_merge_failed_marker(

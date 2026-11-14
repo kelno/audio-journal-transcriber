@@ -14,7 +14,7 @@ from transcriber.commands.command import Command
 from transcriber.commands.command_handlers import merge_bundles
 from transcriber.commands.command_resolution import MigratedCommandResolution
 from transcriber.config import TranscribeConfig
-from transcriber.constants import MERGE_FAILED_FILENAME, MULTIPLE_TRANSCRIPTS_SEPARATOR
+from transcriber.constants import MERGE_FAILED_FILENAME, MULTIPLE_TRANSCRIPTS_SEPARATOR, TRANSCRIPT_FILENAME
 from transcriber.exception import MergeBlockedException
 from transcriber.transcribe_bundle import TranscribeBundle
 
@@ -341,6 +341,59 @@ class TestMergeActionExecutor:
         assert fake_fs.read_file(target_dir / "notes_1.txt") == "earlier collision"
         assert fake_fs.read_file(target_dir / "notes_2.txt") == "source notes"
         assert fake_fs.read_file(target_dir / "attachment.pdf") == "source attachment"
+
+    @pytest.mark.parametrize("source_archived", [True, False], ids=["both archived", "target archived"])
+    def test_merge_keeps_listing_archived_audio_so_a_restore_keeps_the_transcript(
+        self,
+        fake_config: TranscribeConfig,
+        fake_fs: FakeFileSystemService,
+        fake_audio_service: FakeAudioService,
+        transcribe_bundle_factory: TranscribeBundleFactory,
+        source_archived: bool,
+    ) -> None:
+        """Audio moved out of a bundle stays listed through a merge, so copying it back is not new audio."""
+        previous_audio = "Recording 20250115080000.mp3"
+        current_audio = "Recording 20250115090000.mp3"
+        previous_bundle = transcribe_bundle_factory(
+            bundle_name="2025-01-15_previous",
+            audio_filename=previous_audio,
+            bundle_date=datetime(2025, 1, 15, 8, tzinfo=fake_config.general.timezone),
+            transcript_text="previous words",
+            transcript_model_used="model-a",
+        )
+        current_bundle = transcribe_bundle_factory(
+            bundle_name="2025-01-15_current",
+            audio_filename=current_audio,
+            bundle_date=datetime(2025, 1, 15, 9, tzinfo=fake_config.general.timezone),
+            transcript_text="current words",
+            transcript_model_used="model-b",
+            commands=["merge"],
+        )
+        assert current_bundle.commands is not None
+        archived = [(previous_bundle, previous_audio)] + ([(current_bundle, current_audio)] if source_archived else [])
+        for bundle, audio_filename in archived:
+            fake_fs.delete_file(bundle.get_bundle_dir() / audio_filename)
+            bundle.source_audios = []
+
+        _execute_previous_merge(
+            current_bundle,
+            fake_config,
+            _bundle_cache(previous_bundle, current_bundle),
+            current_bundle.commands.commands[0],
+        )
+        target_dir = previous_bundle.get_bundle_dir()
+        merged_bundle = TranscribeBundle.from_existing_directory(target_dir, fake_config, fake_fs, fake_audio_service)
+
+        metadata_by_filename = {audio_meta.filename: audio_meta.transcript_model_used for audio_meta in merged_bundle.metadata.audio_files}
+        assert metadata_by_filename == {previous_audio: ["model-a"], current_audio: ["model-b"]}
+
+        for _bundle, audio_filename in archived:
+            fake_fs.write_file(target_dir / audio_filename, "audio brought back from the archive")
+        restored_bundle = TranscribeBundle.from_existing_directory(target_dir, fake_config, fake_fs, fake_audio_service)
+        restored_bundle.cleanup_inconsistencies(dry_run=False)
+
+        assert restored_bundle.transcript is not None
+        assert fake_fs.file_exists(target_dir / TRANSCRIPT_FILENAME)
 
     def test_merge_moves_directory_trees_and_renames_collisions(
         self,

@@ -331,13 +331,20 @@ class TranscribeBundle:
             if not dry_run:
                 self.fs_service.delete_file(self.get_bundle_dir() / COMMANDS_FILENAME)
 
-        # Check if existing audio files match metadata
-        original_audio_filenames = {f.filename for f in self.metadata.audio_files}
-        current_audio_filenames = {f.name for f in self.source_audios}
-        if current_audio_filenames and current_audio_filenames != original_audio_filenames:
+        # Redo the bundle only when it holds audio its metadata does not list: that audio
+        # is new content (added by hand, or copied back without being listed), which the
+        # transcript does not cover yet. Listed audio that is missing must not trigger a
+        # redo. It is the normal state once audio leaves on purpose (retention deletes
+        # it, archiving moves it out of the store), and a sync tool such as Syncthing
+        # applies a removal one file at a time, so another machine can briefly see only
+        # part of a bundle's audio gone. A redo then would delete a good transcript,
+        # summary and commands and rebuild them from the audio left, losing the rest.
+        listed_audio_filenames = {f.filename for f in self.metadata.audio_files}
+        unlisted_audio_filenames = {f.name for f in self.source_audios} - listed_audio_filenames
+        if unlisted_audio_filenames:
             logger.info(
-                f"Bundle {self.bundle_name} has audio files not matching metadata. "
-                f"Original: {original_audio_filenames}, Found: {current_audio_filenames}",
+                f"Bundle {self.bundle_name} has audio files its metadata does not list. "
+                f"Listed: {listed_audio_filenames}, not listed: {unlisted_audio_filenames}",
             )
             self.refresh(dry_run)
 
